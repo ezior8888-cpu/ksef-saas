@@ -13,6 +13,7 @@ import { isSignupClosed } from '@/lib/feature-flags/signups';
 import { checkRegisterRateLimit } from '@/lib/rate-limit/auth';
 import { verifyTurnstile } from '@/lib/security/turnstile';
 import { userRegistered } from '@/lib/jobs/events';
+import { recordTermsAcceptance } from '@/lib/legal/record';
 import { createClient } from '@/lib/supabase/server';
 
 /**
@@ -32,6 +33,13 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
   if (await isSignupClosed()) {
     redirect('/register?error=signups_disabled');
   }
+
+  // Akceptacja regulaminu i umowy powierzenia — `required` w formularzu to
+  // tylko wygoda; formularz można wysłać z pominięciem przeglądarki.
+  if (formData.get('terms') !== 'on') {
+    redirect('/register?error=terms_required');
+  }
+  const marketingConsent = formData.get('marketing') === 'on';
 
   const ip = await getClientIp();
 
@@ -77,6 +85,21 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
   }
 
   const authUser = data.user;
+
+  // Dowód akceptacji. Tylko dla NOWEGO konta: przy zajętym adresie GoTrue
+  // zwraca konto bez tożsamości (ochrona przed sprawdzaniem, kto ma konto) —
+  // cudzemu kontu nie dopisujemy akceptacji z cudzego formularza. Błąd zapisu
+  // nie blokuje rejestracji: bramka (/onboarding/zgody) poprosi o akceptację
+  // ponownie, gdy dokumenty będą finalne.
+  if (authUser?.id && (authUser.identities?.length ?? 0) > 0) {
+    const recorded = await recordTermsAcceptance({
+      userId: authUser.id,
+      method: 'register_form',
+      marketingConsent,
+    }).catch(() => ({ ok: false }));
+    if (!recorded.ok) console.error('[register] legal acceptance not recorded');
+  }
+
   if (authUser?.id && authUser.email) {
     const firstName =
       name.trim().split(/\s+/)[0] || email.split('@')[0] || 'użytkowniku';

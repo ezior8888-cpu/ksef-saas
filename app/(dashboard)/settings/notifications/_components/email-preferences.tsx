@@ -37,17 +37,17 @@ const CATEGORIES: CategoryConfig[] = [
   },
   {
     id: 'product_updates',
-    title: 'Powiadomienia produktowe',
+    title: 'Porady i nowości',
     description:
-      'Welcome po onboardingu, magic import zakończony, miesięczne paczki Co-Pilot dla księgowej.',
+      'Porady na start (pierwsze dni po rejestracji) i informacje o nowych funkcjach. Włączenie oznacza zgodę na takie e-maile; możesz ją wycofać w każdej chwili.',
     examples:
-      'Np. „Twoja historia z KSeF jest gotowa", „Paczka dla księgowej za marzec została wysłana"',
+      'Np. „Wystaw pierwszą fakturę w 3 krokach", „Sprawdź odczyt paragonów"',
   },
   {
     id: 'marketing',
-    title: 'Powiadomienia marketingowe',
+    title: 'Oferty i kampanie',
     description:
-      'Nowe funkcje, blog FaktFlow, kampanie re-engagement (gdy długo nieaktywny).',
+      'Oferty FaktFlow, artykuły z bloga, przypomnienia, gdy dawno nie zaglądałeś. Włączenie oznacza zgodę na takie e-maile; możesz ją wycofać w każdej chwili.',
     examples:
       'Np. „Co nowego w FaktFlow w kwietniu", „Wracaj — Twoje konto czeka"',
   },
@@ -86,8 +86,8 @@ export function EmailPreferences({ unsubscribedCategories }: Props) {
       } else {
         toast.success(
           nextSubscribed
-            ? 'Subskrypcja włączona'
-            : 'Wypisano z tej kategorii',
+            ? 'Zgoda zapisana — e-maile włączone'
+            : 'Zgoda wycofana — wypisano z tej kategorii',
         );
         router.refresh();
       }

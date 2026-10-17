@@ -29,6 +29,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'yearly',
     },
     { url: `${baseUrl}/legal/rodo`, priority: 0.3, changeFrequency: 'yearly' },
+    { url: `${baseUrl}/legal/umowa-powierzenia`, priority: 0.3, changeFrequency: 'yearly' },
+    { url: `${baseUrl}/legal/cookies`, priority: 0.3, changeFrequency: 'yearly' },
+    { url: `${baseUrl}/legal/podprocesorzy`, priority: 0.2, changeFrequency: 'monthly' },
   ];
 
   const blogDir = path.join(process.cwd(), 'content/blog');

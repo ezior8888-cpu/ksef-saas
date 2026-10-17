@@ -79,6 +79,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   'plan-unavailable': 'Ten plan nie jest już dostępny. Wybierz plan miesięczny.',
   'mfa-required':
     'Zmiany w płatnościach wymagają weryfikacji dwuetapowej. Włącz ją w Ustawieniach → Bezpieczeństwo.',
+  'statement-required':
+    'Zaznacz oświadczenie pod ceną (zamówienie i akceptacja Regulaminu), żeby przejść do płatności.',
 };
 
 export default async function BillingPage(props: {
