@@ -1,7 +1,8 @@
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 import { PlusCircle } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getPageContext } from '@/lib/supabase/page-context';
 import {
@@ -84,12 +85,13 @@ export default async function InvoicesPage({
             przycięty przycisk wygląda jak zepsuta strona. */}
         <div className="flex w-full flex-wrap items-end gap-3 sm:w-auto">
           <BatchPdfDownload />
-          <Button asChild variant="glass-primary" className="flex-1 sm:flex-none">
-            <Link href="/invoices/new">
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Nowa faktura
-            </Link>
-          </Button>
+          <Link
+            href="/invoices/new"
+            className={cn(buttonVariants({ variant: 'glass-primary' }), 'flex-1 sm:flex-none')}
+          >
+            <PlusCircle className="h-4 w-4 mr-2" />
+            Nowa faktura
+          </Link>
         </div>
       </div>
 
@@ -133,9 +135,9 @@ export default async function InvoicesPage({
             Filtruj
           </Button>
           {filtered && (
-            <Button asChild variant="outline">
-              <Link href="/invoices">Wyczyść</Link>
-            </Button>
+            <Link href="/invoices" className={buttonVariants({ variant: 'outline' })}>
+              Wyczyść
+            </Link>
           )}
         </div>
       </form>

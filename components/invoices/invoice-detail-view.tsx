@@ -279,13 +279,13 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
       </div>
 
       {inv.ksef_number && (
-        <Card className="p-4 mb-6 bg-green-50 border-green-200">
-          <p className="text-xs text-green-800 uppercase tracking-wide">
+        <Card className="p-4 mb-6 bg-green-50 ring-green-200 dark:bg-green-950/30 dark:ring-green-900">
+          <p className="text-xs text-green-800 dark:text-green-200 uppercase tracking-wide">
             Numer KSeF
           </p>
-          <p className="font-mono text-sm mt-1">{inv.ksef_number}</p>
+          <p className="font-mono text-sm mt-1 dark:text-green-50">{inv.ksef_number}</p>
           {inv.ksef_accepted_at && (
-            <p className="text-xs text-green-800 mt-1">
+            <p className="text-xs text-green-800 dark:text-green-200 mt-1">
               Zaakceptowana: {formatWarsawDateTime(inv.ksef_accepted_at)}
             </p>
           )}
@@ -319,14 +319,14 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
       )}
 
       {duplicatePanel && inv.ksef_duplicate_original && (
-        <Card className="p-4 mb-6 border-amber-200 bg-amber-50">
-          <h3 className="font-semibold text-sm text-amber-900">
+        <Card className="p-4 mb-6 ring-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:ring-amber-900">
+          <h3 className="font-semibold text-sm text-amber-900 dark:text-amber-100">
             {inv.ksef_duplicate_original.title}
           </h3>
           <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
             {inv.ksef_duplicate_original.rows.map((row) => (
               <div key={row.label} className="flex gap-2">
-                <dt className="text-amber-800">{row.label}:</dt>
+                <dt className="text-amber-800 dark:text-amber-200">{row.label}:</dt>
                 <dd className="font-medium break-all">{row.value}</dd>
               </div>
             ))}

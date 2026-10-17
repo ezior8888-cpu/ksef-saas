@@ -19,7 +19,7 @@ import type { DuplicateDecisionView } from '@/lib/ksef/duplicate-decision';
  *    „📧📞 Jan K” (10 jednostek, 8 znaków) przechodziła w przeglądarce
  *    i padała w bazie z tekstem resetu szkicu.
  *
- * Prawdziwe: `OperatorDuplicateDecision`, checkbox (radix), teksty operatora.
+ * Prawdziwe: `OperatorDuplicateDecision`, checkbox, teksty operatora.
  * Zastąpione: akcja serwerowa, `next/navigation`, `sonner` i dialog (bez portalu).
  */
 

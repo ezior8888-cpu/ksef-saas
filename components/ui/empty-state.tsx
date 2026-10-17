@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 type EmptyStateAction =
@@ -73,9 +73,13 @@ function renderAction(
 
   if (action.type === 'link') {
     return (
-      <Button asChild variant={variant} size="lg" key={action.label}>
-        <Link href={action.href}>{inner}</Link>
-      </Button>
+      <Link
+        href={action.href}
+        key={action.label}
+        className={buttonVariants({ variant, size: 'lg' })}
+      >
+        {inner}
+      </Link>
     );
   }
 

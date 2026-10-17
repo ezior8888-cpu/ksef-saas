@@ -1,9 +1,10 @@
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 import { AlertTriangle, Building2, CheckCircle2, Lock, Sparkles } from 'lucide-react';
 
 import { CertificateUpload } from '@/components/settings/certificate-upload';
 import { CompleteNipForm } from '@/components/settings/complete-nip-form';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -161,14 +162,13 @@ export default async function KsefSettingsPage() {
               </p>
             </div>
             {hasCredentials ? (
-              <Button asChild variant="glass-primary" size="lg" className="w-full sm:w-auto">
-                <Link
-                  href={`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`}
-                >
-                  <Sparkles className="mr-2 h-4 w-4 shrink-0" />
-                  Rozpocznij Magiczny Import
-                </Link>
-              </Button>
+              <Link
+                href={`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`}
+                className={cn(buttonVariants({ variant: 'glass-primary', size: 'lg' }), 'w-full sm:w-auto')}
+              >
+                <Sparkles className="mr-2 h-4 w-4 shrink-0" />
+                Rozpocznij Magiczny Import
+              </Link>
             ) : (
               <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 backdrop-blur-glass-sm p-4 text-sm text-muted-foreground text-left">
                 Aby uruchomić import, najpierw wgraj certyfikat powyżej — KSeF wymaga

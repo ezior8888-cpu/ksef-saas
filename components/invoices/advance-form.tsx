@@ -49,6 +49,18 @@ export interface AdvanceInvoiceFormProps {
   initialSeller: SellerData;
 }
 
+// E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
+const VAT_RATE_ITEMS = (['23', '8', '5', '0'] as const).map((x) => ({ value: x, label: `${x}%` }))
+
+// E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
+const PAYMENT_METHOD_ITEMS = [
+  { value: 'transfer', label: 'Przelew' },
+  { value: 'cash', label: 'Gotówka' },
+  { value: 'card', label: 'Karta' },
+  { value: 'compensation', label: 'Kompensata' },
+  { value: 'other', label: 'Inna' },
+] as const
+
 export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
@@ -234,19 +246,21 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
             <Label className={labelClass}>Stawka VAT zaliczki</Label>
             <Select
               value={vatWatch}
-              onValueChange={(v) =>
+              items={VAT_RATE_ITEMS}
+              onValueChange={(v) => {
+                if (v == null) return
                 form.setValue('vatRate', v as AdvanceInvoiceSchemaIn['vatRate'], {
                   shouldDirty: true,
                 })
-              }
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(['23', '8', '5', '0'] as const).map((x) => (
-                  <SelectItem key={x} value={x}>
-                    {x}%
+                {VAT_RATE_ITEMS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -339,19 +353,21 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
             <Label className={labelClass}>Metoda</Label>
             <Select
               value={paymentMethodWatch}
-              onValueChange={(v) =>
+              items={PAYMENT_METHOD_ITEMS}
+              onValueChange={(v) => {
+                if (v == null) return
                 form.setValue('paymentMethod', v as AdvanceFormIn['paymentMethod'])
-              }
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="transfer">Przelew</SelectItem>
-                <SelectItem value="cash">Gotówka</SelectItem>
-                <SelectItem value="card">Karta</SelectItem>
-                <SelectItem value="compensation">Kompensata</SelectItem>
-                <SelectItem value="other">Inna</SelectItem>
+                {PAYMENT_METHOD_ITEMS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
