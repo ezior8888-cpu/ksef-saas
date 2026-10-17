@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
@@ -8,9 +7,7 @@ import { ArrowRight } from 'lucide-react';
 import { DrawnVideo } from '@/components/ui/drawn-video';
 
 import { asset } from '../_assets';
-import { Tilt } from './anim';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
-import { Icon } from './ui';
 
 /** Krzywa i czasy zgodne z domyślnym wejściem Framera. */
 const EASE = [0.44, 0, 0.56, 1] as const;
@@ -23,10 +20,11 @@ const rise = (delay: number) => ({
 export function Hero() {
   return (
     <header className="relative flex flex-col pb-20">
-      {/* Panel tła: 1400×860 od góry 20 px, promień 20 — pod hero i pulpitem. */}
+      {/* Panel tła od góry 20 px, promień 20 — rozciąga się na całe hero
+          (stałe 860 px było liczone pod usunięty „zrzut pulpitu”). */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-5 top-5 h-[860px] rounded-[20px]"
+        className="pointer-events-none absolute inset-x-5 bottom-0 top-5 rounded-[20px]"
         style={{
           background:
             'linear-gradient(180deg, #fff 0%, #fff 42%, #eff5fe 78%, #dbe8fb 100%)',
@@ -78,27 +76,12 @@ export function Hero() {
                 </Link>
               </motion.div>
 
-              {/* Pas logotypów klientów: w oryginale <ul> 513×26 tuż pod
-                  przyciskami. Wcześniej go przeoczyłem. */}
-              <motion.ul
-                initial={{ opacity: 0, x: -30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, amount: 0.15 }}
-                transition={{ duration: 0.75, delay: 0.24, ease: [0.16, 1, 0.3, 1] }}
-                className="flex max-w-[513px] flex-wrap items-center gap-x-[5px] gap-y-3 lg:flex-nowrap"
-              >
-                {asset.hero.clientLogos.map((src) => (
-                  <li key={src} className="flex h-[26px] items-center">
-                    <Image
-                      src={src}
-                      alt="Logo klienta"
-                      width={130}
-                      height={26}
-                      className="h-[26px] w-auto object-contain opacity-70 transition-opacity hover:opacity-100"
-                    />
-                  </li>
-                ))}
-              </motion.ul>
+              {/* Pas „logotypów klientów” usunięty 15.10.2026: były to
+                  fikcyjne marki z szablonu (Pluto Inc, NovaTech…), a przed
+                  startem nie mamy klientów, których moglibyśmy pokazać.
+                  Wraca dopiero z prawdziwymi logotypami i zgodą klientów
+                  (art. 5 i 7 ustawy o przeciwdziałaniu nieuczciwym praktykom
+                  rynkowym). */}
             </div>
 
             {/* prawa kolumna — 365 px: film, opis, ocena */}
@@ -123,44 +106,18 @@ export function Hero() {
                     potwierdzenia. Zdjęcie paragonu trafia prosto do KPiR.
                   </p>
                 </MaskReveal>
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Icon
-                        key={i}
-                        id="2930526878"
-                        size={14}
-                        className="text-[var(--z-yellow)]"
-                      />
-                    ))}
-                  </div>
-                  <span className="z-small text-[var(--z-muted)]">
-                    Ocena 4,8 od księgowych i mikrofirm
-                  </span>
-                </div>
+                {/* Gwiazdki „Ocena 4,8 od księgowych i mikrofirm” usunięte
+                    15.10.2026 — nie było żadnych ocen. Zmyślona ocena to
+                    praktyka zakazana w każdych okolicznościach (art. 7
+                    pkt 23b–23c u.p.n.p.r., od 1.01.2023). */}
               </div>
             </motion.div>
           </div>
         </div>
 
-        {/* zrzut pulpitu — 969×579, wystaje poza dolną krawędź panelu */}
-        <Tilt
-          delay={0.28}
-          className="mx-auto w-full max-w-[var(--z-container)] px-5 md:px-[var(--z-gutter)]"
-        >
-          {/* Proporcje 969×579 wymuszone kadrowaniem: plik źródłowy ma
-              2880×2048 (inny stosunek boków), a oryginał go przycina. */}
-          <div className="relative mx-auto aspect-[969/579] w-full max-w-[969px] overflow-hidden rounded-[16px] bg-white shadow-[0_24px_60px_-20px_rgba(16,32,64,0.28)]">
-            <Image
-              src={asset.hero.dashboard}
-              alt="Pulpit FaktFlow"
-              fill
-              sizes="(max-width: 1024px) 100vw, 969px"
-              priority
-              className="object-cover object-top"
-            />
-          </div>
-        </Tilt>
+        {/* „Zrzut pulpitu” usunięty 15.10.2026: był to panel inwestycyjny
+            z szablonu (Apple, Google, Meta, $150,000) podpisany „Pulpit
+            FaktFlow”. Wraca tylko prawdziwy zrzut panelu FaktFlow. */}
       </div>
     </header>
   );

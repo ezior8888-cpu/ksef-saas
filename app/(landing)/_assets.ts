@@ -1,5 +1,13 @@
 /**
- * Mapa zasobów landing page (szablon Zova, Lunis Design — licencja darmowa).
+ * Mapa zasobów landing page (szablon Zova, Lunis Design).
+ *
+ * LICENCJA (sprawdzone 15.10.2026): Zova to szablon PŁATNY z Framer
+ * Marketplace (19 USD), nie darmowy, jak było tu napisane. Warunki Framera
+ * (Community Terms) dają licencję na jeden projekt, pod warunkiem zapłaty.
+ * Bez dowodu zakupu ilustracje, filmy i zdjęcia z tego pliku naruszają prawa
+ * autorskie twórcy — przed startem potwierdź zakup (faktura/e-mail z Framera)
+ * albo kup szablon, i trzymaj dowód. Zrzuty „produktu” z szablonu (panel
+ * inwestycyjny Zova AI) nie są renderowane — pokazywały cudzy produkt.
  *
  * Pliki zachowują oryginalne nazwy z Framera. Celowo: nazwy są losowe, ale
  * dzięki temu nie ma ryzyka pomylenia grafik przy przenoszeniu, a ten plik
@@ -11,7 +19,9 @@ const IMG = '/landing/img';
 const VID = '/landing/video';
 
 export const asset = {
-  logo: `${IMG}/oKmGzYlWFu13ruJRasum68wrh5Y.png`,
+  // Znak FaktFlow. Do 15.10.2026 był tu znak „Zova AI” z szablonu — cudze
+  // oznaczenie podpisane alt="FaktFlow" w nawigacji, stopce i logowaniu.
+  logo: '/brand/faktflow-mark.png',
 
   hero: {
     /** Zrzut pulpitu pod hero — 969×579. */
