@@ -1121,7 +1121,7 @@ etapu (§9 „Oszczędzanie”).
 | Ikony | **Remix Icon** `@remixicon/react` 4.9.0 (komponenty `Ri…`) | dodać |
 | Wykresy | **recharts** 3.8.0 + `src/components/ui/chart.tsx` (ChartContainer, ChartTooltip, ChartLegend) | dodać |
 | Paleta ⌘K | `cmdk` 1.1.1 przez `src/components/ui/command.tsx` | dodać (E2) |
-| Tabele | `@tanstack/react-table` 8.21.3 | dodać w E3 (pierwsza tabela Finory) |
+| Tabele | `@tanstack/react-table` 8.21.3 | NIE dodajemy (decyzja E3, 17.10): tabela P3 stoi na prymitywach `ui/table` + stan z adresu; E6 i E8 robią tak samo |
 | Daty w formularzach | `date-fns` 4.4.0, `react-day-picker` 10.0.1 (`ui/calendar.tsx`, `src/views/pages/invoices/invoice-date-field.tsx`) | dodać dopiero w etapie, który ich użyje (P5, filtry dat) |
 | NIE dodajemy | `next-themes` (u nas jest w `package.json`, ale motywem rządzi `lib/theme/theme.ts`), `nuqs` (filtry przez adres i `invoiceListHref`), `zustand` i `src/store/*` (dane z serwera), `react-use` (tylko ciasteczko ustawień), `motion` (tylko listy z inwestycji; animację daje nasz `framer-motion`: `AnimatePresence` ma to samo API), `react-19-credit-card`, `geist` (Geist mamy z `next/font`) | — |
 | `globals.css` Finory (247 linii) | `@import 'shadcn/tailwind.css'` (nasz `shadcn` 4.3.0 ma ten eksport), `@custom-variant dark (&:is(.dark *))` (zgodne z klasą `dark` z `lib/theme/theme.ts`), `@theme inline` z `--font-heading: var(--font-sans)` i skalą promieni od `--radius: 0.625rem`, klasy `.input-default/-lg/-sm`, odstępy przycisków `[data-slot='button'].h-9/.h-10:not(.px-6)`, kursory `cursor: pointer` dla przycisków, opcji i pozycji menu, reguły druku | przenieść te bloki; reguły `.rccs` (karty płatnicze) i `[data-theme-scale='lg']` pominąć |
@@ -1375,6 +1375,18 @@ Transactions, Monthly Analytics, Accounts i Invoice List.
 | 17.10.2026 | E2 | #282 (razem z E1) | brak wglądu w rozliczenie; agenci: mapowanie 0,37 mln (Sonnet), budowa 0,55 mln (Sonnet + szkielet na mocnym modelu), przegląd 1,24 mln (szukanie Sonnet, weryfikacja mocny model), poprawki (Sonnet) | gotowe, czeka na punkt kontrolny | — | szkielet Finory (pasek inset zwijany do ikon, stan z ciasteczka, nagłówek z przełącznikiem firmy, menu avatara, stopka), nawigacja §4 z istniejących tras (zgoda Bartosza na zmianę `dashboard-nav-config.ts`: „kontynuuj wszystko”, 17.10), dolny pasek na ikonach Remix, ⌘K z wyszukiwaniem faktur i kontrahentów, portale Base UI w kontenerze `.ff-dashboard`, banery jako Alert, `error`/`loading` bez szkła; znak marki w panelu „Fakt\|Way” (był rozbity „Fakt\|Flow” — strażnik nazwy łapie teraz i taki zapis). Przegląd: 9 usterek średnich (bąbelek pomocy nad oknami, podświetlenie po „Wstecz”, kontrast paska i awatara, zdublowana pozycja ⌘K) + 5 drobnych — poprawione z testami |
 | 17.10.2026 | E3 | #282 (razem z E1 i E2) | brak wglądu w rozliczenie; agenci: budowa (dane na mocnym modelu, lista i podgląd na Sonnecie), przegląd 1,38 mln (szukanie Sonnet + dane na mocnym modelu, weryfikacja mocny model), poprawki 0,71 mln (dane mocny model, UI Sonnet, weryfikacja mocny model) | gotowe, czeka na punkt kontrolny | — | P3 lista faktur (kafle, pasek filtrów `platnosc`/`rodzaj`/`na_stronie`, tabela z zaznaczaniem i PDF zaznaczonych, paginacja Finory, karty na telefonie), P4 podgląd (dokument + karty „Status” i „Dokument”, VAT per stawka w walucie faktury, kod QR KOD I, „Korekta”, „Drukuj” jako PDF w nowej karcie), `lib/dashboard/receivables.ts`, `list-row-facts`, `list-stats`, `batch-pdf ?ids=`; bez `@tanstack/react-table` (tabela na prymitywach, decyzja przed E6). Karty UPO, błędu KSeF i e-maila bez szkła. Przegląd: 10 potwierdzonych (2 to ten sam `limit(50)` formularza korekty — osobna sesja z sugerowanego zadania, nie w tym PR), 3 obalone; 8 poprawionych z czerwonymi testami + 6 drobnych z weryfikacji poprawek. Filtr `not.eq.{}` i kilka `or()` naraz sprawdzone na prawdziwym PostgREST (job RLS) |
 
+**Decyzje po E3 (Bartosz 17.10: „odpowiedz sam, ma być jak najbardziej
+poprawnie”):** (1) lista `/invoices` dalej pokazuje faktury ze wszystkich
+środowisk KSeF — to rejestr dokumentów, niczego nie chowamy; liczby (kafle,
+płatność, filtr płatności) liczą tylko aktywne środowisko. (2) „Opłacone
+w tym miesiącu” liczy faktury opłacone w całości (`paid_at`), bo §2.4 pkt 14
+zabrania czytania `payments`. (3) „Faktury w tym miesiącu” już rozdziela
+przyjęte i szkice — bez zmian. (4) Strażnik środowiska kafla „Do zapłaty”
+tylko na otwartych należnościach, jak `/payments/overdue`. (5) Bez
+`@tanstack/react-table` (§10.1). (6) Oryginał z korektą zostaje w wyniku
+filtra płatności z „—”: lista po id dzieci w adresie nie skaluje się,
+a widok w bazie to migracja bez zysku dla liczb (kafle liczą poprawnie).
+
 **Dla Bartosza:** `lib/flo/wrapped.ts` czyta nieodświeżany
 `mv_tenant_monthly_stats` (tor silnika). Zgłoszone, nie naprawiamy w tym
 planie.
@@ -1385,7 +1397,8 @@ rozwinięty i zwinięty; obok demo Finory — i uruchamiają Playwright 03, 04,
 06, 07 i `flo-*` (CI PR ich nie odpala). Lista rzeczy do obejrzenia jest
 w opisie #282 (E3: `/invoices` z filtrami, paginacją i zaznaczaniem,
 `/invoices/[id]` szkicu, wysłanej, przyjętej i odrzuconej faktury). Decyzje
-z E3 dla Bartosza — w opisie #282. Potem scalenie #282 i wdrożenie. Dopiero
+z E3 rozstrzygnięte (wyżej). Potem scalenie #282 i wdrożenie
+(`./scripts/ops/wdroz-produkcje.sh` z sesji lokalnej). Dopiero
 po „idź dalej”: poprawki z punktu kontrolnego osobnym PR, potem osobny mały
 PR strefy czasowej (§2.4 pkt 10), potem **E4** (P1 Pulpit z slotem FLO,
 `lib/dashboard/costs.ts`, `getSalesSeries`). Osobno: poprawka `limit(50)`
