@@ -1361,20 +1361,21 @@ Transactions, Monthly Analytics, Accounts i Invoice List.
 | 17.10.2026 | Decyzja D7 | (ten dokument) | — | gotowe | — | karty podatkowe dozwolone: przywrócony licznik limitu zwolnienia z VAT (240 000 zł, gotowe funkcje z `vat-limit.ts`) w P1/P2, „Odłóż na podatek” w P2 |
 | 17.10.2026 | E0 + nazwa FaktWay | #278 | ok. 10 (szacunek sesji w chmurze, bez wglądu w rozliczenie) | scalone 17.10 | — | §10 wypełniony z `faktflow-finora-src` @ `56394ef`; konflikty z planem w §10.2 (kontrast `primary` 3,73:1 blokuje E1); D8 i zmiana nazwy w kodzie aplikacji ze strażnikiem `nazwa-produktu.test.ts`. Teksty z bazy (abonament, odmowy 00148) i pliki FLO zostają z FaktFlow do osobnego PR |
 | 17.10.2026 | E1 | #282 (szkic, E2 dojdzie do tego PR) | brak wglądu w rozliczenie; agenci: mapowanie 1,7 mln tokenów (mocny model — za drogo, od teraz tańsze), porty 0,3 mln (Sonnet), przegląd 0,5 mln | gotowe, czeka na E2 w tym samym PR (stos, §9 „Wdrożenia”) | — | prymitywy Finory na Base UI (16 + `chart`), preset z poprawkami kontrastu, aliasy `--ff-*`, wątek FLO przypięty do dawnych kolorów (`.ff-flo-legacy` + arkusz kolejki), skala SM na `.ff-dashboard`, Outfit, `.zova` odizolowana, Select z `items`, linki bez `asChild`, usunięte `radix-ui` i `next-themes`. Przegląd: 3 soczewki, 1 potwierdzona usterka (kontrast `destructive` na karcie w ciemnym) — poprawiona |
+| 17.10.2026 | E2 | #282 (razem z E1) | brak wglądu w rozliczenie; agenci: mapowanie 0,37 mln (Sonnet), budowa 0,55 mln (Sonnet + szkielet na mocnym modelu), przegląd 1,24 mln (szukanie Sonnet, weryfikacja mocny model), poprawki (Sonnet) | gotowe, czeka na punkt kontrolny | — | szkielet Finory (pasek inset zwijany do ikon, stan z ciasteczka, nagłówek z przełącznikiem firmy, menu avatara, stopka), nawigacja §4 z istniejących tras (zgoda Bartosza na zmianę `dashboard-nav-config.ts`: „kontynuuj wszystko”, 17.10), dolny pasek na ikonach Remix, ⌘K z wyszukiwaniem faktur i kontrahentów, portale Base UI w kontenerze `.ff-dashboard`, banery jako Alert, `error`/`loading` bez szkła; znak marki w panelu „Fakt\|Way” (był rozbity „Fakt\|Flow” — strażnik nazwy łapie teraz i taki zapis). Przegląd: 9 usterek średnich (bąbelek pomocy nad oknami, podświetlenie po „Wstecz”, kontrast paska i awatara, zdublowana pozycja ⌘K) + 5 drobnych — poprawione z testami |
 
 **Dla Bartosza:** `lib/flo/wrapped.ts` czyta nieodświeżany
 `mv_tenant_monthly_stats` (tor silnika). Zgłoszone, nie naprawiamy w tym
 planie.
 
-**Następny krok:** **E2** (szkielet P0, nawigacja §4, dolny pasek, ⌘K)
-na TEJ SAMEJ gałęzi i w tym samym PR co E1 — stos z §9 „Wdrożenia”, więc
-E1 nie idzie na produkcję sam. Do zakresu E2 dochodzą z przeglądu E1:
-(1) portale Base UI (Dialog, Select, Menu, Tooltip, Popover) renderują się
-w `<body>`, poza `.ff-dashboard`, więc nie mają skali SM ani tokenów
-`--ff-*` — szkielet E2 daje im `container` wewnątrz korzenia (poza
-animowanym `.ff-route-template`) albo klasę `ff-dashboard` na treści;
-(2) `TooltipProvider` w szkielecie (pasek Finory używa `Tooltip`);
-(3) kanwa pulpitu jest teraz biała jak w Finorze (`--ff-bg` = `--background`),
-a karty FLO zostały białe z ramką — do oceny Masła na punkcie kontrolnym.
+**Następny krok:** **punkt kontrolny E1+E2** (§9): Bartosz albo Masło
+oglądają panel lokalnie — jasny i ciemny motyw; 375, 768 i 1440 px; pasek
+rozwinięty i zwinięty; obok demo Finory — i uruchamiają Playwright 03, 04,
+06, 07 i `flo-*` (CI PR ich nie odpala). Lista rzeczy do obejrzenia jest
+w opisie #282. Potem scalenie #282 („Scalenie E1, E2”) i wdrożenie. Dopiero
+po „idź dalej”: poprawki z punktu kontrolnego osobnym PR, a następnie
+**E3** (P3 Faktury + P4 Podgląd + `lib/dashboard/receivables.ts`); przed
+startem E3 `gh pr list --state open` (§9 „Dodatki” E3). Przed E4 osobny mały
+PR strefy czasowej (§2.4 pkt 10). Kanwa pulpitu jest biała jak w Finorze,
+a wątek FLO ma dawne kolory, typografię Outfit i skalę SM — do oceny Masła.
 Osobno, po rozstrzygnięciu szkicu #248: migracja nazwy FaktWay w bazie
 (wyjątki `DB_BOUND` w `tests/unit/nazwa-produktu.test.ts`).

@@ -6,6 +6,11 @@ export interface PaletteEntry {
   /** Tytuł grupy w palecie („Przejdź do" albo „Akcje"). */
   group: string;
   label: string;
+  /**
+   * Unikalna wartość cmdk (`grupa:etykieta`). „Wystaw fakturę” jest i w menu,
+   * i w akcjach — zdublowana wartość psuje nawigację strzałkami.
+   */
+  value: string;
   href: string;
   icon: RemixiconComponentType;
   /** Dodatkowe słowa dla dopasowania cmdk (np. nazwa sekcji menu). */
@@ -24,32 +29,36 @@ export function buildPaletteNavEntries(): PaletteEntry[] {
     section.items.map((item) => ({
       group: PALETTE_NAV_GROUP,
       label: item.label,
+      value: `${PALETTE_NAV_GROUP}:${item.label}`,
       href: item.href,
       icon: item.icon,
-      keywords: [section.title],
+      keywords: [item.label, section.title],
     })),
   );
   nav.push({
     group: PALETTE_NAV_GROUP,
     label: dashboardSettingsNavItem.label,
+    value: `${PALETTE_NAV_GROUP}:${dashboardSettingsNavItem.label}`,
     href: dashboardSettingsNavItem.href,
     icon: dashboardSettingsNavItem.icon,
-    keywords: ['konfiguracja'],
+    keywords: [dashboardSettingsNavItem.label, 'konfiguracja'],
   });
   const actions: PaletteEntry[] = [
     {
       group: PALETTE_ACTIONS_GROUP,
       label: 'Wystaw fakturę',
+      value: `${PALETTE_ACTIONS_GROUP}:Wystaw fakturę`,
       href: '/invoices/new',
       icon: RiFileAddLine,
-      keywords: ['nowa', 'faktura', 'sprzedaż'],
+      keywords: ['Wystaw fakturę', 'nowa', 'faktura', 'sprzedaż'],
     },
     {
       group: PALETTE_ACTIONS_GROUP,
       label: 'Dodaj wydatek',
+      value: `${PALETTE_ACTIONS_GROUP}:Dodaj wydatek`,
       href: '/expenses',
       icon: RiAddLine,
-      keywords: ['koszt', 'paragon', 'zdjęcie'],
+      keywords: ['Dodaj wydatek', 'koszt', 'paragon', 'zdjęcie'],
     },
   ];
   return [...nav, ...actions];

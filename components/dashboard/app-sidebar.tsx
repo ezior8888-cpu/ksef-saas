@@ -38,9 +38,12 @@ import {
 const SIDEBAR_VARIANT = 'inset'
 const SIDEBAR_COLLAPSIBLE = 'icon'
 
-/** Klasy aktywnej pozycji jak w Finorze (pigułka w kolorze `primary`). */
+/**
+ * Klasy aktywnej pozycji jak w Finorze (pigułka w kolorze `primary`). Tekst:
+ * jasny `chart-3` (`primary` na własnym 10% miał 4,20:1), ciemny `primary`.
+ */
 const ACTIVE_ITEM_CLASS =
-  'data-active:bg-primary/10! dark:data-active:bg-primary/20! data-active:text-primary hover:data-active:text-primary'
+  'data-active:bg-primary/10! dark:data-active:bg-primary/20! data-active:text-chart-3 hover:data-active:text-chart-3 dark:data-active:text-primary dark:hover:data-active:text-primary'
 
 function shouldHandlePrimaryInAppNav(e: ReactPointerEvent): boolean {
   return e.pointerType !== 'mouse' || (e.button === 0 && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey)
@@ -49,6 +52,8 @@ function shouldHandlePrimaryInAppNav(e: ReactPointerEvent): boolean {
 interface NavItemProps {
   item: DashboardNavItem
   active: boolean
+  /** Bieżąca strona (nie to samo co podświetlenie oczekującego celu). */
+  current: boolean
   onPrimaryDown: (href: string) => void
   onPrefetchHover: (href: string) => void
 }
@@ -58,7 +63,7 @@ interface NavItemProps {
  * `pendingHref` w rodzicu przerysowuje wyłącznie dwie pozycje (poprzednią
  * aktywną i nową), a nie całe menu.
  */
-const NavItem = memo(function NavItem({ item, active, onPrimaryDown, onPrefetchHover }: NavItemProps) {
+const NavItem = memo(function NavItem({ item, active, current, onPrimaryDown, onPrefetchHover }: NavItemProps) {
   const Icon = item.icon
   const prefetchable = item.prefetch !== false
 
@@ -67,6 +72,7 @@ const NavItem = memo(function NavItem({ item, active, onPrimaryDown, onPrefetchH
       <SidebarMenuButton
         tooltip={item.label}
         isActive={active}
+        aria-current={current ? 'page' : undefined}
         className={ACTIVE_ITEM_CLASS}
         render={<Link href={item.href} prefetch={prefetchable ? undefined : false} />}
         onPointerDown={e => {
@@ -100,6 +106,14 @@ export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [pending, setPending] = useState<PendingNav | null>(null)
+  const [seenPath, setSeenPath] = useState(pathname)
+
+  // Każda zmiana adresu unieważnia oczekujący cel (reset w renderze, bez
+  // efektu) — inaczej po A → B → Wstecz do A „fromPath” znów by pasował.
+  if (seenPath !== pathname) {
+    setSeenPath(pathname)
+    setPending(null)
+  }
 
   const beginNavTo = useCallback(
     (href: string) => {
@@ -149,10 +163,11 @@ export function AppSidebar() {
         </Link>
       </SidebarHeader>
 
+      <nav aria-label='Nawigacja główna' className='flex min-h-0 flex-1 flex-col'>
       <SidebarContent className='group-data-[collapsible=icon]:overflow-y-auto'>
         {dashboardNavSections.map(section => (
           <SidebarGroup key={section.title}>
-            <SidebarGroupLabel className='text-sidebar-foreground/50 tracking-wider uppercase'>
+            <SidebarGroupLabel className='tracking-wider uppercase'>
               {section.title}
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -162,6 +177,7 @@ export function AppSidebar() {
                     key={item.href}
                     item={item}
                     active={isHrefActive(item.href)}
+                    current={isActiveNavPath(pathname, item.href)}
                     onPrimaryDown={beginNavTo}
                     onPrefetchHover={armPrefetch}
                   />
@@ -177,11 +193,13 @@ export function AppSidebar() {
           <NavItem
             item={dashboardSettingsNavItem}
             active={isHrefActive(dashboardSettingsNavItem.href)}
+            current={isActiveNavPath(pathname, dashboardSettingsNavItem.href)}
             onPrimaryDown={beginNavTo}
             onPrefetchHover={armPrefetch}
           />
         </SidebarMenu>
       </SidebarFooter>
+      </nav>
     </Sidebar>
   )
 }

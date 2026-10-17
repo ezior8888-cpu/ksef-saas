@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RiFileList3Line, RiSearchLine, RiUserLine } from '@remixicon/react';
 
@@ -57,6 +57,16 @@ export function CommandMenu() {
   const navEntries = entries.filter((e) => e.group === PALETTE_NAV_GROUP);
   const actionEntries = entries.filter((e) => e.group === PALETTE_ACTIONS_GROUP);
 
+  // Jedna ścieżka otwierania/zamykania — zamknięcie (skrót, Esc, wybór pozycji)
+  // zawsze czyści frazę i wyniki zdalne.
+  const onOpenChange = useCallback((next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setSearch('');
+      setRemote({ status: 'idle' });
+    }
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const isK = e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey);
@@ -64,11 +74,11 @@ export function CommandMenu() {
       if (!isK && !isSlash) return;
       if (isSlash && isTypingTarget(e.target)) return;
       e.preventDefault();
-      setOpen((o) => !o);
+      onOpenChange(!open);
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [open, onOpenChange]);
 
   // Wyszukiwanie zdalne: debounce 250 ms + ochrona przed spóźnioną odpowiedzią.
   useEffect(() => {
@@ -97,14 +107,6 @@ export function CommandMenu() {
   const onSearchChange = (value: string) => {
     setSearch(value);
     if (!normalizeSearchQuery(value)) setRemote({ status: 'idle' });
-  };
-
-  const onOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      setSearch('');
-      setRemote({ status: 'idle' });
-    }
   };
 
   const go = (href: string) => {
@@ -142,21 +144,21 @@ export function CommandMenu() {
         title="Szukaj lub przejdź"
         description="Wyszukaj fakturę, kontrahenta albo przejdź do ekranu aplikacji."
       >
-        <Command>
+        <Command label="Szukaj lub przejdź">
           <CommandInput
             placeholder="Szukaj faktury, kontrahenta albo ekranu…"
             value={search}
             onValueChange={onSearchChange}
           />
           <CommandList>
-            <CommandEmpty>
-              {remote.status === 'loading' ? 'Szukam…' : 'Brak wyników.'}
-            </CommandEmpty>
+            {remote.status !== 'loading' && remote.status !== 'error' ? (
+              <CommandEmpty>Brak wyników.</CommandEmpty>
+            ) : null}
             <CommandGroup heading={PALETTE_NAV_GROUP}>
               {navEntries.map((e) => (
                 <CommandItem
-                  key={e.href}
-                  value={e.label}
+                  key={e.value}
+                  value={e.value}
                   keywords={e.keywords}
                   onSelect={() => go(e.href)}
                 >
@@ -169,8 +171,8 @@ export function CommandMenu() {
             <CommandGroup heading={PALETTE_ACTIONS_GROUP}>
               {actionEntries.map((e) => (
                 <CommandItem
-                  key={e.label}
-                  value={e.label}
+                  key={e.value}
+                  value={e.value}
                   keywords={e.keywords}
                   onSelect={() => go(e.href)}
                 >
@@ -185,7 +187,9 @@ export function CommandMenu() {
               </p>
             ) : null}
             {hasQuery && remote.status === 'loading' ? (
-              <p className="text-muted-foreground px-3 py-2 text-xs">Szukam…</p>
+              <p role="status" aria-live="polite" className="text-muted-foreground px-3 py-2 text-xs">
+                Szukam…
+              </p>
             ) : null}
             {invoices.length > 0 ? (
               <>

@@ -45,6 +45,17 @@ function useSidebar() {
   return context
 }
 
+// Skrót nie może zjadać ⌘/Ctrl+B w polach tekstowych (np. pogrubienie).
+function isTypingTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement)
+  )
+}
+
 function SidebarProvider({
   defaultOpen = true,
   open: openProp,
@@ -91,7 +102,13 @@ function SidebarProvider({
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
+      if (
+        event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !isTypingTarget(event.target)
+      ) {
         event.preventDefault()
         toggleSidebar()
       }

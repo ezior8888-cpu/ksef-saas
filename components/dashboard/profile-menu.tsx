@@ -91,14 +91,14 @@ export function ProfileMenu({ email, name }: { email: string; name?: string }) {
         }
       >
         <Avatar>
-          <AvatarFallback className='bg-primary/10 text-primary font-medium'>{initials}</AvatarFallback>
+          <AvatarFallback className='bg-primary/10 text-accent-foreground font-medium'>{initials}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-65'>
         <DropdownMenuGroup>
           <DropdownMenuLabel className='flex items-center gap-3 px-2 py-2.5 font-normal'>
             <Avatar className='size-10'>
-              <AvatarFallback className='bg-primary/10 text-primary font-medium'>{initials}</AvatarFallback>
+              <AvatarFallback className='bg-primary/10 text-accent-foreground font-medium'>{initials}</AvatarFallback>
             </Avatar>
             <div className='flex min-w-0 flex-1 flex-col items-start'>
               {name ? (

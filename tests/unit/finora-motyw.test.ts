@@ -135,6 +135,31 @@ describe('kontrast WCAG AA 4,5:1 (§10.2 pkt 1)', () => {
       expect(contrast(oklch(t['--muted-foreground']), oklch(t[surface]))).toBeGreaterThanOrEqual(4.5);
     }
   });
+
+  // Pasek boczny (E2): pigułka aktywnej pozycji to `--primary` 10% (jasny)
+  // albo 20% (ciemny) na `--sidebar`.
+  it('jasny: aktywna pozycja menu (`chart-3`) na pigułce `primary`/10 nad paskiem', () => {
+    const pigulka = over(oklch(light['--primary']), 0.1, oklch(light['--sidebar']));
+    expect(contrast(oklch(light['--chart-3']), pigulka)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('ciemny: aktywna pozycja menu (`primary`) na pigułce `primary`/20 nad paskiem', () => {
+    const pigulka = over(oklch(dark['--primary']), 0.2, oklch(dark['--sidebar']));
+    expect(contrast(oklch(dark['--primary']), pigulka)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('jasny: etykiety grup (`--sidebar-foreground`) na pasku', () => {
+    expect(contrast(oklch(light['--sidebar-foreground']), oklch(light['--sidebar']))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('jasny: inicjały avatara (`--accent-foreground`) na `primary`/10 nad tłem', () => {
+    const tlo = over(oklch(light['--primary']), 0.1, oklch(light['--background']));
+    expect(contrast(oklch(light['--accent-foreground']), tlo)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('jasny: pierścień fokusu paska (`--sidebar-ring`) ma 3:1 względem paska (WCAG 1.4.11)', () => {
+    expect(contrast(oklch(light['--sidebar-ring']), oklch(light['--sidebar']))).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe('font i skala (D2)', () => {

@@ -64,6 +64,17 @@ describe('buildPaletteNavEntries', () => {
   });
 });
 
+describe('buildPaletteNavEntries — unikalne wartości cmdk', () => {
+  it('„Wystaw fakturę” jest i w menu, i w akcjach, a wartości (value) się nie powtarzają', () => {
+    const entries = buildPaletteNavEntries();
+    expect(entries.filter((e) => e.label === 'Wystaw fakturę').length).toBeGreaterThan(1);
+    const values = entries.map((e) => e.value);
+    expect(new Set(values).size).toBe(values.length);
+    // Etykieta zostaje w słowach kluczowych, by dopasowanie po nazwie działało.
+    for (const e of entries) expect(e.keywords).toContain(e.label);
+  });
+});
+
 describe('normalizeSearchQuery', () => {
   it('przycina, obcina do 80 znaków i odrzuca frazy krótsze niż 2', () => {
     expect(normalizeSearchQuery('  ab  ')).toBe('ab');

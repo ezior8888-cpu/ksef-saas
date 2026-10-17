@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { usePortalContainer } from '@/components/ui/portal-container';
 import { cn } from '@/lib/utils';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/client';
 import { getContextualArticleSlugs } from '@/lib/support/contextual-help';
@@ -93,6 +94,7 @@ export function SupportWidget({
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const [portalReady, setPortalReady] = useState(false);
+  const kontener = usePortalContainer();
 
   useLayoutEffect(() => {
     setPortalReady(true);
@@ -189,7 +191,7 @@ export function SupportWidget({
 
   const shell = (
     <>
-      {/* Floating button — portal do `body` + z nad banerem zgody (z-[60]),
+      {/* Floating button — portal do kontenera portali panelu (body bez providera) + z nad banerem zgody (z-[60]),
           żeby `fixed` nie był wycinany przez stacking / layout dashboardu
           (localhost z PostHog vs prod bez klucza). */}
       {!open && (
@@ -313,7 +315,15 @@ export function SupportWidget({
     return null;
   }
 
-  return createPortal(shell, document.body);
+  // Ten sam kontener co okna i menu Base UI (wewnątrz `.ff-dashboard`, plan
+  // Finora E2) — inaczej bąbelek maluje się nad oknami, arkuszami i ⌘K.
+  // undefined = brak providera (body); null = kontener jeszcze się montuje.
+  const target = kontener === undefined ? document.body : kontener;
+  if (target === null) {
+    return null;
+  }
+
+  return createPortal(shell, target);
 }
 
 function WelcomeState({

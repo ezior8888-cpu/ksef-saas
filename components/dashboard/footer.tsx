@@ -19,7 +19,7 @@ export function Footer() {
 
   return (
     <footer className="ff-shell-footer">
-      <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-3 px-4 py-3 text-sm max-sm:flex-col sm:gap-6 sm:px-[var(--ff-container-padding)]">
+      <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-3 px-4 py-3 text-sm max-sm:flex-col sm:gap-6 sm:px-[var(--ff-container-padding)] lg:pr-[100px]">
         <p className="text-muted-foreground text-balance max-sm:text-center">
           © {year} FaktWay
         </p>
