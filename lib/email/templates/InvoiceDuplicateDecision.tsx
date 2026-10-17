@@ -51,7 +51,7 @@ export default function InvoiceDuplicateDecision({
 
           <Hr style={hrStyle} />
 
-          <Text style={footerStyle}>Wiadomość automatyczna z systemu KSeF SaaS.</Text>
+          <Text style={footerStyle}>Wiadomość automatyczna z systemu FaktWay.</Text>
         </Container>
       </Body>
     </Html>

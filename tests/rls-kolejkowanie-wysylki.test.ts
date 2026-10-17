@@ -175,7 +175,7 @@ async function submissionsOf(invoiceId: string) {
 }
 
 /**
- * Faktura abonamentu FaktFlow (`stripe_invoice_id`) — powstaje tylko jako
+ * Faktura abonamentu FaktWay (`stripe_invoice_id`) — powstaje tylko jako
  * właściciel bazy: 00079 odmawia serwisowi zapisu tożsamości, a 00080 wymaga
  * wiersza `stripe_payments` z referencją płatności. Od 00115 wpłata musi mieć
  * potwierdzoną pełną parę PaymentIntent/Charge (`stripe_payment_refs_verified`,

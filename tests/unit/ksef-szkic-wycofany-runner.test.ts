@@ -26,7 +26,7 @@ const OTHER_ID = '44444444-4444-4444-8444-444444444444';
 const ATTEMPT = '22222222-2222-4222-8222-222222222222';
 const NUMBER = 'FV 2026/10/001';
 const GENERATED_AT = new Date('2026-10-01T10:00:00.000Z');
-/** Numer KSeF oryginału (faktura spoza FaktFlow, która zajęła numer). */
+/** Numer KSeF oryginału (faktura spoza FaktWay, która zajęła numer). */
 const K = '5260001246-20260928-0100A0B0C0D0-1A';
 const K2 = '5260001246-20260929-0200A0B0C0D0-2B';
 const CLAIMED = '2026-10-03T12:00:00.000000+00:00';
@@ -217,7 +217,7 @@ function takenRow(shape: 'decided' | 'automatic' | 'unmarked', extra: Row = {}):
   if (shape === 'automatic') {
     return {
       ...base, original_ksef_number: K, original_session_reference_number: 'S-OBCA', original_check: null,
-      error_message: `Numer faktury zajęty w KSeF przez fakturę ${K} spoza FaktFlow`, ...extra,
+      error_message: `Numer faktury zajęty w KSeF przez fakturę ${K} spoza FaktWay`, ...extra,
     };
   }
   return { ...base, original_ksef_number: null, original_session_reference_number: null, original_check: null, ...extra };

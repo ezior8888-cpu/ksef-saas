@@ -3,7 +3,7 @@
  * (Faza 25 Krok 4).
  *
  * Meta-rekursja: nasza apka wystawia fakturę VAT własnym pipeline'em KSeF.
- * Operator (FaktFlow Sp. z o.o.) jest sprzedawcą, klient płacący Stripe'a
+ * Operator (spółka prowadząca FaktWay) jest sprzedawcą, klient płacący Stripe'a
  * jest nabywcą.
  *
  * Założenia rozliczeniowe:
@@ -66,12 +66,9 @@ export function paidDateInPoland(paidAt: string): string {
   }).format(new Date(paidAt));
 }
 
-// UWAGA (rebranding FaktFlow → FaktWay): napisy „FaktFlow — subskrypcja …” niżej
-// oraz `notes` w `buildSelfInvoiceDraft` NIE są tu zmienione celowo — funkcja
-// RPC z migracji 00110 (create_billing_vat_invoice) porównuje je 1:1
-// (`NOT LIKE 'FaktFlow — subskrypcja …'`, `notes IS DISTINCT FROM v_note`)
-// i odrzuci fakturę z nową nazwą. Zmiana wymaga NAJPIERW nowej migracji,
-// akceptującej oba warianty, a dopiero potem zmiany tych napisów.
+// Stara nazwa produktu w pozycji i w uwagach zostaje celowo (plan Finora,
+// D8): `create_billing_vat_invoice` (00110) porównuje oba teksty co do znaku
+// i odrzuca fakturę przy różnicy. Zmieniają się razem z migracją tej funkcji.
 function planLineName(plan: 'monthly' | 'annual', issueDate: string): string {
   const dateLabel = new Date(issueDate).toLocaleDateString('pl-PL', {
     year: 'numeric',

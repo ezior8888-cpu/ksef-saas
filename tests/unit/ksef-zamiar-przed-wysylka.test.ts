@@ -12,7 +12,7 @@ import type { Invoice } from '@/types/invoice';
  * worker) albo zapis wpisu się nie udał, ponowienie nie wiedziało o tamtej
  * wysyłce: wysyłało fakturę drugi raz, KSeF odpowiadał 440 z numerem sesji,
  * której nie było w historii, i faktura kończyła jako `failed
- * KSEF_DUPLICATE_RECONCILE` — przyjęta w KSeF, a w FaktFlow „do uzgodnienia
+ * KSEF_DUPLICATE_RECONCILE` — przyjęta w KSeF, a w FaktWay „do uzgodnienia
  * przez operatora”.
  *
  * Teraz po otwarciu sesji, PRZED wysłaniem faktury, powstaje wpis `intent`

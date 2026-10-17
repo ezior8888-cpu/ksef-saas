@@ -4,18 +4,18 @@ import { memoryClient, type MemoryTables, type Row } from './helpers/baza-w-pami
 
 /**
  * PR C0b (D-A4-1b-3, specyfikacja v3, 5.10 i 7.2) — CZERWONY TEST ustalenia
- * GEN-RUNDA: „plik z generatora FaktFlow czyta się bez strat i bez fałszywych
+ * GEN-RUNDA: „plik z generatora FaktWay czyta się bez strat i bez fałszywych
  * ostrzeżeń”.
  *
- * Runda to: faktura FaktFlow → `finalizeInvoice` → `validateInvoice` (bez
+ * Runda to: faktura FaktWay → `finalizeInvoice` → `validateInvoice` (bez
  * błędów) → `generateFA3Xml` (z walidacją) → `parseFa3Xml` → wiersz importu
  * (`processImportedInvoices`). „Bez strat” = każda dana, którą plik FA(3) niesie
- * i którą FaktFlow zapisuje na wierszu faktury albo pokazuje klientowi/JPK:
+ * i którą FaktWay zapisuje na wierszu faktury albo pokazuje klientowi/JPK:
  * identyfikator nabywcy i jego rodzaj, `JST`/`GV`, stawki, kwoty, adnotacje,
  * daty, uwagi (`Stopka`), rodzaj faktury. Dziś parser (`lib/import/fa3-parser.ts`)
  * i budowniczy wiersza (`lib/import/imported-invoice-row.ts`) gubią część z tego
  * i dopisują fałszywe ostrzeżenia; PR C (zapis oryginału KSeF po decyzji klienta)
- * potrzebuje rundy bez strat z DWÓCH stron — bramy (plik FaktFlow nie może
+ * potrzebuje rundy bez strat z DWÓCH stron — bramy (plik FaktWay nie może
  * dostać `review` przez fałszywe ostrzeżenie) i projekcji K (zapisany wiersz nie
  * może być uboższy niż plik) — dlatego jedno ustalenie, jeden test, jedna macierz.
  *
@@ -842,7 +842,7 @@ describe('Bez strat: stawki, kwoty, daty, płatność i adnotacje z pliku (stra�
 });
 
 
-// ─── Pliki obcych programów: odczyt elementów spoza generatora FaktFlow ──────────
+// ─── Pliki obcych programów: odczyt elementów spoza generatora FaktWay ──────────
 // Bez nich zła implementacja C0b przeszłaby macierz (stałe invoiceTypeCode,
 // NrID bez KodKraju, ostatnia Informacje, 0 WDT/0 EX, NrPESEL/NrInny, noIdMarker).
 

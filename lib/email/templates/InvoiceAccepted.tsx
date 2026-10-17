@@ -45,7 +45,7 @@ export default function InvoiceAccepted({
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            Wiadomość automatyczna z systemu KSeF SaaS. Nie odpowiadaj na nią.
+            Wiadomość automatyczna z systemu FaktWay. Nie odpowiadaj na nią.
           </Text>
         </Container>
       </Body>

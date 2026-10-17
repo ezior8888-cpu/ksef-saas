@@ -294,7 +294,7 @@ export const FLO_FIXTURES: FloProposalView[] = [
     secondary: [{ label: 'Nie teraz', intent: 'snooze' }],
     preview: {
       type: 'file',
-      label: 'FaktWay_sierpien_2026.zip',
+      label: 'FaktFlow_sierpien_2026.zip',
       href: '/reports/exports/fx-pack-08/download',
       sizeLabel: '4,2 MB',
     },
@@ -442,7 +442,7 @@ export const FLO_FIXTURES: FloProposalView[] = [
     kind: 'feature.hint',
     variant: 'single',
     title: 'Możesz wrzucać paragony zdjęciem z telefonu',
-    body: 'Piąty koszt w tym miesiącu wpisujesz ręcznie. Udostępnij zdjęcie do FaktWay, a resztę zrobię sam.',
+    body: 'Piąty koszt w tym miesiącu wpisujesz ręcznie. Udostępnij zdjęcie do FaktFlow, a resztę zrobię sam.',
     evidence: [],
     primary: { label: 'Pokaż jak', intent: 'open' },
     secondary: STD_SECONDARY,

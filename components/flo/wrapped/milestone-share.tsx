@@ -35,7 +35,7 @@ export function FloMilestoneShare({
       buildShareSvg({
         value: title,
         caption: body,
-        footer: 'FaktWay',
+        footer: 'FaktFlow',
       }),
     [title, body],
   );
@@ -47,7 +47,7 @@ export function FloMilestoneShare({
 
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'faktway-prog.png';
+      link.download = 'faktflow-prog.png';
       link.click();
 
       URL.revokeObjectURL(url);
