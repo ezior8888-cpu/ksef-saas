@@ -97,8 +97,9 @@
   /* Ciemny wariant presetu. Wyjątki kontrastu (§10.2 pkt 1):
    *  - `--primary`: `chart-1` presetu (0.71 0.14 254.69) z CIEMNYM tekstem
    *    (`--primary-foreground` 0.20) — 7,02:1; biały na 0.62 miał 3,73:1;
-   *  - `--destructive`: 0.74 0.17 22 zamiast 0.64 — tekst na karcie 5,92:1
-   *    (preset: 4,05:1). */
+   *  - `--destructive`: 0.80 0.14 22 zamiast 0.64 — tekst przycisku na
+   *    własnym tle 20% leżącym na karcie albo w oknie dialogowym 4,85:1
+   *    (preset: 3,1:1). */
   --background: oklch(0.2 0 0);
   --foreground: oklch(0.92 0 0);
   --card: oklch(0.27 0 0);
@@ -113,7 +114,7 @@
   --muted-foreground: oklch(0.72 0 0);
   --accent: oklch(0.38 0.14 265.59);
   --accent-foreground: oklch(0.88 0.06 254.63);
-  --destructive: oklch(0.74 0.17 22);
+  --destructive: oklch(0.8 0.14 22);
   --border: oklch(0.37 0 0);
   --input: oklch(0.37 0 0);
   --ring: oklch(0.62 0.19 259.76);
@@ -614,7 +615,9 @@
   /* Role statusów — kolor + tło „pigułki" pod ten kolor */
   --ff-accent: var(--primary);
   --ff-accent-hover: color-mix(in oklch, var(--primary) 85%, var(--foreground));
-  --ff-accent-tint: var(--accent);
+  /* Tło pigułek i banerów z linkiem w kolorze akcentu. Nie `--accent`
+   * presetu: akcent jako tekst miał na nim 4,43:1 (< 4,5). */
+  --ff-accent-tint: color-mix(in oklch, var(--primary) 6%, var(--card));
   --ff-warn: #b45309;
   --ff-warn-tint: #fffbeb;
   --ff-warn-border: #fde68a;
@@ -706,6 +709,7 @@ html.dark .ff-dashboard {
   --ff-tertiary: #38bdf8;
   /* W ciemnym presecie `muted` = `card`; wnęka ma być ciemniejsza od karty. */
   --ff-surface-inset: var(--background);
+  --ff-accent-tint: color-mix(in oklch, var(--primary) 10%, var(--card));
   --ff-warn: #f59e0b;
   --ff-warn-tint: #1a1509;
   --ff-warn-border: #3d2f0e;

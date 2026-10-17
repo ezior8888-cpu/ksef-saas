@@ -97,13 +97,33 @@ describe('kontrast WCAG AA 4,5:1 (§10.2 pkt 1)', () => {
     expect(contrast(oklch(t['--primary']), oklch(t['--background']))).toBeGreaterThanOrEqual(4.5);
   });
 
+  // Przycisk i plakietka `destructive` mają półprzezroczyste tło (jasny /10,
+  // ciemny /20), które leży na stronie, karcie albo w oknie dialogowym.
   it.each([
     ['jasny', light, 0.1],
     ['ciemny', dark, 0.2],
-  ])('%s: tekst `destructive` na własnym tle przycisku (Finora: bg-destructive/%s)', (_, t, alpha) => {
+  ])('%s: tekst `destructive` na własnym półprzezroczystym tle przycisku', (_, t, alpha) => {
     const fg = oklch(t['--destructive']);
-    expect(contrast(fg, over(fg, alpha as number, oklch(t['--background'])))).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(fg, oklch(t['--card']))).toBeGreaterThanOrEqual(4.5);
+    for (const surface of ['--background', '--card', '--popover']) {
+      expect(contrast(fg, over(fg, alpha as number, oklch(t[surface]))), surface).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(fg, oklch(t[surface])), surface).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // `--ff-accent-tint` to tło pigułek i baneru z linkiem w kolorze akcentu
+  // (np. podkład z ostatniej faktury w `invoice-form.tsx`).
+  it.each([
+    ['jasny', light, block('.ff-dashboard')['--ff-accent-tint']],
+    ['ciemny', dark, block('html.dark .ff-dashboard')['--ff-accent-tint']],
+  ])('%s: akcent jako tekst na `--ff-accent-tint`', (_, t, tint) => {
+    const m = /^color-mix\(in oklch, var\(--primary\) (\d+)%, var\(--card\)\)$/.exec(tint ?? '');
+    expect(m, `--ff-accent-tint: ${tint}`).not.toBeNull();
+    const share = Number(m![1]) / 100;
+    // color-mix w oklch: L i C liniowo, odcień z jedynego składnika z chromą.
+    const [pl, pc, ph] = t['--primary'].slice(6, -1).split(' ').map(Number);
+    const [cl] = t['--card'].slice(6, -1).split(' ').map(Number);
+    const mixed = `oklch(${pl * share + cl * (1 - share)} ${pc * share} ${ph})`;
+    expect(contrast(oklch(t['--primary']), oklch(mixed))).toBeGreaterThanOrEqual(4.5);
   });
 
   it.each([

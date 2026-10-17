@@ -1200,6 +1200,15 @@ Masło na punkcie kontrolnym).
    `--primary-foreground: oklch(0.20 0 0)` (ciemny tekst na jasnoniebieskim
    przycisku, 5,85:1 jako tekst na karcie). `--ring` i `chart-*` bez zmian.
    Bez decyzji E1 bierze tę propozycję, bo inaczej CI dostępności padnie.
+   **Wykonane w E1 (bez osobnej decyzji):** `--primary` jak w propozycji.
+   `--destructive` ciemniej/jaśniej niż w propozycji, bo przycisk
+   i plakietka `destructive` mają tekst na WŁASNYM półprzezroczystym tle
+   (jasny /10, ciemny /20), także na karcie i w oknie dialogowym: jasny
+   `oklch(0.53 0.21 27)` (4,95:1), ciemny `oklch(0.8 0.14 22)` (4,85:1).
+   `--ff-accent-tint` = 6% (jasny) / 10% (ciemny) `--primary` na karcie,
+   bo akcent jako tekst na `--accent` presetu miał 4,43:1. Wszystko liczy
+   `tests/unit/finora-motyw.test.ts`. Stany najechania (hover) zostają jak
+   w Finorze.
 2. **§9 „Dodatki”, motyw i font** pisał „skala `md`, pasek `default`”.
    D2 to skala **`sm`** i wariant **`inset`**. Poprawione niżej w §9.
 3. **„Komplet zmiennych … (z `shadow-*`)”** — preset Modern Minimal nie ma
@@ -1350,15 +1359,22 @@ Transactions, Monthly Analytics, Accounts i Invoice List.
 | 17.10.2026 | Audyt | (ten dokument) | — | gotowe | — | audyt demo Finory (22 strony + auth + ustawienia) i kodu `main` @ `1ded2147` |
 | 17.10.2026 | Krytyka planu | (ten dokument) | — | gotowe | — | 5 krytyków (dane, wykonalność, wizualna, produkt, kompletność) + sędzia: przyjęto 37 poprawek, odrzucono 1 |
 | 17.10.2026 | Decyzja D7 | (ten dokument) | — | gotowe | — | karty podatkowe dozwolone: przywrócony licznik limitu zwolnienia z VAT (240 000 zł, gotowe funkcje z `vat-limit.ts`) w P1/P2, „Odłóż na podatek” w P2 |
-| 17.10.2026 | E0 + nazwa FaktWay | #278 | ok. 10 (szacunek sesji w chmurze, bez wglądu w rozliczenie) | czeka na scalenie | — | §10 wypełniony z `faktflow-finora-src` @ `56394ef`; konflikty z planem w §10.2 (kontrast `primary` 3,73:1 blokuje E1); D8 i zmiana nazwy w kodzie aplikacji ze strażnikiem `nazwa-produktu.test.ts`. Teksty z bazy (abonament, odmowy 00148) i pliki FLO zostają z FaktFlow do osobnego PR |
+| 17.10.2026 | E0 + nazwa FaktWay | #278 | ok. 10 (szacunek sesji w chmurze, bez wglądu w rozliczenie) | scalone 17.10 | — | §10 wypełniony z `faktflow-finora-src` @ `56394ef`; konflikty z planem w §10.2 (kontrast `primary` 3,73:1 blokuje E1); D8 i zmiana nazwy w kodzie aplikacji ze strażnikiem `nazwa-produktu.test.ts`. Teksty z bazy (abonament, odmowy 00148) i pliki FLO zostają z FaktFlow do osobnego PR |
+| 17.10.2026 | E1 | (PR E1+E2, numer w opisie sesji) | brak wglądu w rozliczenie; agenci: mapowanie 1,7 mln tokenów (mocny model — za drogo, od teraz tańsze), porty 0,3 mln (Sonnet), przegląd 0,5 mln | gotowe, czeka na E2 w tym samym PR (stos, §9 „Wdrożenia”) | — | prymitywy Finory na Base UI (16 + `chart`), preset z poprawkami kontrastu, aliasy `--ff-*`, wątek FLO przypięty do dawnych kolorów (`.ff-flo-legacy` + arkusz kolejki), skala SM na `.ff-dashboard`, Outfit, `.zova` odizolowana, Select z `items`, linki bez `asChild`, usunięte `radix-ui` i `next-themes`. Przegląd: 3 soczewki, 1 potwierdzona usterka (kontrast `destructive` na karcie w ciemnym) — poprawiona |
 
 **Dla Bartosza:** `lib/flo/wrapped.ts` czyta nieodświeżany
 `mv_tenant_monthly_stats` (tor silnika). Zgłoszone, nie naprawiamy w tym
 planie.
 
-**Następny krok:** Bartosz decyduje o kolorze `primary` (§10.2 pkt 1; bez
-decyzji E1 bierze propozycję z §10.2) i scala #278. Potem sesja w chmurze:
-**E1** od świeżego `main` (fundament: zależności z §10.1, `components/ui/*`
-Finory na Base UI, preset z §10.1, skala SM według §10.1). Osobno, po
-rozstrzygnięciu szkicu #248: migracja nazwy FaktWay w bazie (wyjątki
-`DB_BOUND` w `tests/unit/nazwa-produktu.test.ts`).
+**Następny krok:** **E2** (szkielet P0, nawigacja §4, dolny pasek, ⌘K)
+na TEJ SAMEJ gałęzi i w tym samym PR co E1 — stos z §9 „Wdrożenia”, więc
+E1 nie idzie na produkcję sam. Do zakresu E2 dochodzą z przeglądu E1:
+(1) portale Base UI (Dialog, Select, Menu, Tooltip, Popover) renderują się
+w `<body>`, poza `.ff-dashboard`, więc nie mają skali SM ani tokenów
+`--ff-*` — szkielet E2 daje im `container` wewnątrz korzenia (poza
+animowanym `.ff-route-template`) albo klasę `ff-dashboard` na treści;
+(2) `TooltipProvider` w szkielecie (pasek Finory używa `Tooltip`);
+(3) kanwa pulpitu jest teraz biała jak w Finorze (`--ff-bg` = `--background`),
+a karty FLO zostały białe z ramką — do oceny Masła na punkcie kontrolnym.
+Osobno, po rozstrzygnięciu szkicu #248: migracja nazwy FaktWay w bazie
+(wyjątki `DB_BOUND` w `tests/unit/nazwa-produktu.test.ts`).
