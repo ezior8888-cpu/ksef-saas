@@ -36,13 +36,11 @@ const OWNED_ELSEWHERE = [
 // Teksty, które baza ma u siebie i porównuje albo zwraca dosłownie.
 // Zmieniają się razem z migracją, która przepisze te funkcje bazy:
 //  - nazwa pozycji i uwagi faktury za abonament: `create_billing_vat_invoice`
-//    (00110) porównuje je z tym, co wysyła kod, i odrzuca fakturę przy różnicy;
-//  - `DUPLICATE_DECISION_SQL_TEXTS` (wiersze `{ template: '…' }`): lustro
-//    odmów `decide_ksef_duplicate` i wyzwalaczy z 00148, które
-//    `ksef-decyzja-duplikatu-migracja.test.ts` porównuje z plikiem migracji.
+//    (00110) porównuje je z tym, co wysyła kod, i odrzuca fakturę przy różnicy.
+// Lustro odmów decyzji o duplikacie (`DUPLICATE_DECISION_SQL_TEXTS`) przepisała
+// na FaktWay migracja 00151 — wyjątku dla `lib/ksef/duplicate-decision.ts` już nie ma.
 const DB_BOUND = new Map([
   ['lib/billing/self-invoice.ts', ['FaktFlow — subskrypcja roczna', 'FaktFlow — subskrypcja miesięczna', 'Faktura za subskrypcję FaktFlow.']],
-  ['lib/ksef/duplicate-decision.ts', ["{ template: '"]],
 ]);
 
 function walk(dir: string): string[] {
