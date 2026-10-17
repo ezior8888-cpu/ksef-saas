@@ -8,6 +8,7 @@ import { RiCloseLine } from '@remixicon/react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { usePortalContainer } from '@/components/ui/portal-container'
 
 // E1: teksty widoczne i sr-only po polsku ("Close" -> "Zamknij") — plan Finora, etap E1
 
@@ -19,8 +20,9 @@ function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
   return <DialogPrimitive.Trigger data-slot='dialog-trigger' {...props} />
 }
 
-function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
-  return <DialogPrimitive.Portal data-slot='dialog-portal' {...props} />
+function DialogPortal({ container, ...props }: DialogPrimitive.Portal.Props) {
+  const kontener = usePortalContainer() // plan Finora §4/E2
+  return <DialogPrimitive.Portal data-slot='dialog-portal' container={container ?? kontener} {...props} />
 }
 
 function DialogClose({ ...props }: DialogPrimitive.Close.Props) {

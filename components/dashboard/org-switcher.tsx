@@ -1,13 +1,20 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import {
+  RiAddLine,
+  RiArrowDownSLine,
+  RiBuilding2Line,
+  RiCheckLine,
+} from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { setActiveOrganizationAction } from '@/app/actions/organizations';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useIsDesktop } from '@/hooks/use-media-query';
+import { OTWORZ_PRZELACZNIK_FIRMY } from '@/lib/org-switcher-event';
 import { cn } from '@/lib/utils';
 
 export interface MembershipPreview {
@@ -40,6 +47,10 @@ const ROLE_LABEL: Record<MembershipPreview['role'], string> = {
  * `w-72` przy prawej krawędzi wychodziła poza ekran 375 px. Wyboru dokonuje
  * `useIsDesktop`, a nie klasa `lg:hidden`, bo zamontowany i schowany
  * `Dialog` i tak przechwytuje ognisko oraz blokuje przewijanie strony.
+ *
+ * OTWIERANIE Z ZEWNĄTRZ. Pozycja „Przełącz firmę” w menu avatara wysyła
+ * zdarzenie `OTWORZ_PRZELACZNIK_FIRMY` (`lib/org-switcher-event.ts`) — ten
+ * sam przełącznik otwiera się wtedy jako rozwijka albo arkusz.
  */
 export function OrgSwitcher({
   memberships,
@@ -56,6 +67,37 @@ export function OrgSwitcher({
   const isDesktop = useIsDesktop();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const otworz = () => setOpen(true);
+    window.addEventListener(OTWORZ_PRZELACZNIK_FIRMY, otworz);
+    return () => window.removeEventListener(OTWORZ_PRZELACZNIK_FIRMY, otworz);
+  }, []);
+
+  // Rozwijka na komputerze nie jest dialogiem, więc sama musi się zamykać
+  // kliknięciem obok i klawiszem Escape (arkusz na telefonie robi to sam).
+  useEffect(() => {
+    if (!open || !isDesktop) return;
+    const naZewnatrz = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        rootRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', naZewnatrz);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', naZewnatrz);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open, isDesktop]);
 
   const handleSwitch = (orgId: string) => {
     if (orgId === activeOrgId) {
@@ -82,7 +124,7 @@ export function OrgSwitcher({
   );
 
   return (
-    <div className="relative min-w-0">
+    <div ref={rootRef} className="relative min-w-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -103,9 +145,7 @@ export function OrgSwitcher({
           className="size-1.5 shrink-0 rounded-full bg-[var(--ff-accent)] lg:hidden"
         />
         <span className="hidden size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--ff-surface-chip)] text-[var(--ff-accent)] lg:flex">
-          <span className="material-symbols-outlined text-[16px] leading-none">
-            business
-          </span>
+          <RiBuilding2Line aria-hidden className="size-4" />
         </span>
 
         <div className="min-w-0 flex-1 leading-[1.25]">
@@ -119,15 +159,13 @@ export function OrgSwitcher({
           </p>
         </div>
 
-        <span
+        <RiArrowDownSLine
           aria-hidden
           className={cn(
-            'material-symbols-outlined shrink-0 text-[16px] text-[var(--ff-text-dim)] transition-transform lg:ml-1',
+            'size-4 shrink-0 text-[var(--ff-text-dim)] transition-transform lg:ml-1',
             open && 'rotate-180',
           )}
-        >
-          expand_more
-        </span>
+        />
       </button>
 
       {isDesktop ? (
@@ -188,12 +226,10 @@ function OrgList({
           onClick={() => onSwitch(m.organizationId)}
           className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--ff-row-hover)]"
         >
-          <span
+          <RiBuilding2Line
             aria-hidden
-            className="material-symbols-outlined shrink-0 text-[20px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]"
-          >
-            business
-          </span>
+            className="size-5 shrink-0 text-[color-mix(in_srgb,var(--ff-on-surface-variant)_90%,transparent)]"
+          />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-[var(--ff-on-surface)]">
               {m.name}
@@ -203,12 +239,10 @@ function OrgList({
             </p>
           </div>
           {m.isActive ? (
-            <span
+            <RiCheckLine
               aria-hidden
-              className="material-symbols-outlined shrink-0 text-[20px] text-[var(--ff-accent)]"
-            >
-              check
-            </span>
+              className="size-5 shrink-0 text-[var(--ff-accent)]"
+            />
           ) : null}
         </button>
       ))}
@@ -219,9 +253,7 @@ function OrgList({
           onClick={onClose}
           className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--ff-on-surface)] hover:bg-[var(--ff-row-hover)]"
         >
-          <span aria-hidden className="material-symbols-outlined text-[20px]">
-            add
-          </span>
+          <RiAddLine aria-hidden className="size-5" />
           Dodaj kolejną organizację
         </Link>
       </div>

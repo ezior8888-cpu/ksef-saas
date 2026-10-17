@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { RiArrowRightLine, RiErrorWarningLine } from '@remixicon/react';
 
+import { Alert } from '@/components/ui/alert';
 import { DismissibleBanner } from '@/components/dashboard/dismissible-banner';
 import { getDashboardActiveOrgVerified } from '@/lib/dashboard-shell-data';
 
@@ -50,17 +52,12 @@ export default async function DashboardVerificationBanner({
   }
 
   return (
-    <div
-      className="mb-6 mt-7 flex flex-col gap-3 rounded-xl border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-[22px] py-4 sm:flex-row sm:items-center sm:gap-4"
+    <Alert
       role="status"
+      className="mt-7 mb-6 flex flex-col gap-3 border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-4 py-3 text-sm sm:flex-row sm:items-center sm:gap-4"
     >
-      <span
-        className="material-symbols-outlined shrink-0 text-[20px] leading-none text-[var(--ff-warn)]"
-        aria-hidden
-      >
-        error
-      </span>
-      <p className="min-w-0 flex-1 text-[13.5px] leading-[1.5] text-[var(--ff-warn-text)]">
+      <RiErrorWarningLine className="size-5 shrink-0 text-[var(--ff-warn)]" aria-hidden />
+      <p className="min-w-0 flex-1 leading-normal text-[var(--ff-warn-text)]">
         <span className="font-semibold text-[var(--ff-warn)]">
           Organizacja niezweryfikowana.
         </span>{' '}
@@ -69,14 +66,12 @@ export default async function DashboardVerificationBanner({
       </p>
       <Link
         href="/settings/ksef"
-        className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[13.5px] font-semibold text-[var(--ff-warn)] underline-offset-4 transition-colors hover:text-[var(--ff-warn-text)] hover:underline"
+        className="flex shrink-0 items-center gap-1.5 text-sm font-semibold whitespace-nowrap text-[var(--ff-warn)] underline-offset-4 transition-colors hover:text-[var(--ff-warn-text)] hover:underline"
       >
         Zweryfikuj teraz
-        <span className="material-symbols-outlined text-[15px] leading-none">
-          arrow_forward
-        </span>
+        <RiArrowRightLine className="size-4" aria-hidden />
       </Link>
-    </div>
+    </Alert>
   );
 }
 

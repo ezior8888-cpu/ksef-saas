@@ -65,15 +65,15 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       {
-        name: 'Nowa faktura',
+        name: 'Wystaw fakturę',
         short_name: 'Nowa',
         description: 'Wystaw fakturę i wyślij do KSeF',
         url: '/invoices/new',
         icons: [{ src: '/icons/icon-96x96.png', sizes: '96x96' }],
       },
       {
-        name: 'Skrzynka odbiorcza',
-        short_name: 'Inbox',
+        name: 'Skrzynka KSeF',
+        short_name: 'KSeF',
         description: 'Faktury otrzymane przez KSeF',
         url: '/inbox',
         icons: [{ src: '/icons/icon-96x96.png', sizes: '96x96' }],

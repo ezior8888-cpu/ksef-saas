@@ -930,7 +930,9 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
   box-shadow: none;
 }
 
-/* Aktywna pozycja w sidebarze: zielona „pigułka" (tło #152b22, tekst #34d399). */
+/* Aktywna pozycja w arkuszu „Więcej" dolnej nawigacji (`bottom-nav.tsx`).
+ * Pasek boczny od E2 planu Finora ma własne klasy aktywności
+ * (`data-active:bg-primary/10` w `app-sidebar.tsx`). */
 .ff-sidebar-active {
   background: var(--ff-accent-tint, #152b22);
   box-shadow: none;
@@ -970,11 +972,6 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
  * znikają — to jest bezpiecznik. Wartości celowo lekko nieprzezroczyste
  * (`rgba(...)` zamiast pełnych `#xxx`), żeby zachować efekt szkła nad mesh.
  * ──────────────────────────────────────────────────────────────────────────── */
-.ff-shell-sidebar {
-  background-color: var(--sidebar);
-  border-right: 1px solid var(--sidebar-border);
-}
-
 .ff-shell-header {
   background-color: var(--background);
   border-bottom: 1px solid var(--border);
@@ -983,6 +980,13 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
    * wyliczeniach wysokości na dashboardzie. */
   height: calc(var(--ff-header-h) + var(--ff-safe-t));
   padding-top: var(--ff-safe-t);
+}
+
+/* Stopka panelu (`components/dashboard/footer.tsx`) — przewija się z treścią
+ * jako drugie dziecko `.ff-shell-scroll`. Na `/dashboard` znika (niżej,
+ * `html.ff-route-dashboard .ff-shell-footer`). */
+.ff-shell-footer {
+  border-top: 1px solid var(--border);
 }
 
 
@@ -1004,17 +1008,51 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
   --ff-safe-l: env(safe-area-inset-left, 0px);
   --ff-safe-r: env(safe-area-inset-right, 0px);
 
-  /* Poniżej `lg` szkielet ma niższy nagłówek, dolną nawigację i zero sidebara. */
-  --ff-header-h: 56px;
+  /* Poniżej `lg` szkielet ma dolną nawigację i zero paska bocznego.
+   * Nagłówek ma 52 px na każdej szerokości: od E2 planu Finora to zwarty
+   * pasek szablonu (jeden wiersz), a nie dawne 80 px z tytułem strony. */
+  --ff-header-h: 52px;
   --ff-bottom-nav-h: 64px;
   --ff-sidebar-w: 0px;
 }
 
 @media (min-width: 1024px) {
   :root {
-    --ff-header-h: 80px;
     --ff-bottom-nav-h: 0px;
-    --ff-sidebar-w: 280px;
+    /* Rezerwa, gdy szkielet nie ma paska (np. inny layout) — szerokość
+     * rozwiniętego paska Finory (`--sidebar-width`). */
+    --ff-sidebar-w: 16rem;
+  }
+
+  /* Lewa krawędź treści (`SidebarInset`) wg stanu paska z `ui/sidebar.tsx`,
+   * wariant `inset`:
+   *  - rozwinięty: szczelina `w-(--sidebar-width)`, wstawka `ml-0`;
+   *  - zwinięty: szczelina `--sidebar-width-icon + spacing(4)` i wstawka
+   *    `ml-2`, razem `--sidebar-width-icon + spacing(6)`.
+   * `--spacing` liczy się tu w skali SM `.ff-dashboard`, tak samo jak
+   * w klasach paska. Z tego tokenu biorą położenie paski `fixed`
+   * (`.ff-sticky-actions`). */
+  .ff-dashboard:has([data-slot='sidebar'][data-state='expanded']) {
+    --ff-sidebar-w: var(--sidebar-width);
+  }
+
+  .ff-dashboard:has([data-slot='sidebar'][data-state='collapsed']) {
+    --ff-sidebar-w: calc(var(--sidebar-width-icon) + var(--spacing) * 6);
+  }
+
+  /* Wygląd „inset": szara rama w kolorze paska, biała treść. Klasa
+   * `has-data-[variant=inset]:bg-sidebar` z `SidebarProvider` przegrywa
+   * z niewarstwowym `background-color` `.ff-dashboard`, stąd selektor
+   * z atrybutem (o jedną specyficzność wyżej). */
+  .ff-dashboard[data-slot='sidebar-wrapper'] {
+    background-color: var(--sidebar);
+  }
+
+  /* Paski `fixed` kończą się na krawędzi wstawki, nie okna — wstawka ma
+   * margines `m-2` z prawej i od dołu. */
+  .ff-dashboard[data-slot='sidebar-wrapper'] .ff-sticky-actions {
+    right: calc(var(--spacing) * 2);
+    bottom: calc(var(--spacing) * 2);
   }
 }
 
@@ -1622,6 +1660,11 @@ html.ff-route-dashboard .ff-shell-scroll > div {
   height: 100%;
   min-height: 0;
   padding-bottom: 0;
+}
+
+/* Stopka nie ma miejsca na ekranie agenta zablokowanym na wysokość okna. */
+html.ff-route-dashboard .ff-shell-footer {
+  display: none;
 }
 
 /* Ostatnie dziecko to strona; banery nad nią zajmują tyle, ile potrzebują,

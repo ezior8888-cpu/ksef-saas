@@ -1,5 +1,6 @@
 'use client';
 
+import { RiCloseLine } from '@remixicon/react';
 import { useCallback, useSyncExternalStore, type ReactNode } from 'react';
 
 const KLUCZ_PREFIKS = 'ff.banner.dismissed.';
@@ -77,9 +78,7 @@ export function DismissibleBanner({
           aria-label="Ukryj na dziś"
           className="absolute right-2 top-2 flex size-9 items-center justify-center rounded-lg text-[var(--ff-warn)] transition-colors hover:bg-[var(--ff-warn-border)] lg:hidden"
         >
-          <span aria-hidden className="material-symbols-outlined text-[18px] leading-none">
-            close
-          </span>
+          <RiCloseLine aria-hidden className="size-[18px]" />
         </button>
       </div>
     </div>

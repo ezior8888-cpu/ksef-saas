@@ -7,13 +7,15 @@ import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import { RiArrowRightSLine, RiCheckLine } from '@remixicon/react'
 
 import { cn } from '@/lib/utils'
+import { usePortalContainer } from '@/components/ui/portal-container'
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot='dropdown-menu' {...props} />
 }
 
-function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
-  return <MenuPrimitive.Portal data-slot='dropdown-menu-portal' {...props} />
+function DropdownMenuPortal({ container, ...props }: MenuPrimitive.Portal.Props) {
+  const kontener = usePortalContainer() // plan Finora §4/E2
+  return <MenuPrimitive.Portal data-slot='dropdown-menu-portal' container={container ?? kontener} {...props} />
 }
 
 function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
@@ -28,8 +30,9 @@ function DropdownMenuContent({
   className,
   ...props
 }: MenuPrimitive.Popup.Props & Pick<MenuPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'>) {
+  const kontener = usePortalContainer() // plan Finora §4/E2
   return (
-    <MenuPrimitive.Portal>
+    <MenuPrimitive.Portal container={kontener}>
       <MenuPrimitive.Positioner
         className='isolate z-50 outline-none'
         align={align}

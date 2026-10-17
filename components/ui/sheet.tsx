@@ -8,6 +8,7 @@ import { RiCloseLine } from '@remixicon/react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { usePortalContainer } from '@/components/ui/portal-container'
 
 // E1: sr-only po polsku ("Close" -> "Zamknij"); zgodność ze starymi wywołaniami (plan §2.1) — usuwają etapy ekranów
 
@@ -23,8 +24,9 @@ function SheetClose({ ...props }: SheetPrimitive.Close.Props) {
   return <SheetPrimitive.Close data-slot='sheet-close' {...props} />
 }
 
-function SheetPortal({ ...props }: SheetPrimitive.Portal.Props) {
-  return <SheetPrimitive.Portal data-slot='sheet-portal' {...props} />
+function SheetPortal({ container, ...props }: SheetPrimitive.Portal.Props) {
+  const kontener = usePortalContainer() // plan Finora §4/E2
+  return <SheetPrimitive.Portal data-slot='sheet-portal' container={container ?? kontener} {...props} />
 }
 
 function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {

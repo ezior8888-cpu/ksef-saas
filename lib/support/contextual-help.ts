@@ -51,6 +51,26 @@ const ROUTE_HELP: RouteHelp[] = [
     slugs: ['jak-wystawic-pierwsza-fakture', 'statusy-faktury-i-upo', 'najczestsze-bledy-ksef'],
   },
   {
+    prefix: '/inbox',
+    slugs: ['statusy-faktury-i-upo', 'kategoryzacja-kosztow', 'czym-jest-ksef'],
+  },
+  {
+    prefix: '/contractors',
+    slugs: ['jak-wystawic-pierwsza-fakture'],
+  },
+  {
+    prefix: '/payments/overdue',
+    slugs: ['statusy-faktury-i-upo'],
+  },
+  {
+    prefix: '/przeplywy',
+    slugs: ['pierwsze-kroki-w-faktflow', 'ksiega-przychodow-i-rozchodow'],
+  },
+  {
+    prefix: '/import-danych',
+    slugs: ['magic-import-z-innych-programow'],
+  },
+  {
     prefix: '/expenses',
     slugs: ['skanowanie-paragonow-ocr', 'kategoryzacja-kosztow'],
   },

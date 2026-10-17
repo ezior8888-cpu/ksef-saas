@@ -7,6 +7,7 @@ import { Select as SelectPrimitive } from '@base-ui/react/select'
 import { RiArrowDownSLine, RiCheckLine, RiArrowUpSLine } from '@remixicon/react'
 
 import { cn } from '@/lib/utils'
+import { usePortalContainer } from '@/components/ui/portal-container'
 
 const Select = SelectPrimitive.Root
 
@@ -57,8 +58,9 @@ function SelectContent({
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<SelectPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset' | 'alignItemWithTrigger'>) {
+  const kontener = usePortalContainer() // plan Finora §4/E2
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={kontener}>
       <SelectPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}

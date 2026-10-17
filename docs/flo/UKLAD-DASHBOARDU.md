@@ -44,8 +44,17 @@ Mapa własności z części IV.2 planu obowiązuje dalej, z **jedną zmianą**:
 - **`app/globals.css` przechodzi do Bartosza.** Motywu nie da się odwrócić bez
   tego pliku. Zmiana jest jawna, opisana tutaj, w `DZIENNIK-BARTOSZ.md`
   i w części VIII planu Masła.
-- **`lib/dashboard-nav-config.ts` dalej należy do Masła i NIE BYŁ RUSZANY.**
-  Nawigacja już jest 1:1 z prototypem. Pozycja „FLO” to nadal jego krok 2.
+- **`lib/dashboard-nav-config.ts` zmieniony w etapie E2 planu Finora**
+  (`docs/koordynacja/PLAN-FINORA.md`, §11 pkt 5) za potwierdzeniem Bartosza
+  z 17.10.2026. Plik był Masła; nowe sekcje (Pulpit, Sprzedaż, Koszty,
+  Księgowość), ikony Remix i reguły `isActiveNavPath` pilnuje
+  `tests/unit/dashboard-nav-config.test.ts`. Dolny pasek (Flo / Faktury /
+  Nowa / Miesiąc / Więcej) zostaje bez zmian pozycji.
+- **Shell jest na szablonie Finora** (plan Finora, E2):
+  `app/(dashboard)/layout.tsx` oraz nowe `components/dashboard/app-sidebar.tsx`,
+  `app-header.tsx`, `command-menu.tsx`, `profile-menu.tsx`, `footer.tsx`.
+  Etykiety FLO w `lib/flo/functions/*` („Przeterminowane", „Skrzynka
+  odbiorcza") zostają — to zadanie toru silnika, nie szkieletu.
 
 Nadal wyłącznie Masła, nietknięte: `components/flo/*`, `app/(dashboard)/flo/*`,
 `app/(dashboard)/settings/flo/*`, `content/flo/*`, `e2e/flo-*.spec.ts`,
@@ -177,7 +186,13 @@ app/globals.css                              paleta (Bartosz od 30.08.2026)
 lib/theme/theme.ts                           domyślny motyw = jasny
 lib/dashboard-page-title.ts                  tytuł strony w pasku nagłówka
 lib/dashboard/monthly-figures.ts             liczby miesiąca + seria wykresu
-app/(dashboard)/layout.tsx                   shell: sidebar, nagłówek, banery
+app/(dashboard)/layout.tsx                   shell na szablonie Finora (E2)
+components/dashboard/app-sidebar.tsx         sidebar 16 rem / 3 rem zwinięty (E2)
+components/dashboard/app-header.tsx          nagłówek 52 px (E2)
+components/dashboard/command-menu.tsx        paleta poleceń ⌘K (E2)
+components/dashboard/profile-menu.tsx        menu profilu (E2)
+components/dashboard/footer.tsx              stopka (E2)
+lib/dashboard-nav-config.ts                  menu: sekcje, ikony Remix (E2)
 app/(dashboard)/_components/
   dashboard-page-heading.tsx                 tytuł w nagłówku
   dashboard-verification-banner.tsx          baner braku certyfikatu
@@ -226,7 +241,7 @@ konto z listy nie miałoby jak się zalogować.
 
 | Element | Komputer (`lg`+) | Telefon |
 |---|---|---|
-| Nawigacja | sidebar 280 px | dolny pasek: Flo · Faktury · **Nowa** · Miesiąc · Więcej |
+| Nawigacja | sidebar 16 rem (od E2, szablon Finora) | dolny pasek: Flo · Faktury · **Nowa** · Miesiąc · Więcej |
 | Tytuł w pasku | „Dashboard" + miesiąc | wordmark FaktFlow |
 | Przełącznik organizacji | kartonik + rozwijka | pigułka „● Nazwa" + arkusz z dołu |
 | Wylogowanie | ikona w pasku | arkusz „Więcej" |
@@ -254,11 +269,11 @@ Nagłówek na telefonie ma awatar, imię, uczciwy podpis i dwie odznaki
 
 ### Tokeny, o których trzeba wiedzieć
 
-`--ff-safe-{t,b,l,r}` (bezpieczne obszary), `--ff-header-h` (56/80 px),
-`--ff-bottom-nav-h` (64/0 px), `--ff-sidebar-w` (0/280 px) — wszystkie
+`--ff-safe-{t,b,l,r}` (bezpieczne obszary), `--ff-header-h` (telefon / od `lg`: 52 px, od E2),
+`--ff-bottom-nav-h` (64/0 px), `--ff-sidebar-w` (0 / 16 rem, po zwinięciu 3 rem — od E2) — wszystkie
 w `app/globals.css`, przełączane jednym `@media (min-width: 1024px)`.
 Klasa `.ff-sticky-actions` zastąpiła dziesięć kopii `fixed bottom-0 …
-lg:left-[280px]`; jeśli zmienia się wysokość nawigacji, zmienia się w jednym
+lg:left-[280px]` (stara wartość; teraz szerokość sidebara z `--ff-sidebar-w`); jeśli zmienia się wysokość nawigacji, zmienia się w jednym
 miejscu.
 
 **Pułapka, która kosztowała pół dnia:** `.ff-route-template` miał
