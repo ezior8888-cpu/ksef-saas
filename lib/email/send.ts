@@ -37,7 +37,9 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
  * `onboarding@resend.dev` — domena dostawcy, którą Resend przyjmuje tylko na
  * koncie testowym. Produkcja ustawia RESEND_FROM_* jawnie.
  */
-const DEFAULT_FROM = 'FaktWay <no-reply@app.faktway.pl>';
+// Apeks domeny, bo tylko on ma DKIM w Resend — subdomena bez weryfikacji
+// odrzuciłaby wysyłkę. Te same adresy co RESEND_FROM_* na produkcji.
+const DEFAULT_FROM = 'FaktWay <powiadomienia@faktway.pl>';
 
 /** Pusta zmienna to brak zmiennej — `??` przepuszczał pusty napis. */
 function envSender(...names: string[]): string | undefined {
@@ -83,8 +85,9 @@ function getResend(): Resend {
  * tej samej domeny używanej dla critical alerts (faktury, hasła).
  *
  * Konwencja (oba opcjonalne — fallback do single `RESEND_FROM_EMAIL`):
- *   RESEND_FROM_TRANSACTIONAL = `FaktWay <no-reply@app.faktway.pl>`
- *   RESEND_FROM_MARKETING     = `FaktWay <hello@hello.faktway.pl>`
+ *   RESEND_FROM_TRANSACTIONAL = `FaktWay <powiadomienia@faktway.pl>`
+ *   RESEND_FROM_MARKETING     = `FaktWay <kontakt@faktway.pl>`
+ * Osobne subdomeny (np. `app.`, `hello.`) dopiero po ich weryfikacji w Resend.
  */
 function getFromEmail(category: 'transactional' | 'product_updates' | 'marketing'): string {
   if (category === 'transactional') {

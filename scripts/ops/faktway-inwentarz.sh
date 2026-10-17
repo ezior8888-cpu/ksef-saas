@@ -72,38 +72,44 @@ echo "Kopia lokalna: $OUT"
 echo
 
 echo "── 1-4. Coolify: aplikacje, serwisy, zmienne z adresami, kopie zapasowe"
-tinker <<'PHP' | grep -v '^> ' | grep -v '^= null' || true
+# Tinker odbija wpisany kod (linie z „. ”, „< ”) i potrafi skleić echo
+# z wynikiem w jednej linii — przez to 17.10 zginęły wiersze APLIKACJA 1
+# i KOPIA BAZY. Prawdziwy wynik ma znacznik „## ” (chr(35)), którego nie ma
+# w samym kodzie; filtr bierze tylko to, co po znaczniku.
+tinker <<'PHP' | grep -a '## ' | sed 's/.*## //' || true
+function o($s) { echo chr(35) . chr(35) . ' ' . $s . PHP_EOL; }
 $secret = '/(KEY|SECRET|TOKEN|PASS|JWT)/i';
 $urlish = '/^(NEXT_PUBLIC_APP_URL|NEXT_PUBLIC_SUPABASE_URL|SUPABASE_URL|SUPABASE_PUBLIC_URL|R2_ENDPOINT|R2_BUCKET_NAME|R2_FORCE_PATH_STYLE|RESEND_FROM_EMAIL|RESEND_FROM_TRANSACTIONAL|RESEND_FROM_MARKETING|EMAIL_FROM|VAPID_SUBJECT|NEXT_PUBLIC_APP_DOMAIN|NEXT_PUBLIC_APP_ENV|KSEF_ENV|SENTRY_ORG|SENTRY_PROJECT|NEXT_PUBLIC_POSTHOG_HOST|LEGACY_HOST_REDIRECT|SITE_URL|API_EXTERNAL_URL|ADDITIONAL_REDIRECT_URLS|SMTP_ADMIN_EMAIL|SMTP_SENDER_NAME|SMTP_HOST|GOTRUE_SITE_URL|GOTRUE_URI_ALLOW_LIST|GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI|GOTRUE_SMTP_ADMIN_EMAIL|GOTRUE_SMTP_SENDER_NAME|MAILER_URLPATHS_[A-Z_]+|MINIO_SERVER_URL|MINIO_BROWSER_REDIRECT_URL|SERVICE_FQDN_[A-Z0-9_]+|SERVICE_URL_[A-Z0-9_]+|PUBLIC_HEALTH_URL)$/';
 $show = function ($envs, $indent) use ($secret, $urlish) {
   $withOld = [];
   foreach ($envs as $e) {
     $isSecret = preg_match($secret, $e->key);
-    if (!$isSecret && preg_match($urlish, $e->key)) { echo $indent . $e->key . '=' . $e->value . "\n"; }
+    if (!$isSecret && preg_match($urlish, $e->key)) { o($indent . $e->key . '=' . $e->value); }
     if (stripos((string) $e->value, 'faktflow') !== false) { $withOld[] = $e->key . ($isSecret ? ' (sekret)' : ''); }
   }
-  echo $indent . 'wartość zawiera „faktflow”: ' . (count($withOld) ? implode(', ', array_unique($withOld)) : '—') . "\n";
+  o($indent . 'wartość zawiera „faktflow”: ' . (count($withOld) ? implode(', ', array_unique($withOld)) : '—'));
 };
 foreach ([1, 2] as $id) {
   $a = App\Models\Application::find($id);
-  if (!$a) { echo "APLIKACJA $id: brak\n"; continue; }
-  echo "APLIKACJA $id ($a->name) fqdn=" . ($a->fqdn ?: '—') . " gałąź=$a->git_branch cel=" . ($a->dockerfile_target_build ?: '—') . "\n";
+  if (!$a) { o("APLIKACJA $id: brak"); continue; }
+  o("APLIKACJA $id ($a->name) fqdn=" . ($a->fqdn ?: '—') . " gałąź=$a->git_branch cel=" . ($a->dockerfile_target_build ?: '—'));
   $last = App\Models\ApplicationDeploymentQueue::where('application_id', $id)->where('status', 'finished')->orderBy('id', 'desc')->first();
-  echo "  ostatnie udane wdrożenie: " . ($last ? "#$last->id commit=$last->commit $last->updated_at" : '—') . "\n";
+  o("  ostatnie udane wdrożenie: " . ($last ? "#$last->id commit=$last->commit $last->updated_at" : '—'));
   $show($a->environment_variables()->where('is_preview', false)->get(), '  ');
 }
 foreach (App\Models\Service::all() as $s) {
-  echo "SERWIS $s->id ($s->name)\n";
-  foreach ($s->applications as $sa) { echo "  kontener $sa->name fqdn=" . ($sa->fqdn ?: '—') . "\n"; }
+  o("SERWIS $s->id ($s->name)");
+  foreach ($s->applications as $sa) { o("  kontener $sa->name fqdn=" . ($sa->fqdn ?: '—')); }
   $show($s->environment_variables()->get(), '  ');
 }
 try {
   foreach (App\Models\ScheduledDatabaseBackup::all() as $b) {
     $last = $b->executions()->orderBy('id', 'desc')->first();
-    echo "KOPIA BAZY #$b->id częstotliwość=$b->frequency włączona=" . ($b->enabled ? 'tak' : 'nie') . " s3=" . ($b->save_s3 ? 'tak' : 'nie')
-      . " ostatnia=" . ($last ? "$last->status $last->created_at" : '—') . "\n";
+    o("KOPIA BAZY #$b->id częstotliwość=$b->frequency włączona=" . ($b->enabled ? 'tak' : 'nie') . " s3=" . ($b->save_s3 ? 'tak' : 'nie')
+      . " ostatnia=" . ($last ? "$last->status $last->created_at" : '—'));
   }
-} catch (\Throwable $t) { echo "KOPIE BAZ: nie odczytałem (" . $t->getMessage() . ")\n"; }
+  if (App\Models\ScheduledDatabaseBackup::count() === 0) { o('KOPIE BAZ: brak harmonogramu kopii w Coolify'); }
+} catch (\Throwable $t) { o('KOPIE BAZ: nie odczytałem (' . $t->getMessage() . ')'); }
 PHP
 echo
 
@@ -120,7 +126,8 @@ ssh -o ConnectTimeout=15 -i "$K" "root@$APP" \
 echo
 
 echo "── 6. Pełna kopia zmiennych (z sekretami) → $OUT/coolify-env.json"
-tinker <<'PHP' | grep -v '^> ' | tail -1
+tinker <<'PHP' | grep -a '## ' | sed 's/.*## //'
+function o($s) { echo chr(35) . chr(35) . ' ' . $s . PHP_EOL; }
 $all = [];
 foreach ([1, 2] as $id) {
   $a = App\Models\Application::find($id);
@@ -134,7 +141,7 @@ foreach (App\Models\Service::all() as $s) {
     'env' => $s->environment_variables()->get()->map(fn ($e) => ['key' => $e->key, 'value' => $e->value])->values()];
 }
 file_put_contents('/tmp/faktway-env.json', json_encode($all, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-echo "zapisano w kontenerze\n";
+o('zapisano w kontenerze');
 PHP
 umask 077
 ssh -o ConnectTimeout=15 -i "$K" "root@$OPS" \

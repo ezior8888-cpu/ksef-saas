@@ -17,8 +17,9 @@ const ROOT = join(__dirname, '..', '..');
 const SCANNED = ['app', 'components', 'lib', 'content'];
 const EXTENSIONS = /\.(tsx?|mdx?)$/;
 // Adresy @faktway.pl dozwolone poza jedną skrzynką: nadawcy maili z konwencji
-// w lib/email/send.ts (odpowiedzi idą na SUPPORT_EMAIL przez Reply-To).
-const ALLOWED_FAKTWAY = new Set([SUPPORT_EMAIL, 'no-reply@app.faktway.pl', 'hello@hello.faktway.pl']);
+// w lib/email/send.ts (odpowiedzi idą na SUPPORT_EMAIL przez Reply-To) —
+// te same co RESEND_FROM_* na produkcji.
+const ALLOWED_FAKTWAY = new Set([SUPPORT_EMAIL, 'powiadomienia@faktway.pl', 'kontakt@faktway.pl']);
 // Stara domena (zmiana marki 10.2026) zostaje tylko w lustrze tekstów RAISE
 // migracji 00148 — zmieni je dopiero nowa migracja. Do tego czasu
 // pomoc@faktflow.pl musi odbierać pocztę (ops/poczta/worker.mjs).

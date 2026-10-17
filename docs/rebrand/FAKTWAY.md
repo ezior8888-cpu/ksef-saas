@@ -19,9 +19,21 @@ Sprawdzenie w każdej chwili: `./scripts/ops/faktway-sprawdz.sh`.
 | DNS `faktway.pl`, `www`, `db`, `s3` | rekordy A gotowe, celują w te same serwery co odpowiedniki `faktflow.pl` |
 | TLS dla tych hostów | **brak** — Traefik podaje domyślny certyfikat, bo w Coolify nie ma jeszcze tych domen |
 | Poczta `faktway.pl` | MX Cloudflare Email Routing, jeden SPF (Cloudflare + Resend), DKIM `resend._domainkey`, MX zwrotów `send.faktway.pl`, DMARC `p=none` z raportami na `dmarc@faktway.pl` — gotowe |
-| Subdomeny nadawców `app.faktway.pl`, `hello.faktway.pl` | bez DKIM (tak samo jak `app.faktflow.pl` dziś) — patrz decyzja w kroku C |
+| Subdomeny `app.faktway.pl`, `hello.faktway.pl` | bez DKIM — i niepotrzebne: produkcja wysyła z apeksu (niżej) |
 | Śmieć w DNS | na obu domenach rekord TXT o treści `"resend._domainkey"` na apeksie — pomyłka przy wklejaniu, do usunięcia |
 | Wyszukiwarka „FaktWay” | brak firmy/produktu o tej nazwie w wynikach; baz znaków (UPRP, EUIPO) nie sprawdzałem |
+
+Z inwentarza Coolify (17.10.2026 17:46, `./scripts/ops/faktway-inwentarz.sh`):
+
+| Gdzie | Dziś |
+|---|---|
+| Aplikacja 1 — domeny | `https://faktflow.pl,https://www.faktflow.pl` |
+| Aplikacja 1 i 2 — działający commit | `face09c5` (wdrożony 10.10); **`main` ma 32 niewdrożone commity** |
+| Aplikacje 1 i 2 — zmienne z „faktflow” | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `R2_ENDPOINT`, `RESEND_FROM_TRANSACTIONAL=powiadomienia@faktflow.pl`, `RESEND_FROM_MARKETING=kontakt@faktflow.pl`, `VAPID_SUBJECT=kontakt@faktflow.pl`, `SENTRY_ORG` (slug Sentry — zostaje) |
+| Serwis Supabase — Kong | domena `https://db.faktflow.pl:8000` (zmienne `SERVICE_FQDN_SUPABASEKONG*` generuje Coolify) |
+| Serwis Supabase — GoTrue | `GOTRUE_SITE_URL=https://faktflow.pl`, `API_EXTERNAL_URL=https://db.faktflow.pl`, `ADDITIONAL_REDIRECT_URLS=https://faktflow.pl/auth/callback,https://faktflow.pl/**`, `SMTP_SENDER_NAME=FaktFlow`, `SMTP_ADMIN_EMAIL=powiadomienia@faktflow.pl` |
+| Serwis MinIO (na `ops-1`) | domena `https://s3.faktflow.pl:9000` |
+| Kopie bazy w Coolify | nie wiadomo — skrypt zgubił te wiersze (poprawione; uruchom inwentarz jeszcze raz) |
 
 ## 2. Co robi PR z kodem (gałąź `claude/faktway-rebrand`)
 
@@ -81,18 +93,29 @@ Legenda: **[B]** tylko Bartosz (panel, konto, decyzja prawna),
 ### Etap B — nowe hosty równolegle do starych
 
 6. **[B/C]** Coolify → aplikacja 1 → Domains: dopisz
-   `,https://faktway.pl,https://www.faktway.pl` (stare zostają) → Save →
-   Redeploy. Uwaga: redeploy buduje `main` — inwentarz pokaże, czy `main`
-   ma niewdrożone commity.
-7. **[B/C]** Coolify → serwis Supabase → kontener Kong → Domains: dopisz
-   `,https://db.faktway.pl`. Serwis MinIO → API: dopisz `,https://s3.faktway.pl`.
-   Zapisz i zastosuj (restart samego kontenera, nie całego stosu — restart
-   stosu Supabase restartuje też Postgresa).
-8. **[B/C]** Serwis Supabase → zmienne: `ADDITIONAL_REDIRECT_URLS` dopisz
-   `,https://faktway.pl/auth/callback,https://www.faktway.pl/auth/callback`
-   (bez tego logowanie, rejestracja i reset hasła z `faktway.pl` wracają na
-   `SITE_URL`). `SITE_URL`, `API_EXTERNAL_URL` i adres Google na razie
-   **bez zmian**.
+   `,https://faktway.pl,https://www.faktway.pl` (stare zostają) → Save.
+   **Nie klikaj „Redeploy”** — zbudowałby `main` z 32 niewdrożonymi
+   commitami. Zamiast tego wdróż ponownie działający commit `face09c5`
+   (zakładka Rollback → obraz `face09c5…`, albo tinker
+   `queue_application_deployment(..., commit: '<pełny sha>')`). Etykiety
+   Traefika powstają przy wdrożeniu, więc sam zapis domen nic nie zmienia.
+7. **[B/C]** `db.faktway.pl` i `s3.faktway.pl` — bez restartu czegokolwiek:
+   plik dynamicznej konfiguracji Traefika (Coolify → Servers → `db-1` /
+   `ops-1` → Proxy → Dynamic Configurations, czyli katalog
+   `/data/coolify/proxy/dynamic/`) z routerem `Host(...)` na ten sam
+   kontener (`supabase-kong-<uuid>:8000`, `minio-<uuid>:9000`) i
+   `certResolver: letsencrypt`. Usunięcie pliku cofa zmianę.
+   **Nie** dopisuj domeny w ustawieniach serwisu Supabase: zapis i restart
+   z panelu odtwarzają cały stos razem z Postgresem.
+8. **[B/C]** Serwis Supabase → `ADDITIONAL_REDIRECT_URLS` dopisz
+   `,https://faktway.pl/auth/callback,https://faktway.pl/**,https://www.faktway.pl/auth/callback,https://www.faktway.pl/**`
+   (bez tego Google, rejestracja i reset hasła z `faktway.pl` wracają na
+   `GOTRUE_SITE_URL`). Zastosowanie: przez SSH tylko kontener auth
+   (`docker compose -p <projekt> up -d --no-deps supabase-auth` po zmianie
+   `.env` serwisu — kilka sekund bez logowania). Restart z panelu odtwarza
+   cały stos (około minuty przerwy). `GOTRUE_SITE_URL`, `API_EXTERNAL_URL`
+   i adres Google na razie **bez zmian** — logowanie Google z `faktway.pl`
+   idzie przez `db.faktflow.pl`, który Google już zna.
 9. **[B]** Google Cloud Console → APIs & Services → Credentials → klient
    OAuth → Authorized redirect URIs: **dodaj**
    `https://db.faktway.pl/auth/v1/callback` (stary zostaje). OAuth consent
@@ -106,13 +129,12 @@ Legenda: **[B]** tylko Bartosz (panel, konto, decyzja prawna),
 
 ### Etap C — poczta
 
-12. **[B] Decyzja: adresy nadawców.** Dziś DKIM jest tylko na apeksie
-    `faktflow.pl`/`faktway.pl`. Do wyboru:
-    - (prościej) nadawcy na apeksie: `FaktWay <no-reply@faktway.pl>`
-      i `FaktWay <hello@faktway.pl>` — działa od razu, domena już ma DNS;
-    - (plan ChatGPT) osobne subdomeny `app.faktway.pl` i `hello.faktway.pl`
-      — w Resend dodaj obie domeny i wklej ich rekordy do Cloudflare.
-    Inwentarz pokaże, czego używa dziś `RESEND_FROM_*` na produkcji.
+12. **Nadawcy — rozstrzygnięte przez inwentarz.** Produkcja wysyła z apeksu
+    (`powiadomienia@faktflow.pl`, `kontakt@faktflow.pl`), więc nowe adresy to
+    `FaktWay <powiadomienia@faktway.pl>` i `FaktWay <kontakt@faktway.pl>`
+    (apeks `faktway.pl` ma już DKIM). Subdomeny z planu ChatGPT nie są
+    potrzebne. Kod (domyślny nadawca, `.env.example`) jest już na tych
+    adresach.
 13. **[B]** Resend → Domains: sprawdź, że `faktway.pl` ma status Verified
     (rekordy w DNS już są).
 14. **[B]** Cloudflare → `faktway.pl` → Email → Email Routing: włącz
@@ -131,17 +153,18 @@ Legenda: **[B]** tylko Bartosz (panel, konto, decyzja prawna),
     - `NEXT_PUBLIC_APP_URL=https://faktway.pl`
     - `NEXT_PUBLIC_SUPABASE_URL=https://db.faktway.pl`
     - `R2_ENDPOINT=https://s3.faktway.pl`
-    - `RESEND_FROM_TRANSACTIONAL`, `RESEND_FROM_MARKETING` — według decyzji 12
+    - `RESEND_FROM_TRANSACTIONAL=FaktWay <powiadomienia@faktway.pl>`
+    - `RESEND_FROM_MARKETING=FaktWay <kontakt@faktway.pl>`
     - `VAPID_SUBJECT=mailto:pomoc@faktway.pl`
     - każda inna zmienna z listy „wartość zawiera faktflow” z inwentarza
     `NEXT_PUBLIC_*` są wbudowywane w build — sam zapis nie wystarczy,
     potrzebne wdrożenie.
-19. **[C]** Serwis Supabase: `SITE_URL=https://faktway.pl`,
-    `API_EXTERNAL_URL=https://db.faktway.pl`,
-    `GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=https://db.faktway.pl/auth/v1/callback`,
-    `SMTP_SENDER_NAME=FaktWay`, `SMTP_ADMIN_EMAIL` według decyzji 12;
-    `ADDITIONAL_REDIRECT_URLS` zostawia też stare adresy. Restart kontenera
-    auth (GoTrue).
+19. **[C]** Serwis Supabase: `GOTRUE_SITE_URL=https://faktway.pl`,
+    `API_EXTERNAL_URL=https://db.faktway.pl`, adres powrotu Google na
+    `https://db.faktway.pl/auth/v1/callback` (najpierw krok 9!),
+    `SMTP_SENDER_NAME=FaktWay`, `SMTP_ADMIN_EMAIL=powiadomienia@faktway.pl`;
+    `ADDITIONAL_REDIRECT_URLS` zostawia też stare adresy. Odtworzenie tylko
+    kontenera auth (GoTrue).
 20. **[C]** Wdrożenie: worker (id=2), potem aplikacja (id=1), po kolei.
 21. **[B]** Stripe → Developers → Webhooks → istniejący endpoint → Update:
     URL `https://faktway.pl/api/stripe/webhook` (ta sama lista zdarzeń, ten
