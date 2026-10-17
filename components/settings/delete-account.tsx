@@ -20,13 +20,11 @@ export function DeleteAccountSection({ tenantNip }: { tenantNip: string }) {
     if (!isConfirmValid) return;
 
     startDeleting(async () => {
-      const formData = new FormData();
-      formData.set('nipConfirm', confirmInput);
-      const result = await requestAccountDeletionAction(formData);
-      if ('success' in result && result.success === false) {
-        toast.error(result.error);
-      }
-      // Sukces → redirect obsługuje akcja serwerowa (`/login?success=account_deleted`).
+      // Od 15.10.2026 akcja zawsze odmawia i kieruje do pomocy technicznej
+      // (usuwanie firmy wstrzymane, NIP niczego nie odblokowuje) — komunikat
+      // ma trzy zdania, stąd 20 s.
+      const result = await requestAccountDeletionAction();
+      toast.error(result.error, { duration: 20_000 });
     });
   };
 
