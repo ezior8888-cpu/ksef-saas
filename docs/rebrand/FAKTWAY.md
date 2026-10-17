@@ -17,7 +17,7 @@ Sprawdzenie w każdej chwili: `./scripts/ops/faktway-sprawdz.sh`.
 |---|---|
 | Domena `faktway.pl` | kupiona 17.10.2026 (Hostido), odnowienie 17.10.2027, serwery nazw Cloudflare (to samo konto co `faktflow.pl`) |
 | DNS `faktway.pl`, `www`, `db`, `s3` | rekordy A gotowe, celują w te same serwery co odpowiedniki `faktflow.pl` |
-| TLS dla tych hostów | **brak** — Traefik podaje domyślny certyfikat, bo w Coolify nie ma jeszcze tych domen |
+| TLS dla tych hostów | wszystkie cztery (`faktway.pl`, `www`, `db`, `s3`) — certyfikaty Let's Encrypt od 17.10 (etap B) |
 | Poczta `faktway.pl` | MX Cloudflare Email Routing, jeden SPF (Cloudflare + Resend), DKIM `resend._domainkey`, MX zwrotów `send.faktway.pl`, DMARC `p=none` z raportami na `dmarc@faktway.pl` — gotowe |
 | Subdomeny `app.faktway.pl`, `hello.faktway.pl` | bez DKIM — i niepotrzebne: produkcja wysyła z apeksu (niżej) |
 | Śmieć w DNS | na obu domenach rekord TXT o treści `"resend._domainkey"` na apeksie — pomyłka przy wklejaniu, do usunięcia |
@@ -34,6 +34,7 @@ Z inwentarza Coolify (17.10.2026 17:46, `./scripts/ops/faktway-inwentarz.sh`):
 | Serwis Supabase — GoTrue | `GOTRUE_SITE_URL=https://faktflow.pl`, `API_EXTERNAL_URL=https://db.faktflow.pl`, `ADDITIONAL_REDIRECT_URLS=https://faktflow.pl/auth/callback,https://faktflow.pl/**`, `SMTP_SENDER_NAME=FaktFlow`, `SMTP_ADMIN_EMAIL=powiadomienia@faktflow.pl` |
 | Serwis MinIO (na `ops-1`) | domena `https://s3.faktflow.pl:9000` |
 | Kopie bazy w Coolify | nie wiadomo — skrypt zgubił te wiersze (poprawione; uruchom inwentarz jeszcze raz) |
+| Logowanie Google | **wyłączone w GoTrue** (`/auth/v1/settings` → `google: false`) — kroki 9, 19 (adres Google) i 23 dotyczą tylko sytuacji, gdy je włączysz |
 
 ## 2. Co robi PR z kodem (gałąź `claude/faktway-rebrand`)
 
@@ -91,6 +92,24 @@ Legenda: **[B]** tylko Bartosz (panel, konto, decyzja prawna),
    oraz listę zdarzeń webhooka Stripe (Developers → Webhooks).
 
 ### Etap B — nowe hosty równolegle do starych
+
+**Stan 17.10.2026 (sesja Claude, za zgodą Bartosza):**
+- krok 7 zrobiony: `/data/coolify/proxy/dynamic/faktway-db.yaml` (db-1) i
+  `faktway-s3.yaml` (ops-1); certyfikaty wystawione, `db.faktway.pl` → Kong
+  (401 bez klucza, `/auth/v1/settings` z kluczem anon → 200),
+  `s3.faktway.pl/minio/health/live` → 200; żaden kontener nie restartował;
+- krok 8 zrobiony: lista w Coolify i w `.env` serwisu (kopia
+  `.env.przed-faktway-20261017-161138`), odtworzony tylko `supabase-auth`
+  (healthy), reszta stosu bez restartu;
+- krok 6 zrobiony: domeny aplikacji 1 + odświeżone `custom_labels`
+  (wdrożenie #148 wzięło stare zapisane etykiety, bez faktway — Coolify nie
+  generuje ich z domen, gdy `custom_labels` są zapisane), wdrożenie #149
+  commitu `face09c5` z gotowego obrazu, bez przerwy w działaniu;
+- bramka B automatycznie: `./scripts/ops/faktway-sprawdz.sh` → „Wszystko OK”,
+  `https://faktway.pl/login` renderuje się, konsola bez błędów.
+- **zostaje [B]:** logowanie hasłem na `https://faktway.pl/login` (konto
+  testowe), podgląd PDF faktury, Turnstile (krok 10) — formularz pokazuje
+  widżet, ale bez dodanego hosta weryfikacja może odrzucić token.
 
 6. **[B/C]** Coolify → aplikacja 1 → Domains: dopisz
    `,https://faktway.pl,https://www.faktway.pl` (stare zostają) → Save.
