@@ -46,6 +46,10 @@ import {
   type InvoiceLineSchema,
 } from '@/lib/validators/invoice-validators';
 import { calculateCorrectionTotals } from '@/lib/invoices/calculator';
+import {
+  CORRECTION_PICKER_SIZE,
+  type CorrectionParentInvoiceRow,
+} from '@/lib/invoices/correction-picker';
 import { zeroVatRateFromParentLines } from '@/lib/invoices/correction-amount-change';
 import { addressCountryForKodUE, parseVatUe } from '@/lib/invoices/vat-ue';
 import { dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
@@ -68,14 +72,7 @@ type ParentContextSuccess = Exclude<
   { success: false }
 >;
 
-export interface CorrectionParentInvoiceRow {
-  id: string;
-  internal_number: string | null;
-  ksef_number: string | null;
-  issue_date: string;
-  gross_total: number | null;
-  buyer_data: unknown;
-}
+export type { CorrectionParentInvoiceRow };
 
 type CorrectionFormBuyer = CorrectionFormIn['buyer'];
 
@@ -184,6 +181,12 @@ const TYPOLOGY_KOREKTY_LABELS = {
 export interface CorrectionInvoiceFormProps {
   parentInvoices: CorrectionParentInvoiceRow[];
   preselectedParentId?: string;
+  /** F-005: dlaczego faktura z `?parentId` nie przyjmie korekty (z loadera strony). */
+  preselectRefusal?: string | null;
+  /** Fraza wyszukiwania listy (`?q=`), już oczyszczona. */
+  searchQuery?: string;
+  /** Kandydatów jest więcej niż na liście. */
+  truncated?: boolean;
 }
 
 // Daty w czasie polskim, nie UTC (F-013).
@@ -283,6 +286,9 @@ const defaultLineRow: InvoiceLineDraft = {
 export function CorrectionInvoiceForm({
   parentInvoices,
   preselectedParentId,
+  preselectRefusal = null,
+  searchQuery = '',
+  truncated = false,
 }: CorrectionInvoiceFormProps) {
   const validPreselect = useMemo(() => {
     const id = preselectedParentId?.trim();
@@ -401,10 +407,47 @@ export function CorrectionInvoiceForm({
           </div>
         ) : null}
 
+        {preselectRefusal ? (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-3xl border border-red-200 bg-red-50/80 p-5 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-950/30 dark:text-red-300"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <p>{preselectRefusal}</p>
+          </div>
+        ) : null}
+
+        <form
+          method="get"
+          action="/invoices/new/correction"
+          className="flex flex-wrap items-end gap-3"
+        >
+          <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Szukaj faktury pierwotnej
+            <Input
+              name="q"
+              defaultValue={searchQuery}
+              placeholder="Numer, nabywca, NIP albo kwota brutto"
+            />
+          </label>
+          <div className="flex gap-2">
+            <Button type="submit" variant="glass">
+              Szukaj
+            </Button>
+            {searchQuery ? (
+              <Button asChild variant="outline">
+                <Link href="/invoices/new/correction">Wyczyść</Link>
+              </Button>
+            ) : null}
+          </div>
+        </form>
+
         {parentInvoices.length === 0 ? (
           <div className="rounded-3xl border border-white/55 bg-white/45 py-12 text-center shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] backdrop-blur-xl dark:border-white/14 dark:bg-[rgba(15,10,30,0.45)]">
             <p className="text-muted-foreground">
-              Nie masz jeszcze żadnych zaakceptowanych faktur do korekty
+              {searchQuery
+                ? `Brak przyjętych faktur pasujących do „${searchQuery}”.`
+                : 'Nie masz jeszcze żadnych zaakceptowanych faktur do korekty'}
             </p>
           </div>
         ) : (
@@ -473,6 +516,14 @@ export function CorrectionInvoiceForm({
             </table>
           </div>
         )}
+
+        {truncated ? (
+          <p className="text-sm text-muted-foreground">
+            Pokazujemy {CORRECTION_PICKER_SIZE} najnowszych przyjętych faktur
+            {searchQuery ? ' pasujących do wyszukiwania' : ''}. Starszą znajdziesz,
+            wpisując jej numer, nazwę lub NIP nabywcy albo kwotę brutto.
+          </p>
+        ) : null}
       </div>
     );
   }

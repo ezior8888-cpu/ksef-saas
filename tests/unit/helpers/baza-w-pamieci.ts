@@ -6,7 +6,8 @@
  *
  * Obsługa: select (kolumny, count/head), insert (wiersz albo tablica, z
  * `.select()` zwraca wstawione), update, delete, eq/neq/in/is/not/gte/lte/gt,
- * `or` dla kontroli środowiska z data-fetchera, order, limit, range, single,
+ * `or` dla kontroli środowiska z data-fetchera i wyszukiwania
+ * (`searchOrFilter`: ilike/eq), order, limit, range, single,
  * maybeSingle. Kolumny JSON jak w PostgREST: `alias:kolumna->klucz` w select
  * (pełny wiersz zostaje, alias dochodzi) i `kolumna->klucz` w filtrach.
  */
@@ -111,8 +112,21 @@ export function memoryClient(tables: MemoryTables, options: { failInsertInto?: r
       or: (expr: string) => {
         // Kontrola proweniencji data-fetchera: przyjęte bez środowiska albo z innego.
         const m = /^ksef_environment\.is\.null,ksef_environment\.neq\.(test|demo|production)$/.exec(expr);
-        if (!m) throw new Error(`baza w pamięci: nieobsługiwany filtr or(${expr})`);
-        predicates.push((r) => r.ksef_environment == null || r.ksef_environment !== m[1]);
+        if (m) {
+          predicates.push((r) => r.ksef_environment == null || r.ksef_environment !== m[1]);
+          return q;
+        }
+        // Wyszukiwanie `searchOrFilter` (lista faktur, wybór faktury do korekty):
+        // `kolumna.ilike.%fraza%` i `kolumna.eq.wartość`, rozdzielone przecinkami.
+        const parts = expr.split(',').map((part) => /^([\w>-]+?)\.(ilike|eq)\.(.*)$/.exec(part));
+        if (parts.some((p) => !p)) throw new Error(`baza w pamięci: nieobsługiwany filtr or(${expr})`);
+        const tests = parts.map((p) => {
+          const [, key, op, value] = p as RegExpExecArray as unknown as [string, string, string, string];
+          if (op === 'eq') return (r: Row) => String(valueAt(r, key)) === value || Number(valueAt(r, key)) === Number(value);
+          const needle = value.replace(/^%|%$/g, '').toLowerCase();
+          return (r: Row) => String(valueAt(r, key) ?? '').toLowerCase().includes(needle);
+        });
+        predicates.push((r) => tests.some((t) => t(r)));
         return q;
       },
       order: (key: string, o?: { ascending?: boolean }) => { sort = { key, ascending: o?.ascending ?? true }; return q; },
