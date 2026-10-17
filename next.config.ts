@@ -86,8 +86,8 @@ const nextConfig: NextConfig = {
   },
 
   experimental: {
-    // Plan Finora E1: prymitywy Base UI, ikony Remix i wykresy recharts.
-    optimizePackageImports: ['lucide-react', '@base-ui/react', '@remixicon/react', 'recharts'],
+    // Plan Finora: prymitywy Base UI, ikony Remix, wykresy recharts (E1), paleta ⌘K cmdk (E2).
+    optimizePackageImports: ['lucide-react', '@base-ui/react', '@remixicon/react', 'recharts', 'cmdk'],
   },
 
   images: {
