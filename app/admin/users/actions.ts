@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache';
 
 import { requireAdmin } from '@/lib/auth/admin-guard';
 import { logAuditSystem } from '@/lib/audit/log-system';
+import { anonymizeUserAuditLogs, findUserDeletionForeignKeyBlockers } from '@/lib/gdpr/account-deletion-steps';
+import { findOrganizationsBlockingDeletion } from '@/lib/gdpr/deletion-blockers';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
@@ -146,6 +148,38 @@ export async function deleteUserGdprAction(
 
   const supabase = createAdminClient();
 
+  // Krok 0: te same sprawdzenia co ścieżka samoobsługowa (`executeGdprRequest`),
+  // przed pierwszym zapisem — odmowa zostawia konto, firmy i dziennik nietknięte.
+  // Subskrypcja jest przypięta do firmy: bez jedynej osoby, która nią zarządza,
+  // Stripe dalej pobiera opłaty, a nikt nie może ich zatrzymać.
+  let billingBlocked: string[];
+  try {
+    billingBlocked = await findOrganizationsBlockingDeletion(supabase, userId);
+  } catch {
+    return { success: false, error: 'Nie udało się sprawdzić subskrypcji firm użytkownika; konto nie zostało usunięte' };
+  }
+  if (billingBlocked.length > 0) {
+    const names = billingBlocked.map((name) => `„${name}”`).join(', ');
+    return {
+      success: false,
+      error: `Usunięcie wstrzymane: subskrypcja firmy ${names} dalej pobiera opłaty, a ten użytkownik jest jedyną osobą, która może nią zarządzać. Anuluj subskrypcję w Stripe albo dodaj firmie innego właściciela lub administratora i spróbuj ponownie. Konto nie zostało usunięte.`,
+    };
+  }
+  // AUD-41: klucz obcy bez ON DELETE wywróciłby deleteUser PO odwołaniu
+  // członkostw, wyłączeniu firm i anonimizacji dziennika.
+  let foreignKeyBlockers: string[];
+  try {
+    foreignKeyBlockers = await findUserDeletionForeignKeyBlockers(supabase, userId);
+  } catch {
+    return { success: false, error: 'Nie udało się sprawdzić powiązań konta w bazie; konto nie zostało usunięte' };
+  }
+  if (foreignKeyBlockers.length > 0) {
+    return {
+      success: false,
+      error: `Usunięcie wstrzymane: konto jest jeszcze wskazywane w ${foreignKeyBlockers.join(', ')} (klucz obcy bez ON DELETE). Przepisz albo usuń te wpisy i spróbuj ponownie. Konto nie zostało usunięte.`,
+    };
+  }
+
   // Krok 1: ustaw soft-delete + hard_delete_at na tenantach, gdzie user jest
   // ownerem (10-lat retention vs RODO). Pełne czyszczenie zrobi Inngest job
   // `retention-delete` po upływie retention period.
@@ -191,6 +225,17 @@ export async function deleteUserGdprAction(
   // Krok 3: usuń konto z auth.users (cascada wpieprza notki, kontrahentów
   // gdzie user był created_by, etc.). Audyt zachowuje user_id w `audit_logs`
   // (snapshot ID po deletion).
+  //
+  // Najpierw anonimizacja dotychczasowych wpisów dziennika (polityka: „po
+  // usunięciu Konta wpisy są anonimizowane”) — user_id, IP i przeglądarka
+  // znikają; ID konta zostaje tylko we wpisie `admin.user.deleted` niżej.
+  // Jak w ścieżce samoobsługowej: nieodwracalna, więc po krokach, które da się
+  // cofnąć, i tuż przed deleteUser.
+  try {
+    await anonymizeUserAuditLogs(supabase, userId);
+  } catch {
+    return { success: false, error: 'Nie udało się zanonimizować dziennika zdarzeń; konto nie zostało usunięte' };
+  }
   const { error } = await supabase.auth.admin.deleteUser(userId);
   if (error) {
     return { success: false, error: error.message };

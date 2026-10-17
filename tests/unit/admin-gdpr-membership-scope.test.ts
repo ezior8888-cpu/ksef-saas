@@ -6,11 +6,19 @@ const mocks = vi.hoisted(() => ({
   deleteUser: vi.fn(),
   audit: vi.fn(),
   revalidate: vi.fn(),
+  rpc: vi.fn(),
+  blockers: vi.fn<() => Promise<string[]>>(),
 }));
 vi.mock('@/lib/auth/admin-guard', () => ({ requireAdmin: mocks.requireAdmin }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mocks.audit }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }));
+// Ta sama blokada subskrypcji co w ścieżce samoobsługowej; jej zapytania
+// testuje gdpr-subscription-blocker.test.ts.
+vi.mock('@/lib/gdpr/deletion-blockers', async (orig) => ({
+  ...(await orig<typeof import('@/lib/gdpr/deletion-blockers')>()),
+  findOrganizationsBlockingDeletion: mocks.blockers,
+}));
 
 import { deleteUserGdprAction } from '@/app/admin/users/actions';
 
@@ -101,8 +109,17 @@ function database(memberships: Membership[] = fixtures()) {
     return query;
   });
 
-  mocks.admin.mockReturnValue({ from, auth: { admin: { deleteUser: mocks.deleteUser } } });
+  mocks.admin.mockReturnValue({ from, rpc: mocks.rpc, auth: { admin: { deleteUser: mocks.deleteUser } } });
   return state;
+}
+
+/** Kolejność wywołań między atrapami (vitest numeruje je globalnie). */
+function callOrder(mock: { mock: { invocationCallOrder: number[] } }, index = 0): number {
+  return mock.mock.invocationCallOrder.at(index) ?? Number.NaN;
+}
+function rpcOrder(fn: string): number {
+  const index = mocks.rpc.mock.calls.findIndex(([name]) => name === fn);
+  return index < 0 ? Number.NaN : callOrder(mocks.rpc, index);
 }
 
 beforeEach(() => {
@@ -110,6 +127,12 @@ beforeEach(() => {
   mocks.requireAdmin.mockResolvedValue({ userId: OPERATOR, email: 'operator@example.test' });
   mocks.deleteUser.mockResolvedValue({ error: null });
   mocks.audit.mockResolvedValue(undefined);
+  mocks.blockers.mockResolvedValue([]);
+  // Kształty odpowiedzi jak w 00113 (lista „tabela.kolumna”) i 00052 ({updated_rows}).
+  mocks.rpc.mockImplementation(async (fn: string) => ({
+    data: fn === 'gdpr_user_deletion_blockers' ? [] : { updated_rows: 3 },
+    error: null,
+  }));
 });
 
 function expectNoSuccessEffects() {
@@ -226,6 +249,110 @@ describe('admin GDPR deletion membership scope', () => {
     await expect(deleteUserGdprAction(USER, 'DELETE')).rejects.toThrow('synthetic unauthorized');
 
     expect(mocks.admin).not.toHaveBeenCalled();
+    expect(mocks.deleteUser).not.toHaveBeenCalled();
+    expectNoSuccessEffects();
+  });
+});
+
+/**
+ * Ścieżka admina ma robić to samo co samoobsługowa (`executeGdprRequest`,
+ * lib/gdpr/deletion.ts): sprawdzenia bez skutków PRZED pierwszym zapisem,
+ * anonimizacja dziennika (polityka: „po usunięciu Konta wpisy są
+ * anonimizowane”) tuż przed deleteUser. Do 15.10.2026 nie robiła żadnej z
+ * tych trzech rzeczy (CYB-F03-05: „nie zamyka przeglądu GDPR”).
+ */
+describe('admin GDPR deletion — te same zabezpieczenia co ścieżka samoobsługowa', () => {
+  function expectUntouched(db: ReturnType<typeof database>) {
+    expect(db.writeAttempts).toEqual([]);
+    expect(db.tenants.every((row) => row.is_active && row.deleted_at === null)).toBe(true);
+    expect(db.memberships.every((row) => row.revoked_at === null || row.organization_id === formerOrg)).toBe(true);
+    expect(mocks.rpc).not.toHaveBeenCalledWith('anonymize_user_audit_logs', expect.anything());
+    expect(mocks.deleteUser).not.toHaveBeenCalled();
+    expectNoSuccessEffects();
+  }
+
+  it('odmawia przed pierwszym zapisem, gdy subskrypcja pobierałaby opłaty bez nikogo, kto ją anuluje', async () => {
+    const db = database();
+    mocks.blockers.mockResolvedValue(['Firma Testowa Sp. z o.o.']);
+
+    const result = await deleteUserGdprAction(USER, 'DELETE');
+
+    expect(result).toMatchObject({ success: false });
+    expect(!result.success && result.error).toContain('Firma Testowa Sp. z o.o.');
+    // Wyjście dla operatora: komunikat mówi, co zrobić.
+    expect(!result.success && result.error).toContain('subskrypcj');
+    expect(mocks.blockers).toHaveBeenCalledWith(expect.objectContaining({ from: expect.any(Function) }), USER);
+    expectUntouched(db);
+  });
+
+  it('odmawia przed pierwszym zapisem, gdy nie da się sprawdzić subskrypcji', async () => {
+    const db = database();
+    mocks.blockers.mockRejectedValue(new Error('gdpr_blocker_lookup_failed'));
+
+    expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: false });
+
+    expectUntouched(db);
+  });
+
+  // AUD-41: klucz obcy bez ON DELETE wywraca deleteUser PO odwołaniu członkostw,
+  // wyłączeniu firm i anonimizacji.
+  it('odmawia przed pierwszym zapisem, gdy klucz obcy zatrzymałby usunięcie konta', async () => {
+    const db = database();
+    mocks.rpc.mockImplementation(async (fn: string) => ({
+      data: fn === 'gdpr_user_deletion_blockers' ? ['public.stripe_financial_case_reviews.reviewer_user_id'] : null,
+      error: null,
+    }));
+
+    const result = await deleteUserGdprAction(USER, 'DELETE');
+
+    expect(result).toMatchObject({ success: false });
+    expect(!result.success && result.error).toContain('public.stripe_financial_case_reviews.reviewer_user_id');
+    expect(mocks.rpc).toHaveBeenCalledWith('gdpr_user_deletion_blockers', { p_user_id: USER });
+    expectUntouched(db);
+  });
+
+  it.each([
+    ['błąd odczytu', { data: null, error: { message: 'synthetic rpc failure' } }],
+    ['odpowiedź nie jest listą', { data: null, error: null }],
+  ])('odmawia przed pierwszym zapisem, gdy sprawdzenie kluczy obcych zawiedzie (%s)', async (_label, response) => {
+    const db = database();
+    mocks.rpc.mockImplementation(async (fn: string) => (
+      fn === 'gdpr_user_deletion_blockers' ? response : { data: null, error: null }
+    ));
+
+    expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: false });
+
+    expectUntouched(db);
+  });
+
+  it('anonimizuje dziennik po krokach odwracalnych, a przed usunięciem konta', async () => {
+    database();
+
+    expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: true });
+
+    expect(mocks.rpc).toHaveBeenCalledWith('anonymize_user_audit_logs', { p_user_id: USER });
+    // `from` atrapy: pierwsze wywołanie = odczyt członkostw, ostatnie = ich odwołanie.
+    const from = (mocks.admin.mock.results[0]!.value as { from: Parameters<typeof callOrder>[0] }).from;
+    const firstWrite = callOrder(from);
+    const lastWrite = callOrder(from, -1);
+    // Sprawdzenia przed pierwszym odczytem/zapisem członkostw…
+    expect(callOrder(mocks.blockers)).toBeLessThan(firstWrite);
+    expect(rpcOrder('gdpr_user_deletion_blockers')).toBeLessThan(firstWrite);
+    // …anonimizacja po odwołaniu członkostw, przed deleteUser.
+    expect(rpcOrder('anonymize_user_audit_logs')).toBeGreaterThan(lastWrite);
+    expect(rpcOrder('anonymize_user_audit_logs')).toBeLessThan(callOrder(mocks.deleteUser));
+    expect(mocks.deleteUser).toHaveBeenCalledExactlyOnceWith(USER);
+  });
+
+  it('nie usuwa konta ani nie zgłasza sukcesu, gdy anonimizacja dziennika zawiedzie', async () => {
+    database();
+    mocks.rpc.mockImplementation(async (fn: string) => ({
+      data: fn === 'gdpr_user_deletion_blockers' ? [] : null,
+      error: fn === 'anonymize_user_audit_logs' ? { message: 'synthetic anonymize failure' } : null,
+    }));
+
+    expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: false });
+
     expect(mocks.deleteUser).not.toHaveBeenCalled();
     expectNoSuccessEffects();
   });
