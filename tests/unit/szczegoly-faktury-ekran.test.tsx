@@ -30,6 +30,12 @@ vi.mock('@/lib/supabase/client', () => ({
     return { channel: () => ch, removeChannel: vi.fn() };
   },
 }));
+// C9: widok woła `useRouter().refresh()` po zmianie statusu / numeru / XML z Realtime
+// (QR i „Korekta” liczy serwer) — poza drzewem aplikacji Next hook rzuca, więc stały szpieg.
+vi.mock('next/navigation', () => {
+  const router = { refresh: vi.fn(), push: vi.fn() };
+  return { useRouter: () => router };
+});
 // Pasek akcji: zapisujemy props, żeby sprawdzić, co widok przekazuje przyciskom po błędzie.
 const actions = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }));
 vi.mock('@/components/invoices/invoice-actions', () => ({

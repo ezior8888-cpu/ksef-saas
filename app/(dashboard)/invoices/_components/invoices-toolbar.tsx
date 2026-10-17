@@ -8,7 +8,9 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/in
 import {
   INVOICE_KIND_FILTERS,
   INVOICE_PAYMENT_FILTERS,
+  INVOICE_PAGE_SIZE,
   INVOICE_STATUS_FILTERS,
+  invoiceListHref,
   type InvoiceListParams,
 } from '@/lib/invoices/list-query';
 import { cn } from '@/lib/utils';
@@ -32,10 +34,23 @@ function Field({ label, className, children }: { label: string; className?: stri
  * To zwykły formularz GET na `/invoices` — działa bez JS, adres niesie
  * wszystkie filtry (`q`, `status`, `platnosc`, `rodzaj`, `od`, `do`,
  * `na_stronie`), a „Filtruj” zawsze wraca na stronę 1.
+ *
+ * Pola są niekontrolowane (`defaultValue`; Base UI czyta go tylko raz), a
+ * „Wyczyść”, „Wyczyść filtry”, „Pokaż N” i Wstecz to miękka nawigacja w tym
+ * samym segmencie — Next nie remontuje wtedy paska. Dlatego formularz ma
+ * klucz z adresu listy bez numeru strony (przejście na kolejną stronę nie
+ * kasuje wpisywanej frazy) i bez „Pokaż N” (wybór liczby wierszy nie zabiera
+ * fokusu z pola — `PerPageSelect` sam idzie za adresem): zmiana filtrów
+ * odtwarza pola z adresu, który jest właścicielem stanu (PLAN-FINORA P3).
  */
 export function InvoicesToolbar({ params, filtered }: { params: InvoiceListParams; filtered: boolean }) {
   return (
-    <form method="get" action="/invoices" className="space-y-3 p-4">
+    <form
+      key={invoiceListHref(params, { page: 1, perPage: INVOICE_PAGE_SIZE })}
+      method="get"
+      action="/invoices"
+      className="space-y-3 p-4"
+    >
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Pokaż">
           <PerPageSelect params={params} className="w-20" />

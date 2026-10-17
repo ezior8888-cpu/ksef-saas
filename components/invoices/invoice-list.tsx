@@ -33,6 +33,11 @@ export type { InvoiceRow } from './invoice-row-types';
  * od której zależą fakty serwera (`PAYMENT_FACT_FIELDS`), odświeża stronę
  * (`router.refresh()`), żeby fakty przeliczył serwer.
  *
+ * Nowy snapshot z serwera (`initialInvoices` — po `router.refresh()`, zmianie
+ * strony albo filtra) zastępuje stan lokalny, ale lista NIE jest remontowana:
+ * zaznaczenie wierszy zostaje (przycięte do wierszy, które nadal są), a
+ * otwarte okna dialogowe wierszy nie znikają w trakcie pracy użytkownika.
+ *
  * RLS na `invoices` zapewnia że klient nie dostanie zdarzeń dla obcych
  * tenantów (policy `invoices_select_own_tenant` + `tenant_id = get_current_tenant_id()`).
  * Dodatkowo `filter` na INSERT/UPDATE ogranicza payload do wierszy tego tenanta
@@ -49,6 +54,7 @@ export function InvoiceList({
   today,
 }: {
   tenantId: string;
+  /** Snapshot z serwera; nowa referencja (po `router.refresh()`) zastępuje stan lokalny. */
   initialInvoices: InvoiceRow[];
   /** Fakty wierszy z `loadInvoiceListRowFacts` (id → fakty); brak = „—” w kolumnach płatności. */
   facts?: InvoiceFactsById;
@@ -66,6 +72,18 @@ export function InvoiceList({
   const router = useRouter();
   const [invoices, setInvoices] = useState<InvoiceRow[]>(initialInvoices);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  // Synchronizacja ze snapshotem serwera bez remontu (wzorzec „stan z poprzednich
+  // propsów”: ustawiamy w trakcie renderu, więc nie ma klatki ze starymi danymi).
+  const [syncedFrom, setSyncedFrom] = useState(initialInvoices);
+  if (syncedFrom !== initialInvoices) {
+    setSyncedFrom(initialInvoices);
+    setInvoices(initialInvoices);
+    const present = new Set(initialInvoices.map((inv) => inv.id));
+    setSelected((prev) => {
+      const kept = [...prev].filter((id) => present.has(id));
+      return kept.length === prev.size ? prev : new Set(kept);
+    });
+  }
   const invoicesRef = useRef(invoices);
   useEffect(() => {
     invoicesRef.current = invoices;

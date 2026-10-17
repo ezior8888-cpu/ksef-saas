@@ -7,10 +7,15 @@ import { PullToRefresh } from '@/components/pwa/pull-to-refresh';
 
 import type { InvoiceFactsById, InvoiceRow } from '@/components/invoices/invoice-row-types';
 
+/**
+ * Lista bez klucza z danych: Realtime zmienia dane widocznego wiersza →
+ * `router.refresh()` → nowy snapshot. Remont listy kasowałby zaznaczenie
+ * i otwarte okna wierszy, więc `InvoiceList` bierze snapshot z
+ * `initialInvoices` bez remontu.
+ */
 export function InvoicesPullToRefresh({
   tenantId,
   initialInvoices,
-  listKey,
   filtered = false,
   summary,
   facts,
@@ -18,8 +23,6 @@ export function InvoicesPullToRefresh({
 }: {
   tenantId: string;
   initialInvoices: InvoiceRow[];
-  /** Unikalny fingerprint listy z serwera — zmiana po `router.refresh()` remountuje listę. */
-  listKey: string;
   /** Lista zawężona filtrem albo dalszą stroną (F-086). */
   filtered?: boolean;
   /** Opis zakresu pozycji pod nagłówkiem tabeli. */
@@ -34,7 +37,6 @@ export function InvoicesPullToRefresh({
   return (
     <PullToRefresh onRefresh={async () => router.refresh()}>
       <InvoiceList
-        key={listKey}
         tenantId={tenantId}
         initialInvoices={initialInvoices}
         filtered={filtered}

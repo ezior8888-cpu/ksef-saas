@@ -1,12 +1,17 @@
 import * as React from 'react'
 
 import { RiArrowLeftSLine, RiArrowRightSLine, RiMoreLine } from '@remixicon/react'
+import type { VariantProps } from 'class-variance-authority'
+import Link from 'next/link'
 
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 
 // Port z szablonu Finora (src/components/ui/pagination.tsx). Różnice: polskie
-// napisy domyślne; PaginationLink zostaje zwykłym <a> (nawigacja przez URL).
+// napisy domyślne; PaginationLink to next/link (nawigacja przez URL, miękka, ale
+// nadal prawdziwy <a href> — działa bez JS i w nowych kartach) ostylowany
+// `buttonVariants`, a nie Base UI Button: ten przy `nativeButton={false}` dokłada
+// role="button", więc czytniki ekranu czytałyby strony jak przyciski.
 
 function Pagination({ className, ...props }: React.ComponentProps<'nav'>) {
   return (
@@ -30,19 +35,40 @@ function PaginationItem({ ...props }: React.ComponentProps<'li'>) {
 
 type PaginationLinkProps = {
   isActive?: boolean
-} & Pick<React.ComponentProps<typeof Button>, 'size'> &
+} & Pick<VariantProps<typeof buttonVariants>, 'size'> &
   React.ComponentProps<'a'>
 
-function PaginationLink({ className, isActive, size = 'icon', ...props }: PaginationLinkProps) {
+function PaginationLink({ className, isActive, size = 'icon', href, ...props }: PaginationLinkProps) {
+  const variant = isActive ? 'outline' : 'ghost'
+  const classes = cn(buttonVariants({ variant, size }), className)
+
+  // Bez `href` (np. „Poprzednia” na pierwszej stronie) nie ma nawigacji, ale to
+  // nadal „link, niedostępny” (`aria-disabled` od wołającego): rola linku
+  // pozwala na `aria-label` strzałek — na zwykłym elemencie ARIA go zabrania.
+  if (href === undefined) {
+    return (
+      <span
+        role='link'
+        data-slot='pagination-link'
+        data-active={isActive}
+        data-variant={variant}
+        data-size={size}
+        className={classes}
+        {...props}
+      />
+    )
+  }
+
   return (
-    <Button
-      variant={isActive ? 'outline' : 'ghost'}
-      size={size}
-      className={cn(className)}
-      nativeButton={false}
-      render={
-        <a aria-current={isActive ? 'page' : undefined} data-slot='pagination-link' data-active={isActive} {...props} />
-      }
+    <Link
+      href={href}
+      aria-current={isActive ? 'page' : undefined}
+      data-slot='pagination-link'
+      data-active={isActive}
+      data-variant={variant}
+      data-size={size}
+      className={classes}
+      {...props}
     />
   )
 }

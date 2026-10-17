@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/client';
@@ -167,10 +168,20 @@ function vatRateLabel(rate: string | null): string {
 }
 
 /**
+ * Kolumny `invoices`, od których zależą fakty liczone TYLKO na serwerze: kod QR
+ * (`loadQr`: numer KSeF + hash pliku XML) i prawo do korekty (`loadCanCorrect`: status, numer).
+ * Realtime niesie same kolumny wiersza, więc zmiana którejkolwiek z nich odświeża stronę
+ * (`router.refresh()`) — tak jak `PAYMENT_FACT_FIELDS` na liście faktur. Inne zmiany
+ * (np. podpowiedź błędu) są już w całości widoczne ze stanu lokalnego.
+ */
+const SERVER_FACT_FIELDS = ['ksef_status', 'ksef_number', 'xml_storage_path'] as const;
+
+/**
  * Szczegóły faktury + nasłuch Realtime na UPDATE tego samego wiersza
  * (status KSeF, numer, ścieżka XML, błąd) — bez ręcznego odświeżania.
  */
 export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }) {
+  const router = useRouter();
   const [inv, setInv] = useState(initial);
   // `router.refresh()` (np. po decyzji albo po odmowie wysyłki/usunięcia — C15) przynosi
   // nowe `initial` z serwera: widok przyjmuje je w całości, inaczej baner szkicu wycofanego
@@ -180,6 +191,12 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
     setSeenInitial(initial);
     setInv(initial);
   }
+  // Bieżący stan dla uchwytu Realtime (porównanie faktów bez wywoływania go w aktualizatorze
+  // stanu — ten bywa uruchamiany dwa razy, a `router.refresh()` to efekt uboczny).
+  const invRef = useRef(inv);
+  useEffect(() => {
+    invRef.current = inv;
+  }, [inv]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -195,6 +212,13 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
         },
         (payload) => {
           const row = payload.new as Record<string, unknown>;
+          // C9: QR i „Korekta” liczy serwer — zmiana statusu, numeru albo pliku XML przynosi je
+          // przez `router.refresh()`; nowe `initial` przyjmuje zerowanie `seenInitial` wyżej
+          // (stan = serwer, więc kolejne zdarzenia o tych samych faktach już nie odświeżają).
+          const current = invRef.current;
+          if (SERVER_FACT_FIELDS.some((field) => field in row && String(row[field] ?? '') !== String(current[field] ?? ''))) {
+            router.refresh();
+          }
           setInv((prev) => {
             // Dane oryginału 440 i widok decyzji pochodzą z chwili otwarcia strony — po
             // zmianie stanu faktury są nieaktualne (nowy werdykt = nowe dane po odświeżeniu).
@@ -267,7 +291,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [initial.id]);
+  }, [initial.id, router]);
 
   const seller = (inv.seller_data ?? {}) as PartySnapshot;
   const buyer = (inv.buyer_data ?? {}) as PartySnapshot;

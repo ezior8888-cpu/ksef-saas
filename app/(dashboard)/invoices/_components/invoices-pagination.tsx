@@ -12,11 +12,16 @@ import { invoiceListHref, type InvoiceListParams } from '@/lib/invoices/list-que
 import { cn } from '@/lib/utils';
 
 const DISABLED = 'pointer-events-none opacity-50';
+// Numery stron i wielokropki tylko od `sm`: na telefonie (375 px) 5 numerów po 44 px
+// + wielokropki + przyciski nie mieszczą się w jednym rzędzie i wypychają
+// Poprzednia/Następna poza ekran, więc poniżej `sm` jest „Strona X z Y”.
+const FROM_SM = 'hidden sm:block';
 
 /**
  * Stopka listy: „Pozycje X–Y z N” i paginacja Finory jako ZWYKŁE LINKI
  * (`invoiceListHref` zachowuje filtry, `na_stronie` i szukaną frazę) —
  * działa bez JS i w nowych kartach. Serwer jest właścicielem strony.
+ * Telefon (< sm): Poprzednia, „Strona X z Y”, Następna; numery od `sm`.
  */
 export function InvoicesPagination({ params, total }: { params: InvoiceListParams; total: number }) {
   const pages = Math.max(1, Math.ceil(total / params.perPage));
@@ -37,7 +42,8 @@ export function InvoicesPagination({ params, total }: { params: InvoiceListParam
       </p>
       {pages > 1 ? (
         <Pagination aria-label="Strony listy faktur" className="mx-0 w-auto">
-          <PaginationContent>
+          {/* Zawijanie: od `sm` przy dotyku (44 px na numer) 10 stron nie mieści się do ok. 720 px. */}
+          <PaginationContent className="flex-wrap justify-center">
             <PaginationItem>
               {current > 1 ? (
                 <PaginationPrevious href={href(current - 1)} />
@@ -45,32 +51,35 @@ export function InvoicesPagination({ params, total }: { params: InvoiceListParam
                 <PaginationPrevious aria-disabled="true" tabIndex={-1} className={DISABLED} />
               )}
             </PaginationItem>
+            <PaginationItem className="text-muted-foreground px-2 text-xs sm:hidden">
+              {`Strona ${current} z ${pages}`}
+            </PaginationItem>
             {window[0] !== undefined && window[0] > 1 ? (
-              <PaginationItem>
+              <PaginationItem className={FROM_SM}>
                 <PaginationLink href={href(1)} aria-label="Strona 1">
                   1
                 </PaginationLink>
               </PaginationItem>
             ) : null}
             {showLeftEllipsis ? (
-              <PaginationItem>
+              <PaginationItem className={FROM_SM}>
                 <PaginationEllipsis />
               </PaginationItem>
             ) : null}
             {window.map((page) => (
-              <PaginationItem key={page}>
+              <PaginationItem key={page} className={FROM_SM}>
                 <PaginationLink href={href(page)} isActive={page === current} aria-label={`Strona ${page}`}>
                   {page}
                 </PaginationLink>
               </PaginationItem>
             ))}
             {showRightEllipsis ? (
-              <PaginationItem>
+              <PaginationItem className={FROM_SM}>
                 <PaginationEllipsis />
               </PaginationItem>
             ) : null}
             {window[window.length - 1] !== undefined && (window[window.length - 1] as number) < pages ? (
-              <PaginationItem>
+              <PaginationItem className={FROM_SM}>
                 <PaginationLink href={href(pages)} aria-label={`Strona ${pages}`}>
                   {pages}
                 </PaginationLink>

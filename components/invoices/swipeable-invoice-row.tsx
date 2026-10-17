@@ -14,7 +14,6 @@ import { toast } from 'sonner';
 
 import { PaymentIndicator } from '@/app/(dashboard)/invoices/_components/payment-indicator';
 import { downloadInvoiceXmlAction } from '@/components/invoices/actions-detail';
-import { Badge } from '@/components/ui/badge';
 
 import { StatusBadge } from './status-badge';
 
@@ -149,9 +148,8 @@ export function SwipeableInvoiceRow({ invoice, facts, today }: Props) {
           {state !== null ? (
             <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3 text-xs">
               <PaymentIndicator state={state} showLabel />
-              {outstanding === 0 ? (
-                <Badge variant="secondary">Opłacona</Badge>
-              ) : outstanding !== null ? (
+              {/* Opłacona: wskaźnik po lewej już to mówi (ikona + etykieta) — bez drugiej plakietki. */}
+              {state !== 'paid' && outstanding !== null && outstanding !== 0 ? (
                 <span className="text-muted-foreground tabular-nums">
                   {`Do zapłaty: ${formatPlMoney(outstanding)} ${symbol}`}
                 </span>
