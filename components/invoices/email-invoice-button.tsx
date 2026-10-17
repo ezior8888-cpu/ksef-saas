@@ -21,7 +21,7 @@ export function EmailInvoiceButton({ invoiceId }: { invoiceId: string }) {
 
   if (!open) {
     return (
-      <Button variant="glass" size="lg" onClick={() => setOpen(true)}>
+      <Button variant="outline" onClick={() => setOpen(true)}>
         <Mail className="h-4 w-4 mr-2" />
         Wyślij mailem
       </Button>
@@ -59,7 +59,7 @@ export function EmailInvoiceButton({ invoiceId }: { invoiceId: string }) {
         className="w-56"
         aria-label="Adres email odbiorcy faktury"
       />
-      <Button type="submit" size="lg" disabled={isPending}>
+      <Button type="submit" disabled={isPending}>
         {isPending ? (
           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
         ) : (
@@ -69,8 +69,7 @@ export function EmailInvoiceButton({ invoiceId }: { invoiceId: string }) {
       </Button>
       <Button
         type="button"
-        variant="glass"
-        size="lg"
+        variant="outline"
         onClick={() => setOpen(false)}
         disabled={isPending}
       >

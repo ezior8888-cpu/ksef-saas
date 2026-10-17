@@ -1,5 +1,8 @@
 import { notFound } from 'next/navigation';
 
+import { amountDueOf } from '@/lib/invoices/amount-due';
+import { parentsWithOpenCorrection } from '@/lib/invoices/correction-parents';
+import { canCorrectInvoice } from '@/lib/invoices/list-row-facts';
 import { KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { canManageKsefSend } from '@/lib/invoices/ksef-send-policy';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -13,6 +16,8 @@ import {
   type RetiredDraftView,
 } from '@/lib/ksef/duplicate-decision';
 import { loadDuplicateDecisionFacts } from '@/lib/ksef/duplicate-decision-facts';
+import { invoiceVerificationUrl, ksefEnvForQr, qrLabel } from '@/lib/ksef/qr-verification';
+import { isTenantStoragePath } from '@/lib/storage/tenant-path';
 import { createClient } from '@/lib/supabase/server';
 import {
   InvoiceDetailView,
@@ -21,6 +26,9 @@ import {
 } from '@/components/invoices/invoice-detail-view';
 
 export const dynamic = 'force-dynamic';
+
+/** Pozycje w jednej linii: baza w pamięci testów rozbiera zagnieżdżony select tylko z jednolinijkowego nawiasu. */
+const LINE_COLUMNS = 'ordinal, name, unit, quantity, unit_price_net, vat_rate, net_amount, vat_amount, gross_amount';
 
 export default async function InvoiceDetailPage({
   params,
@@ -49,6 +57,7 @@ export default async function InvoiceDetailPage({
       vat_total,
       gross_total,
       currency,
+      ksef_environment,
       paid_amount,
       stripe_invoice_id,
       offline_idempotency_key,
@@ -63,15 +72,7 @@ export default async function InvoiceDetailPage({
       buyer_nip,
       buyer_data,
       payment_data,
-      invoice_line_items(
-        ordinal,
-        name,
-        unit,
-        quantity,
-        unit_price_net,
-        vat_rate,
-        gross_amount
-      )
+      invoice_line_items(${LINE_COLUMNS})
       `
     )
     .eq('id', id)
@@ -144,6 +145,18 @@ export default async function InvoiceDetailPage({
     .slice()
     .sort((a, b) => a.ordinal - b.ordinal);
 
+  // E3 / P4: pola pochodne dla układu Finory. Tylko liczby i flagi — treść
+  // dokumentu (`fa3_data`) zostaje na serwerze.
+  const currency = (invoice.currency as string | null)?.trim().toUpperCase() || 'PLN';
+  const splitPayment = hasSplitPayment(invoice.fa3_data);
+  const amountDue = amountDueOf({
+    invoice_kind: invoice.invoice_kind,
+    gross_total: invoice.gross_total,
+    payment_data: invoice.payment_data,
+  });
+  const canCorrect = await loadCanCorrect(supabase, invoice, env);
+  const qr = await loadQr(supabase, invoice);
+
   const initial: InvoiceDetailInitial = {
     id: invoice.id as string,
     internal_number: internalNumber,
@@ -167,6 +180,11 @@ export default async function InvoiceDetailPage({
     buyer_data: invoice.buyer_data,
     payment_data: invoice.payment_data ?? null,
     lines,
+    currency,
+    split_payment: splitPayment,
+    amount_due: amountDue,
+    can_correct: canCorrect,
+    qr,
     upo_status:
       upo?.status ??
       null,
@@ -182,4 +200,98 @@ export default async function InvoiceDetailPage({
   };
 
   return <InvoiceDetailView key={initial.id} initial={initial} />;
+}
+
+/** MPP (P_18A) z adnotacji dokumentu — sama flaga, bez reszty `fa3_data`. */
+function hasSplitPayment(fa3Data: unknown): boolean {
+  if (!fa3Data || typeof fa3Data !== 'object' || Array.isArray(fa3Data)) return false;
+  const annotations = (fa3Data as { annotations?: unknown }).annotations;
+  if (!annotations || typeof annotations !== 'object' || Array.isArray(annotations)) return false;
+  return (annotations as { splitPayment?: unknown }).splitPayment === 1;
+}
+
+type SessionClient = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Link „Korekta”: ten sam predykat co lista faktur (`canCorrectInvoice`, warunki
+ * formularza korekty) plus K4 — korekta w toku blokuje kolejną. Korekty rodzica
+ * czytamy dopiero, gdy faktura w ogóle może być rodzicem. Błąd odczytu chowa
+ * link („nie wiem” to nie „brak korekty w toku”), ale nie wywraca podglądu:
+ * akcję i tak sprawdza formularz korekty po swojej stronie.
+ */
+async function loadCanCorrect(
+  supabase: SessionClient,
+  invoice: { id: unknown; tenant_id: unknown; direction: unknown; ksef_status: unknown; invoice_kind: unknown; ksef_environment: unknown; ksef_number: unknown },
+  env: ReturnType<typeof configuredKsefEnvironment>,
+): Promise<boolean> {
+  if (!env) return false;
+  const row = {
+    id: invoice.id as string,
+    direction: (invoice.direction as string | null) ?? null,
+    origin: null,
+    ksef_status: (invoice.ksef_status as string | null) ?? null,
+    ksef_environment: (invoice.ksef_environment as string | null) ?? null,
+    invoice_kind: (invoice.invoice_kind as string | null) ?? null,
+    invoice_type: null,
+    currency: null,
+    gross_total: null,
+    paid_amount: null,
+    payment_data: null,
+    payment_due_date: null,
+    payment_status: null,
+    ksef_number: (invoice.ksef_number as string | null) ?? null,
+  };
+  if (!canCorrectInvoice(row, { environment: env, openCorrectionParents: new Set() })) return false;
+
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('parent_invoice_id, ksef_status')
+    .eq('tenant_id', invoice.tenant_id as string)
+    .eq('parent_invoice_id', row.id)
+    .eq('invoice_kind', 'correction');
+  if (error) return false;
+  const open = parentsWithOpenCorrection(
+    (data ?? []) as Array<{ parent_invoice_id: string | null; ksef_status: string | null }>,
+  );
+  return canCorrectInvoice(row, { environment: env, openCorrectionParents: open });
+}
+
+/**
+ * Kod QR weryfikacji (KOD I) — ten sam link co na PDF (`lib/pdf/invoice-pdf.ts`):
+ * NIP sprzedawcy, data wystawienia i SHA-256 pliku XML wysłanego do KSeF.
+ * Skrót czytamy sesją (RLS `xml_documents_select_own_tenant`), po ścieżce
+ * zapisanej przy fakturze, z filtrem firmy i faktury. Bez numeru KSeF, bez
+ * pliku XML (import, skrzynka) albo ze skrótem, który nie jest SHA-256, nie
+ * ma kodu (`null`) — to NIE jest KOD II (certyfikat Offline, `qr-codes.ts`).
+ * Błąd odczytu też daje `null`, jak w generatorze PDF (`readXmlHash`): kod QR
+ * jest dodatkiem do dokumentu, nie powodem, by podgląd faktury się nie otworzył.
+ */
+async function loadQr(
+  supabase: SessionClient,
+  invoice: {
+    id: unknown; tenant_id: unknown; ksef_number: unknown; xml_storage_path: unknown; issue_date: unknown; seller_data: unknown;
+  },
+): Promise<InvoiceDetailInitial['qr']> {
+  const ksefNumber = (invoice.ksef_number as string | null)?.trim() || null;
+  const path = (invoice.xml_storage_path as string | null) ?? null;
+  const tenantId = invoice.tenant_id as string;
+  const issueDate = (invoice.issue_date as string | null) ?? null;
+  if (!ksefNumber || !path || !issueDate || !isTenantStoragePath(path, tenantId)) return null;
+
+  const { data, error } = await supabase
+    .from('xml_documents')
+    .select('sha256_hash')
+    .eq('storage_path', path)
+    .eq('tenant_id', tenantId)
+    .eq('invoice_id', invoice.id as string)
+    .maybeSingle();
+  if (error) return null;
+
+  const url = invoiceVerificationUrl({
+    env: ksefEnvForQr(),
+    sellerNip: (invoice.seller_data as { nip?: string | null } | null)?.nip ?? null,
+    issueDate,
+    sha256Hex: (data as { sha256_hash: string | null } | null)?.sha256_hash ?? null,
+  });
+  return url ? { url, label: qrLabel(ksefNumber) } : null;
 }

@@ -126,8 +126,14 @@ const base: InvoiceDetailInitial = {
     amountDue: 22140.23,
   },
   lines: [
-    { ordinal: 1, name: 'Usługa', unit: 'h', quantity: '1.5', unit_price_net: '100.1234', vat_rate: '23', gross_amount: '184.73' },
+    { ordinal: 1, name: 'Usługa', unit: 'h', quantity: '1.5', unit_price_net: '100.1234', vat_rate: '23', net_amount: '150.19', vat_amount: '34.54', gross_amount: '184.73' },
   ],
+  // E3 / P4: pola pochodne liczone przez stronę (waluta, MPP, „Do zapłaty”, korekta, QR).
+  currency: 'PLN',
+  split_payment: false,
+  amount_due: 22140.23,
+  can_correct: false,
+  qr: null,
   upo_status: null,
   can_manage_send: false,
   ksef_duplicate_original: null,
@@ -173,8 +179,8 @@ describe('szczegóły faktury na ekranie (F-094)', () => {
     const t = render({
       ...base,
       lines: [
-        { ordinal: 1, name: 'Programowanie', unit: 'usł.', quantity: '1', unit_price_net: '2000', vat_rate: 'np_ii', gross_amount: '2000' },
-        { ordinal: 2, name: 'Montaż w DE', unit: 'usł.', quantity: '1', unit_price_net: '500', vat_rate: 'np', gross_amount: '500' },
+        { ordinal: 1, name: 'Programowanie', unit: 'usł.', quantity: '1', unit_price_net: '2000', vat_rate: 'np_ii', net_amount: '2000', vat_amount: '0', gross_amount: '2000' },
+        { ordinal: 2, name: 'Montaż w DE', unit: 'usł.', quantity: '1', unit_price_net: '500', vat_rate: 'np', net_amount: '500', vat_amount: '0', gross_amount: '500' },
       ],
     });
     expect(t).toContain('np. II');
@@ -192,6 +198,24 @@ describe('szczegóły faktury na ekranie (F-094)', () => {
     const t = render({ ...base, payment_data: null });
     expect(t).not.toContain('Termin płatności');
     expect(t).toContain('FV/7/10/2026');
+  });
+
+  it('E3 / P4: dokument ma wszystkie kolumny pozycji (Lp., Nazwa, Ilość, J.m., Cena netto, VAT, Netto, Brutto), kwota netto pozycji', () => {
+    const t = render(base);
+    for (const head of ['Lp.', 'Nazwa', 'Ilość', 'J.m.', 'Cena netto', 'VAT', 'Netto', 'Brutto']) {
+      expect(t, head).toContain(head);
+    }
+    expect(t).toContain('150,19');
+  });
+
+  it('E3 / P4: pasek akcji stoi w dwóch miejscach (status = primary, dokument = secondary) z tymi samymi props', () => {
+    actions.props.length = 0;
+    render({ ...base, can_correct: true });
+    const [first, second] = actions.props.slice(-2) as Array<{ section?: string; invoice: Record<string, unknown>; canManageSend?: boolean }>;
+    expect([first!.section, second!.section].sort()).toEqual(['primary', 'secondary']);
+    expect(first!.invoice).toEqual(second!.invoice);
+    expect(first!.canManageSend).toBe(second!.canManageSend);
+    expect(first!.invoice.can_correct).toBe(true);
   });
 
   it('D-A4-1b-3: nierozstrzygnięty duplikat 440 — panel z danymi faktury, którą KSeF ma pod tym numerem', () => {

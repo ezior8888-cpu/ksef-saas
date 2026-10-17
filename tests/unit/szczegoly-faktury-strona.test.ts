@@ -188,6 +188,8 @@ function seed() {
     memberships: [{ user_id: st.user, organization_id: TENANT, status: 'active', role: 'owner' }],
     upo_receipts: [],
     ksef_submissions: [],
+    // E3/P4: strona czyta skrót SHA-256 pliku XML sesją (RLS) do kodu QR (KOD I).
+    xml_documents: [],
   });
   return st.db;
 }
@@ -481,5 +483,184 @@ describe('D-A4-1b-3 PR B: widok decyzji klienta i baner szkicu wycofanego liczon
     for (const key of KSEF_RESEND_SOURCE_COLUMN_KEYS) {
       expect(columns.filter((c) => c === key), `kolumna ${key}`).toHaveLength(1);
     }
+  });
+});
+
+/**
+ * E3 / P4 (PLAN-FINORA §5): podgląd faktury w układzie Finory dostaje od serwera
+ * TYLKO pochodne, bezpieczne pola: walutę, kwoty netto i VAT pozycji, MPP
+ * (boolean z `fa3_data.annotations`), „Do zapłaty”, możliwość korekty i dane
+ * kodu QR (KOD I). Treść dokumentu (`fa3_data`) nadal zostaje na serwerze.
+ *
+ * Do E3 `initial` nie miał waluty (widok na sztywno pisał „PLN”), kwot per
+ * stawka ani linku „Korekta”, a skrót XML czytał tylko generator PDF kluczem
+ * admina.
+ */
+describe('E3 P4: pola podglądu faktury liczone na serwerze', () => {
+  const ACC_ID = '33333333-3333-4333-8333-333333333351';
+  const ROZ_ID = '33333333-3333-4333-8333-333333333352';
+  const CHILD_ID = '33333333-3333-4333-8333-333333333353';
+  const XML_PATH = `${TENANT}/xml/FV-1.xml`;
+  const SHA = 'ab'.repeat(32);
+  const KSEF_NR = '1234567890-20261002-0100A0B0C0D0-1A';
+
+  const lineRows = [
+    { ordinal: 2, name: 'B', unit: 'szt.', quantity: 1, unit_price_net: 50, vat_rate: '8', net_amount: 50, vat_amount: 4, gross_amount: 54 },
+    { ordinal: 1, name: 'A', unit: 'szt.', quantity: 1, unit_price_net: 100, vat_rate: '23', net_amount: 100, vat_amount: 23, gross_amount: 123 },
+  ];
+
+  function accepted(patch: Row = {}): Row {
+    return invoiceRow(ACC_ID, {
+      internal_number: 'FV/1/10/2026',
+      ksef_status: 'accepted',
+      ksef_number: KSEF_NR,
+      ksef_accepted_at: '2026-10-02T09:00:00Z',
+      last_error: null,
+      last_error_code: null,
+      ksef_environment: 'test',
+      currency: 'EUR',
+      paid_amount: 0,
+      xml_storage_path: XML_PATH,
+      net_total: 150,
+      vat_total: 27,
+      gross_total: 177,
+      invoice_line_items: lineRows,
+      ...patch,
+    });
+  }
+
+  function put(row: Row, extra: Row[] = []) {
+    st.db!.tables.invoices!.push(row, ...extra);
+  }
+  const putXml = () => st.db!.tables.xml_documents!.push({ storage_path: XML_PATH, tenant_id: TENANT, invoice_id: ACC_ID, sha256_hash: SHA });
+
+  it('waluta i kwoty netto/VAT pozycji; pozycje posortowane po `ordinal`', async () => {
+    put(accepted());
+    const initial = await loadInitial(ACC_ID);
+    expect(initial.currency).toBe('EUR');
+    expect(initial.lines.map((l) => [l.ordinal, l.net_amount, l.vat_amount, l.gross_amount])).toEqual([
+      [1, 100, 23, 123],
+      [2, 50, 4, 54],
+    ]);
+  });
+
+  it('brak waluty w wierszu = PLN (jak widok `invoices_overdue`)', async () => {
+    put(accepted({ currency: null }));
+    expect((await loadInitial(ACC_ID)).currency).toBe('PLN');
+  });
+
+  it('MPP: `split_payment` z fa3_data.annotations.splitPayment, a sama treść dokumentu nie wychodzi', async () => {
+    put(accepted({
+      fa3_data: { internalNumber: 'FV/1/10/2026', annotations: { splitPayment: 1, cashMethod: 2 }, lines: [] },
+    }));
+    const initial = await loadInitial(ACC_ID);
+    expect(initial.split_payment).toBe(true);
+    expect(initial).not.toHaveProperty('fa3_data');
+    expect(JSON.stringify(initial)).not.toContain('annotations');
+    expect(JSON.stringify(initial)).not.toContain('cashMethod');
+
+    st.db!.tables.invoices!.length = 0;
+    put(accepted({ fa3_data: { annotations: { splitPayment: 2 }, lines: [] } }));
+    expect((await loadInitial(ACC_ID)).split_payment).toBe(false);
+    st.db!.tables.invoices!.length = 0;
+    put(accepted({ fa3_data: null }));
+    expect((await loadInitial(ACC_ID)).split_payment).toBe(false);
+  });
+
+  it('„Do zapłaty” przez `amountDueOf`: zwykła faktura = brutto, ROZ = reszta po zaliczkach z payment_data', async () => {
+    put(accepted(), [accepted({
+      id: ROZ_ID,
+      internal_number: 'ROZ/1/10/2026',
+      invoice_type: 'ROZ',
+      invoice_kind: 'final',
+      gross_total: 4000,
+      payment_data: { method: 'transfer', dueDate: '2026-10-16', currency: 'PLN', amountDue: 1000 },
+    })]);
+    expect((await loadInitial(ACC_ID)).amount_due).toBe(177);
+    expect((await loadInitial(ROZ_ID)).amount_due).toBe(1000);
+  });
+
+  it('korekta: przyjęta zwykła faktura bez korekty w toku → `can_correct`; ten sam predykat co lista (P3)', async () => {
+    put(accepted());
+    expect((await loadInitial(ACC_ID)).can_correct).toBe(true);
+  });
+
+  it.each([
+    ['szkic', { ksef_status: 'draft', ksef_number: null }],
+    ['zaliczka', { invoice_kind: 'advance', invoice_type: 'ZAL' }],
+    ['inne środowisko', { ksef_environment: 'demo' }],
+    ['bez numeru KSeF', { ksef_number: null }],
+    ['przychodząca', { direction: 'incoming' }],
+  ] as const)('korekta niedostępna: %s', async (_label, patch) => {
+    put(accepted(patch));
+    expect((await loadInitial(ACC_ID)).can_correct).toBe(false);
+  });
+
+  it('korekta niedostępna, gdy KSEF_ENV niepoprawne (środowisko nieznane)', async () => {
+    vi.stubEnv('KSEF_ENV', 'bogus');
+    put(accepted());
+    expect((await loadInitial(ACC_ID)).can_correct).toBe(false);
+  });
+
+  it.each([
+    ['szkic', 'draft', false],
+    ['w kolejce', 'queued', false],
+    ['z błędem', 'failed', false],
+    ['przyjęta', 'accepted', true],
+    ['odrzucona', 'rejected', true],
+  ] as const)('K4: korekta w toku (%s) blokuje „Korekta” tylko, gdy nie jest rozstrzygnięta', async (_label, status, canCorrect) => {
+    put(accepted(), [{ id: CHILD_ID, tenant_id: TENANT, parent_invoice_id: ACC_ID, invoice_kind: 'correction', ksef_status: status }]);
+    expect((await loadInitial(ACC_ID)).can_correct).toBe(canCorrect);
+  });
+
+  it('QR (KOD I): link z NIP sprzedawcy, daty wystawienia i skrótu XML czytanego sesją; podpis = numer KSeF', async () => {
+    put(accepted());
+    putXml();
+    const initial = await loadInitial(ACC_ID);
+    const hash = Buffer.from(SHA, 'hex').toString('base64url');
+    expect(initial.qr).toEqual({
+      url: `https://qr-test.ksef.mf.gov.pl/invoice/1234567890/02-10-2026/${hash}`,
+      label: KSEF_NR,
+    });
+    const read = st.db!.reads.find((r) => r.table === 'xml_documents');
+    expect(read, 'skrót XML trzeba przeczytać z xml_documents').toBeDefined();
+    expect(read!.filters).toEqual({ storage_path: XML_PATH, tenant_id: TENANT, invoice_id: ACC_ID });
+  });
+
+  it('QR: brak pliku XML (import, skrzynka), brak numeru KSeF albo cudza ścieżka → `qr: null`, bez błędu', async () => {
+    put(accepted());
+    expect((await loadInitial(ACC_ID)).qr).toBeNull();
+
+    putXml();
+    st.db!.tables.invoices!.length = 0;
+    put(accepted({ ksef_number: null, ksef_status: 'queued' }));
+    expect((await loadInitial(ACC_ID)).qr).toBeNull();
+
+    st.db!.tables.invoices!.length = 0;
+    put(accepted({ xml_storage_path: 'inna-firma/xml/FV-1.xml' }));
+    expect((await loadInitial(ACC_ID)).qr).toBeNull();
+  });
+
+  it('QR: skrót nie jest sha256 (uszkodzony wiersz) → `qr: null`, nie link donikąd', async () => {
+    put(accepted());
+    st.db!.tables.xml_documents!.push({ storage_path: XML_PATH, tenant_id: TENANT, invoice_id: ACC_ID, sha256_hash: 'zły' });
+    expect((await loadInitial(ACC_ID)).qr).toBeNull();
+  });
+
+  it('strażnik: nowe pola nie wynoszą treści dokumentu ani skrótu XML; faktura czytana raz, każda kolumna raz', async () => {
+    put(accepted({ fa3_data: { annotations: { splitPayment: 1 }, advanceEnvelope: {} }, special_data: { correctionData: {} } }));
+    putXml();
+    const initial = await loadInitial(ACC_ID);
+    const json = JSON.stringify(initial);
+    for (const forbidden of ['fa3_data', 'special_data', 'advanceEnvelope', 'correctionData', SHA]) {
+      expect(json, forbidden).not.toContain(forbidden);
+    }
+    const reads = st.db!.reads.filter((r) => r.table === 'invoices' && r.filters.id === ACC_ID);
+    expect(reads).toHaveLength(1);
+    const columns = selectedColumns(reads[0]!.columns);
+    expect(new Set(columns).size, `zdublowana kolumna w: ${reads[0]!.columns}`).toBe(columns.length);
+    expect(columns).toEqual(expect.arrayContaining(['currency', 'ksef_environment']));
+    expect(reads[0]!.columns).toMatch(/invoice_line_items\([^)]*net_amount[^)]*vat_amount/);
+    expect(st.notCalls).toEqual([]);
   });
 });

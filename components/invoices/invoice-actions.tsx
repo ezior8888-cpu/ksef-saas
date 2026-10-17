@@ -1,10 +1,11 @@
 'use client';
 
 import { useTransition } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
-import { Download, FileText, Loader2 } from 'lucide-react';
+import { Download, FilePenLine, FileText, Loader2, Printer } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { EmailInvoiceButton } from './email-invoice-button';
 import { DraftInvoiceActions } from './draft-invoice-actions';
 import { FailedInvoiceActions } from './failed-invoice-actions';
@@ -38,14 +39,40 @@ interface Props {
      * rozliczeniową (`deletable`, decyzja 9). `null` — zwykły szkic albo inny stan.
      */
     ksef_retired?: { deletable: boolean } | null;
+    /**
+     * E3 / P4: faktura może mieć korektę (liczy strona tym samym predykatem
+     * co lista faktur) — w karcie „Dokument” pojawia się link „Korekta”.
+     */
+    can_correct?: boolean;
   };
   /** Rola w firmie dopuszcza ponowną wysyłkę i powrót do szkicu (owner/admin). */
   canManageSend?: boolean;
+  /**
+   * E3 / P4: podgląd faktury stawia akcje w dwóch kartach, z TYMI SAMYMI
+   * props — `primary` (karta „Status”: wysyłka szkicu, ponowienie po błędzie)
+   * i `secondary` (karta „Dokument”: e-mail, PDF, Drukuj, XML, Korekta).
+   * Każdy przycisk jest w DOM raz. `all` (domyślnie) to dotychczasowy pasek.
+   */
+  section?: 'primary' | 'secondary' | 'all';
 }
 
-export function InvoiceActions({ invoice, canManageSend = false }: Props) {
+/** Komunikat dla klienta po nieudanym pobraniu PDF — wspólny dla „Pobierz PDF” i „Drukuj”. */
+async function pdfFailureMessage(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  return body.error === 'pdf_generation_failed'
+    ? 'Nie udało się wygenerować PDF. Spróbuj ponownie.'
+    : res.status === 409
+      ? body.error ?? 'PDF faktury offline jest obecnie niedostępny.'
+      : 'Nie udało się pobrać PDF faktury.';
+}
+
+/** Blob URL zostaje na czas oglądania PDF w nowej karcie (przeładowanie karty go potrzebuje). */
+const PRINT_BLOB_URL_TTL_MS = 10 * 60_000;
+
+export function InvoiceActions({ invoice, canManageSend = false, section = 'all' }: Props) {
   const [isDownloading, startDownloading] = useTransition();
   const [isDownloadingPdf, startDownloadingPdf] = useTransition();
+  const [isOpeningPdf, startOpeningPdf] = useTransition();
 
   const canDownload = !!invoice.xml_storage_path;
 
@@ -68,16 +95,7 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
       try {
         const res = await fetch(`/api/invoices/${invoice.id}/pdf`);
         if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          toast.error(
-            body.error === 'pdf_generation_failed'
-              ? 'Nie udało się wygenerować PDF. Spróbuj ponownie.'
-              : res.status === 409
-                ? body.error ?? 'PDF faktury offline jest obecnie niedostępny.'
-              : 'Nie udało się pobrać PDF faktury.',
-          );
+          toast.error(await pdfFailureMessage(res));
           return;
         }
         const cd = res.headers.get('Content-Disposition') ?? '';
@@ -90,38 +108,45 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
     });
   };
 
-  return (
-    <div className="flex flex-wrap gap-2 justify-end pt-2">
-      <Button
-        variant="glass"
-        size="lg"
-        onClick={handleDownloadPdf}
-        disabled={isDownloadingPdf}
-      >
-        {isDownloadingPdf ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-        ) : (
-          <FileText className="h-4 w-4 mr-2" />
-        )}
-        Pobierz PDF
-      </Button>
-      {/* Decyzja 10: dokument wycofany nie jest fakturą dla nabywcy (odmawia też serwer). */}
-      {!invoice.ksef_retired && <EmailInvoiceButton invoiceId={invoice.id} />}
-      {canDownload && (
-        <Button
-          variant="glass"
-          size="lg"
-          onClick={handleDownload}
-          disabled={isDownloading}
-        >
-          {isDownloading ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4 mr-2" />
-          )}
-          Pobierz XML
-        </Button>
-      )}
+  /**
+   * „Drukuj” (P4): dokumentem jest PDF z `/api/invoices/[id]/pdf`, a
+   * `window.print()` wydrukowałby szkielet panelu. Kartę otwieramy od razu
+   * w obsłudze kliknięcia (po `await` przeglądarki blokują okna), a PDF
+   * wczytujemy do niej przez blob URL — te same trasa, zgody i komunikaty
+   * błędów co przy „Pobierz PDF”.
+   */
+  const handlePrintPdf = () => {
+    const tab = window.open('about:blank', '_blank');
+    if (!tab) {
+      toast.error('Przeglądarka zablokowała nową kartę. Zezwól na okna z tej strony i spróbuj ponownie.');
+      return;
+    }
+    tab.opener = null;
+    startOpeningPdf(async () => {
+      try {
+        const res = await fetch(`/api/invoices/${invoice.id}/pdf`);
+        if (!res.ok) {
+          tab.close();
+          toast.error(await pdfFailureMessage(res));
+          return;
+        }
+        const url = URL.createObjectURL(await res.blob());
+        tab.location.href = url;
+        window.setTimeout(() => URL.revokeObjectURL(url), PRINT_BLOB_URL_TTL_MS);
+      } catch {
+        tab.close();
+        toast.error('Błąd połączenia przy pobieraniu PDF.');
+      }
+    });
+  };
+
+  const hasPrimary =
+    invoice.ksef_status === 'draft' ||
+    invoice.ksef_status === 'rejected' ||
+    invoice.ksef_status === 'failed';
+
+  const primary = (
+    <>
       {invoice.ksef_status === 'draft' && (
         <DraftInvoiceActions
           invoiceId={invoice.id}
@@ -141,6 +166,77 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
           duplicatePanel={invoice.ksef_duplicate_panel ?? false}
         />
       )}
+    </>
+  );
+
+  // Podział na karty: główna akcja (wysyłka, ponowienie) obok statusu, reszta w karcie „Dokument”.
+  if (section === 'primary') {
+    return hasPrimary ? <div className="flex flex-wrap gap-2">{primary}</div> : null;
+  }
+
+  const secondary = (
+    <>
+      <Button
+        variant="outline"
+        onClick={handleDownloadPdf}
+        disabled={isDownloadingPdf}
+      >
+        {isDownloadingPdf ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <FileText className="h-4 w-4 mr-2" />
+        )}
+        Pobierz PDF
+      </Button>
+      <Button
+        variant="outline"
+        onClick={handlePrintPdf}
+        disabled={isOpeningPdf}
+      >
+        {isOpeningPdf ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <Printer className="h-4 w-4 mr-2" />
+        )}
+        Drukuj
+      </Button>
+      {/* Decyzja 10: dokument wycofany nie jest fakturą dla nabywcy (odmawia też serwer). */}
+      {!invoice.ksef_retired && <EmailInvoiceButton invoiceId={invoice.id} />}
+      {canDownload && (
+        <Button
+          variant="outline"
+          onClick={handleDownload}
+          disabled={isDownloading}
+          >
+          {isDownloading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4 mr-2" />
+          )}
+          Pobierz XML
+        </Button>
+      )}
+      {invoice.can_correct && (
+        <Link
+          href={`/invoices/new/correction?parentId=${encodeURIComponent(invoice.id)}`}
+          className={buttonVariants({ variant: 'outline' })}
+        >
+          <FilePenLine className="h-4 w-4 mr-2" />
+          Korekta
+        </Link>
+      )}
+    </>
+  );
+
+  if (section === 'secondary') {
+    // Kolumna 18 rem: pole e-maila (EmailInvoiceButton) ma się zawinąć, nie wystawać.
+    return <div className="flex flex-col gap-2 [&_form]:flex-wrap">{secondary}</div>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2 justify-end pt-2">
+      {secondary}
+      {primary}
     </div>
   );
 }
