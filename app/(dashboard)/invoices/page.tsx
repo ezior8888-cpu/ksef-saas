@@ -1,13 +1,20 @@
+import Link from 'next/link';
+
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
+import { receivableBaseFilterOps } from '@/lib/dashboard/receivables';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import {
+  INVOICE_PAYMENT_FILTERS,
   INVOICE_STATUS_FILTERS,
+  invoiceListHref,
   isFilteredList,
+  orFilterString,
   pageRange,
   parseInvoiceListParams,
   paymentFilterSpec,
   searchOrFilter,
+  type PaymentFilterOp,
 } from '@/lib/invoices/list-query';
 import {
   LIST_ROW_FACT_COLUMNS,
@@ -15,6 +22,7 @@ import {
   type InvoiceListRowFacts,
   type ListRowFactsRow,
 } from '@/lib/invoices/list-row-facts';
+import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { BatchPdfDownload } from '@/components/invoices/batch-pdf-download';
 import type { InvoiceFactsById, InvoiceRow } from '@/components/invoices/invoice-row-types';
@@ -55,7 +63,20 @@ export default async function InvoicesPage({
   const statuses = INVOICE_STATUS_FILTERS[params.status].statuses;
   if (statuses) query = query.in('ksef_status', [...statuses]);
   if (params.kind !== 'wszystkie') query = query.eq('invoice_kind', params.kind);
-  for (const cond of paymentFilterSpec(params.payment, today) ?? []) {
+  // Filtr płatności tylko na fakturach z §2.4 pkt 11 (C1); środowisko KSeF
+  // czytamy dopiero, gdy filtr jest wybrany. Bez środowiska nie pokazujemy
+  // listy bez filtra udającej filtrowaną — komunikat i link bez tego filtra
+  // (AGENTS.md pkt 4: blokada z wyjściem).
+  let paymentOps: PaymentFilterOp[] | null = null;
+  let paymentFilterError = false;
+  try {
+    paymentOps = paymentFilterSpec(params.payment, today, () =>
+      receivableBaseFilterOps(requireConfiguredKsefEnvironment()));
+  } catch (e) {
+    console.error('[invoices] filtr płatności bez środowiska KSeF', e);
+    paymentFilterError = true;
+  }
+  for (const cond of paymentOps ?? []) {
     switch (cond.op) {
       case 'eq':
         query = query.eq(cond.column, cond.value);
@@ -66,8 +87,17 @@ export default async function InvoicesPage({
       case 'lt':
         query = query.lt(cond.column, cond.value);
         break;
+      case 'gt':
+        query = query.gt(cond.column, cond.value);
+        break;
+      case 'gte':
+        query = query.gte(cond.column, cond.value);
+        break;
       case 'in':
         query = query.in(cond.column, [...cond.value]);
+        break;
+      case 'or':
+        query = query.or(orFilterString(cond.anyOf));
         break;
     }
   }
@@ -76,10 +106,12 @@ export default async function InvoicesPage({
   const search = searchOrFilter(params.q);
   if (search) query = query.or(search);
 
-  const { data: invoices, error, count } = await query
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
-    .range(rangeFrom, rangeTo);
+  const { data: invoices, error, count } = paymentFilterError
+    ? { data: null, error: null, count: 0 }
+    : await query
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(rangeFrom, rangeTo);
 
   const rows = (invoices ?? []) as unknown as ListQueryRow[];
   const total = count ?? rows.length;
@@ -97,26 +129,6 @@ export default async function InvoicesPage({
     }
   }
   const factsById: InvoiceFactsById = Object.fromEntries(facts);
-
-  const listKey = rows
-    .map((row) => {
-      const f = factsById[row.id];
-      return [
-        row.id,
-        row.ksef_status,
-        row.internal_number ?? '',
-        row.ksef_number ?? '',
-        row.xml_storage_path ?? '',
-        row.payment_status ?? '',
-        row.payment_due_date ?? '',
-        String(row.paid_amount ?? ''),
-        row.currency ?? '',
-        row.invoice_kind ?? '',
-        row.last_error_code ?? '',
-        f ? `${f.payment ?? '-'}/${f.outstanding ?? '-'}/${f.canCorrect ? 1 : 0}` : '',
-      ].join(':');
-    })
-    .join('|');
 
   return (
     <div className="space-y-6 pb-10">
@@ -136,7 +148,20 @@ export default async function InvoicesPage({
         <InvoicesToolbar params={params} filtered={filtered} />
       </Card>
 
-      {error ? (
+      {paymentFilterError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Filtr płatności jest chwilowo niedostępny</AlertTitle>
+          <AlertDescription>
+            <p>
+              Filtr „{INVOICE_PAYMENT_FILTERS[params.payment].label}” wymaga ustawionego środowiska KSeF
+              w konfiguracji serwera, a go brakuje. Pozostałe filtry działają; zgłoś to w pomocy FaktWay.
+            </p>
+            <Link href={invoiceListHref(params, { payment: 'wszystkie' })} className="font-medium underline">
+              Pokaż faktury bez filtra płatności
+            </Link>
+          </AlertDescription>
+        </Alert>
+      ) : error ? (
         <Alert variant="destructive">
           <AlertTitle>Nie udało się pobrać faktur: {error.message}</AlertTitle>
         </Alert>
@@ -152,7 +177,6 @@ export default async function InvoicesPage({
           ) : null}
           <InvoicesPullToRefresh
             tenantId={tenantId}
-            listKey={listKey}
             initialInvoices={rows}
             facts={factsById}
             today={today}

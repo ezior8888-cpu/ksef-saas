@@ -185,11 +185,60 @@ export function invoiceListHref(p: InvoiceListParams, overrides: Partial<Invoice
   return s ? `/invoices?${s}` : '/invoices';
 }
 
+/** Warunek wewnątrz `or()` PostgREST; wartości to stałe z kodu, nie fraza użytkownika. */
+export type OrFilterTerm =
+  | { op: 'eq'; column: string; value: string }
+  | { op: 'in'; column: string; value: readonly string[] }
+  | { op: 'is'; column: string; value: null };
+
 /** Jeden warunek PostgREST filtra płatności; strona stosuje go na zapytaniu listy. */
 export type PaymentFilterOp =
-  | { op: 'eq' | 'neq'; column: 'payment_status'; value: string }
+  | { op: 'eq'; column: 'direction' | 'origin' | 'ksef_status' | 'ksef_environment' | 'payment_status'; value: string }
+  | { op: 'neq'; column: 'payment_status'; value: string }
   | { op: 'lt'; column: 'payment_due_date'; value: string }
-  | { op: 'in'; column: 'payment_status'; value: readonly string[] };
+  | { op: 'gt' | 'gte'; column: 'gross_total' | 'paid_amount'; value: number }
+  | { op: 'in'; column: 'payment_status'; value: readonly string[] }
+  /** Alternatywa gałęzi, gałąź to koniunkcja warunków (`orFilterString`). */
+  | { op: 'or'; anyOf: ReadonlyArray<ReadonlyArray<OrFilterTerm>> };
+
+const OR_COLUMN = /^[a-z_]+$/;
+const OR_VALUE = /^[A-Za-z0-9_]+$/;
+
+function orValue(value: string): string {
+  if (!OR_VALUE.test(value)) throw new Error(`Niedozwolona wartość w warunku or(): ${value}`);
+  return value;
+}
+
+function orTermString(term: OrFilterTerm): string {
+  if (!OR_COLUMN.test(term.column)) throw new Error(`Niedozwolona kolumna w warunku or(): ${term.column}`);
+  switch (term.op) {
+    case 'is':
+      return `${term.column}.is.null`;
+    case 'eq':
+      return `${term.column}.eq.${orValue(term.value)}`;
+    case 'in':
+      if (term.value.length === 0) throw new Error('Pusta lista w warunku or()');
+      return `${term.column}.in.(${term.value.map(orValue).join(',')})`;
+  }
+}
+
+/**
+ * Tekst dla `query.or()`: gałęzie po przecinku, gałąź z kilku warunków jako
+ * `and(...)`. Kilka wywołań `or()` na jednym zapytaniu PostgREST łączy przez
+ * AND (każdy parametr `or` to osobne drzewo warunków), więc ten warunek nie
+ * koliduje z `or()` wyszukiwania. Wartości ze znakami składni (przecinek,
+ * nawias, kropka) odrzucamy, zamiast budować zepsuty filtr.
+ */
+export function orFilterString(anyOf: ReadonlyArray<ReadonlyArray<OrFilterTerm>>): string {
+  if (anyOf.length === 0) throw new Error('Warunek or() bez gałęzi');
+  return anyOf
+    .map((branch) => {
+      if (branch.length === 0) throw new Error('Pusta gałąź warunku or()');
+      const terms = branch.map(orTermString);
+      return terms.length === 1 ? terms[0] : `and(${terms.join(',')})`;
+    })
+    .join(',');
+}
 
 /**
  * Warunki filtra `platnosc` (null = bez filtra). `today` to dzisiejsza data
@@ -197,18 +246,30 @@ export type PaymentFilterOp =
  * importów. „Po terminie” liczymy z daty (`payment_due_date < dziś`
  * i `payment_status <> 'paid'`), nigdy z `payment_status = 'overdue'` —
  * wyzwalacz ustawia go tylko przy zapisie wiersza (§2.4 pkt 11).
+ *
+ * Każda wartość poza „wszystkie” niesie warunki faktury z §2.4 pkt 11
+ * (`baseOps` = `receivableBaseFilterOps` z `lib/dashboard/receivables.ts`,
+ * C1). Bez nich filtr pokazywał importy, szkice i korekty jako nieopłacone
+ * albo po terminie, choć ich wiersze mają „—”, a kafel „Do zapłaty” ich nie
+ * liczy. `baseOps` jest funkcją, bo wymaga skonfigurowanego środowiska
+ * KSeF — strona bez filtra płatności go nie potrzebuje.
  */
-export function paymentFilterSpec(payment: InvoicePaymentFilter, today: string): PaymentFilterOp[] | null {
+export function paymentFilterSpec(
+  payment: InvoicePaymentFilter,
+  today: string,
+  baseOps: () => readonly PaymentFilterOp[],
+): PaymentFilterOp[] | null {
   switch (payment) {
     case 'wszystkie':
       return null;
     case 'oplacone':
-      return [{ op: 'eq', column: 'payment_status', value: 'paid' }];
+      return [...baseOps(), { op: 'eq', column: 'payment_status', value: 'paid' }];
     case 'nieoplacone':
-      return [{ op: 'in', column: 'payment_status', value: ['unpaid', 'partial', 'overdue'] }];
+      return [...baseOps(), { op: 'in', column: 'payment_status', value: ['unpaid', 'partial', 'overdue'] }];
     case 'po_terminie':
       if (isoDateOrNull(today) === null) throw new Error('Filtr „po terminie” wymaga dzisiejszej daty RRRR-MM-DD');
       return [
+        ...baseOps(),
         { op: 'lt', column: 'payment_due_date', value: today },
         { op: 'neq', column: 'payment_status', value: 'paid' },
       ];

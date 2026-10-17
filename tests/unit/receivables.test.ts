@@ -15,8 +15,10 @@ vi.mock('@/lib/ksef/claim-environment', () => ({
 import {
   getReceivables,
   isReceivableBase,
+  receivableBaseFilterOps,
   RECEIVABLES_NOTE,
 } from '@/lib/dashboard/receivables';
+import type { OrFilterTerm, PaymentFilterOp } from '@/lib/invoices/list-query';
 import type { PageContext } from '@/lib/supabase/page-context';
 
 type Row = Record<string, unknown>;
@@ -389,5 +391,65 @@ describe('isReceivableBase — czysty predykat (bez warunku payment_status)', ()
     ['ma dziecko', { id: 'child-parent' }],
   ])('%s → false', (_label, overrides) => {
     expect(isReceivableBase(invoice(overrides) as never, ctx)).toBe(false);
+  });
+});
+
+/** Warunek PostgREST na wierszu, z semantyką SQL: NULL nie spełnia porównań. */
+function matchesTerm(row: Row, term: OrFilterTerm): boolean {
+  const value = row[term.column];
+  if (term.op === 'is') return value === null || value === undefined;
+  if (value === null || value === undefined) return false;
+  if (term.op === 'eq') return String(value) === term.value;
+  return term.value.includes(String(value));
+}
+
+function matchesOps(row: Row, ops: readonly PaymentFilterOp[]): boolean {
+  return ops.every((op) => {
+    if (op.op === 'or') return op.anyOf.some((branch) => branch.every((term) => matchesTerm(row, term)));
+    const value = row[op.column];
+    if (value === null || value === undefined) return false;
+    switch (op.op) {
+      case 'eq': return String(value) === op.value;
+      case 'neq': return String(value) !== op.value;
+      case 'in': return op.value.includes(String(value));
+      case 'lt': return String(value) < op.value;
+      case 'gt': return Number(value) > op.value;
+      case 'gte': return Number(value) >= op.value;
+    }
+  });
+}
+
+function product(dimensions: Record<string, readonly unknown[]>): Row[] {
+  return Object.entries(dimensions).reduce<Row[]>(
+    (rows, [column, values]) => rows.flatMap((row) => values.map((value) => ({ ...row, [column]: value }))),
+    [{}],
+  );
+}
+
+// C1 (rewizja E3): filtr płatności listy zapisuje predykat pkt 11 jako
+// warunki PostgREST. Ten test pilnuje, żeby obie wersje się nie rozjechały.
+describe('receivableBaseFilterOps — warunki PostgREST = isReceivableBase bez dzieci', () => {
+  it('na pełnym iloczynie wartości kolumn obie wersje wybierają te same faktury', () => {
+    const ctx = { environment: 'production' as const, childIds: new Set<string>() };
+    const ops = receivableBaseFilterOps('production');
+    const rows = product({
+      direction: ['outgoing', 'incoming'],
+      origin: ['app', 'ksef_import', 'file_import'],
+      ksef_status: ['accepted', 'draft', 'rejected'],
+      ksef_environment: ['production', 'test', null],
+      invoice_kind: ['regular', 'advance', 'final', 'correction'],
+      invoice_type: ['VAT', 'UPR', 'ZAL', 'ROZ', 'KOR', null],
+      currency: ['PLN', null, 'EUR'],
+      gross_total: [1000, 0, -5, null],
+      paid_amount: [0, 500, -5],
+    }).map((overrides) => invoice(overrides));
+    const mismatches = rows.filter((row) => matchesOps(row, ops) !== isReceivableBase(row as never, ctx));
+    expect(mismatches.slice(0, 3)).toEqual([]);
+    expect(rows.filter((row) => matchesOps(row, ops)).length).toBeGreaterThan(0);
+  });
+
+  it('środowisko z argumentu, nie stałe', () => {
+    expect(receivableBaseFilterOps('test')).toContainEqual({ op: 'eq', column: 'ksef_environment', value: 'test' });
+    expect(receivableBaseFilterOps('test')).not.toContainEqual({ op: 'eq', column: 'ksef_environment', value: 'production' });
   });
 });

@@ -211,7 +211,11 @@ pasek na telefonie: Flo / Faktury / Nowa / Miesiąc / Więcej). Szkielet:
     zapisie wiersza. Każda karta z tą sumą ma podpis „Bez importów i faktur
     skorygowanych” (jak `/payments/overdue`). Test: szkic, import, korekta
     in minus, oryginał z korektą, ROZ z zaliczkami, inne środowisko, faktura
-    po terminie ze statusem `unpaid`.
+    po terminie ze statusem `unpaid`. Filtr płatności listy faktur (P3)
+    stosuje te warunki przez PostgREST (`receivableBaseFilterOps`) bez
+    warunku dzieci — PostgREST nie wyrazi NOT EXISTS na wierszu rodzica, więc
+    oryginał z korektą zostaje w wyniku filtra z „—” w kolumnie płatności
+    (E3, przegląd C1).
 12. **Koszty** czytamy jedną drogą, tak jak `/przeplywy` i eksport
     (`fetchExpensesForExport` w `lib/exports/data-fetcher.ts`): `expenses`
     z `is_deductible = true` → `readCompletePages` →
@@ -234,8 +238,13 @@ pasek na telefonie: Flo / Faktury / Nowa / Miesiąc / Więcej). Szkielet:
     tę samą usługę daje 3 000 zł, nie 4 000 zł; korekta `before_after`
     10 → 9 szt. nie dodaje sprzedaży.
 14. **Wpłaty:** stron nie zasilamy z `payments` ani `payment_imports`.
-    Wpływy to `invoices.paid_amount` faktur sprzedaży z pkt 11 według
-    `paid_at`, czyli dnia potwierdzenia, nie przelewu. Podpis karty:
+    Wpływy to `invoices.paid_amount > 0` faktur sprzedaży z pkt 11 według
+    `paid_at`, czyli dnia potwierdzenia, nie przelewu — z warunkami
+    faktury z pkt 11, ale **bez warunku dzieci i bez warunku
+    `payment_status`**. Wpłacone pieniądze nie znikają, gdy faktura dostanie
+    korektę, a ROZ płaci resztę po zaliczkach, więc wpłata zaliczki i wpłata
+    ROZ to osobne wpływy (E3, przegląd C2: zaliczka 1 000 zł + ROZ
+    3 000 zł = 4 000 zł). Wzór: `paidThisMonth` w `lib/invoices/list-stats.ts`. Podpis karty:
     „według oznaczonych wpłat”. Gdy w okresie nie ma żadnej opłaconej
     faktury, pokazujemy pusty stan „Oznaczaj wpłaty, a pokażemy wpływy”,
     nigdy „0 zł”. Daty `paid_at` nie porównujemy z terminem płatności.

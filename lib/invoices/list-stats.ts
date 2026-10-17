@@ -1,9 +1,5 @@
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
-import {
-  isReceivableBase,
-  loadTenantChildIds,
-  RECEIVABLE_BASE_COLUMNS,
-} from '@/lib/dashboard/receivables';
+import { isReceivableBase, RECEIVABLE_BASE_COLUMNS } from '@/lib/dashboard/receivables';
 import { addDaysToIsoDate, todayInWarsaw } from '@/lib/format/warsaw-date';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { PageContext } from '@/lib/supabase/page-context';
@@ -140,6 +136,13 @@ export async function countInvoicesThisMonth(
  * (§2.4 pkt 14). `paid_at` opisuje stan „opłacona w całości” (00073), więc
  * wpłaty częściowe pojawią się tu dopiero po dopłacie reszty.
  *
+ * Bez warunku dzieci z pkt 11 (C2): opłacona faktura, która potem dostała
+ * korektę albo fakturę rozliczającą (ROZ), nadal jest wpływem — warunek
+ * dzieci chroni należności przed kwotą zmienioną korektą, a wpłata, która
+ * już wpłynęła, nie znika. Zaliczka i jej ROZ to dwie różne wpłaty
+ * (`paid_amount` ROZ to reszta po zaliczkach, 00145), nie podwójne liczenie.
+ * Same korekty wpływem nie są (rodzaj spoza pkt 11).
+ *
  * `null`, gdy w miesiącu nie ma żadnej opłaconej faktury z wpłatą > 0 —
  * karta pokazuje wtedy `PAID_EMPTY_STATE`, nigdy „0 zł”.
  */
@@ -176,16 +179,11 @@ export async function paidThisMonth(
     throw new Error(ENVIRONMENT_ERROR);
   }
 
-  const noChildren = { environment, childIds: new Set<string>() };
-  const candidates = inMonth.filter((row) => isReceivableBase(row, noChildren));
-  if (candidates.length === 0) return null;
-
-  const childIds = await loadTenantChildIds(supabase, tenantId);
-  const ctx = { environment, childIds };
+  const withoutChildCondition = { environment, childIds: new Set<string>() };
   let sum = 0;
   let paidInvoices = 0;
-  for (const row of candidates) {
-    if (!isReceivableBase(row, ctx)) continue;
+  for (const row of inMonth) {
+    if (!isReceivableBase(row, withoutChildCondition)) continue;
     const amount = Number(row.paid_amount);
     if (!Number.isFinite(amount) || amount <= 0) continue;
     sum += amount;

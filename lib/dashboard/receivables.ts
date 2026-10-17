@@ -2,6 +2,7 @@ import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { outstandingOf } from '@/lib/invoices/amount-due';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import type { PaymentFilterOp } from '@/lib/invoices/list-query';
 import { isReminderInvoiceChaseable } from '@/lib/reminders/delivery-schema';
 import type { PageContext } from '@/lib/supabase/page-context';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
@@ -36,8 +37,18 @@ export const RECEIVABLES_NOTE = 'Bez importów i faktur skorygowanych';
 const ENVIRONMENT_ERROR = 'Przyjęte faktury wymagają uzgodnienia środowiska KSeF';
 const KNOWN_ENVIRONMENTS: ReadonlySet<string> = new Set(['test', 'demo', 'production']);
 const OPEN_PAYMENT_STATUSES = ['unpaid', 'partial', 'overdue'] as const;
-const RECEIVABLE_KINDS = ['regular', 'advance', 'final'] as const;
-const RECEIVABLE_TYPES = ['VAT', 'UPR', 'ZAL', 'ROZ'] as const;
+/**
+ * Pary rodzaj → typy faktury z pkt 11 (jak `isReminderInvoiceChaseable`
+ * i widok 00145). Jedno źródło dla zapytania należności i filtra płatności
+ * listy (`receivableBaseFilterOps`).
+ */
+const RECEIVABLE_KIND_TYPES = [
+  { kind: 'regular', types: ['VAT', 'UPR'] },
+  { kind: 'advance', types: ['ZAL'] },
+  { kind: 'final', types: ['ROZ'] },
+] as const;
+const RECEIVABLE_KINDS = RECEIVABLE_KIND_TYPES.map((pair) => pair.kind);
+const RECEIVABLE_TYPES = RECEIVABLE_KIND_TYPES.flatMap((pair) => pair.types);
 const DAY_MS = 86_400_000;
 
 /** Kolumny potrzebne predykatowi `isReceivableBase` i kwocie `outstandingOf`. */
@@ -133,6 +144,38 @@ function isReceivableIgnoringCurrency(row: ReceivableBaseRow, ctx: ReceivableCon
  */
 export function isReceivableBase(row: ReceivableBaseRow, ctx: ReceivableContext): boolean {
   return isReceivableIgnoringCurrency(row, ctx) && isPlnOrUnset(row.currency);
+}
+
+/**
+ * Predykat `isReceivableBase` zapisany jako warunki PostgREST — dla filtra
+ * płatności listy faktur (P3, `paymentFilterSpec`, C1). Dzięki niemu
+ * „Opłacone”, „Nieopłacone” i „Po terminie” pokazują te same faktury, którym
+ * kolumny „Płatność” i „Do zapłaty” dają stan płatności, a nie importy,
+ * szkice czy korekty. Zgodność z predykatem pilnuje test w
+ * `tests/unit/receivables.test.ts` (pełny iloczyn wartości kolumn).
+ *
+ * Jedyna różnica to warunek dzieci: PostgREST nie wyrazi „NOT EXISTS
+ * dziecko” na wierszu rodzica, więc oryginał z korektą albo zaliczka z ROZ
+ * zostaje w wyniku filtra, a jego wiersz pokazuje „—” (jak bez filtra).
+ */
+export function receivableBaseFilterOps(environment: KsefEnvironment): PaymentFilterOp[] {
+  return [
+    { op: 'eq', column: 'direction', value: 'outgoing' },
+    { op: 'eq', column: 'origin', value: 'app' },
+    { op: 'eq', column: 'ksef_status', value: 'accepted' },
+    { op: 'eq', column: 'ksef_environment', value: environment },
+    {
+      op: 'or',
+      anyOf: RECEIVABLE_KIND_TYPES.map(({ kind, types }) => [
+        { op: 'eq', column: 'invoice_kind', value: kind },
+        { op: 'in', column: 'invoice_type', value: types },
+      ]),
+    },
+    { op: 'gt', column: 'gross_total', value: 0 },
+    { op: 'gte', column: 'paid_amount', value: 0 },
+    // `isPlnOrUnset`: PLN albo brak waluty (jak widok 00145).
+    { op: 'or', anyOf: [[{ op: 'is', column: 'currency', value: null }], [{ op: 'eq', column: 'currency', value: 'PLN' }]] },
+  ];
 }
 
 function isOpenPaymentStatus(status: string | null): boolean {

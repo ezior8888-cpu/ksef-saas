@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * miesiącu, Opłacone, Do zapłaty. Każdy kafel to osobna funkcja (osobna karta
  * w <Suspense>, §2.4 pkt 15). Miesiąc liczony w Europe/Warsaw (pkt 10),
  * sprzedaż tylko z faktur przyjętych w aktywnym środowisku (pkt 2), wpływy
- * z `paid_amount` faktur z pkt 11 według `paid_at` (pkt 14) — bez wpłat
- * pusty stan, nigdy „0 zł”.
+ * z `paid_amount` faktur z pkt 11 według `paid_at` (pkt 14) — bez warunku
+ * dzieci, bo wpłata nie znika po korekcie ani ROZ (C2) — bez wpłat pusty
+ * stan, nigdy „0 zł”.
  */
 
 const env = vi.hoisted(() => ({ value: 'production' as string }));
@@ -244,13 +245,42 @@ describe('Opłacone (wpływy w tym miesiącu)', () => {
     expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(1);
   });
 
-  it('opłacona zaliczka rozliczona w ROZ — wykluczona jak w należnościach', async () => {
+  // C2 (rewizja E3): warunek „bez dzieci” z pkt 11 chroni należności przed
+  // goniącymi kwotami, które zmieniła korekta. Wpłata, która już wpłynęła,
+  // nie znika, gdy faktura dostanie korektę albo ROZ. `paid_amount` ROZ to
+  // tylko reszta po zaliczkach (00145), więc zaliczka + ROZ to dwie różne
+  // wpłaty, a nie podwójne liczenie.
+  it('opłacona zaliczka rozliczona w ROZ — obie wpłaty to wpływy (1000 + 3000)', async () => {
     const zal = paid(1000, '2026-10-03T10:00:00Z', { invoice_kind: 'advance', invoice_type: 'ZAL' });
     const roz = paid(3000, '2026-10-04T10:00:00Z', {
       invoice_kind: 'final', invoice_type: 'ROZ', gross_total: 4000, advance_invoice_ids: [zal.id], payment_data: { amountDue: 3000 },
     });
     const { supabase } = sb({ invoices: [zal, roz] });
-    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(3000);
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(4000);
+  });
+
+  it('zaliczka opłacona w całości + ROZ z amountDue = 0 (opłacona bez wpłaty) — wpływ zaliczki zostaje', async () => {
+    const zal = paid(1000, '2026-10-03T10:00:00Z', { invoice_kind: 'advance', invoice_type: 'ZAL' });
+    const roz = paid(0, '2026-10-20T10:00:00Z', {
+      invoice_kind: 'final', invoice_type: 'ROZ', gross_total: 1000, advance_invoice_ids: [zal.id], payment_data: { amountDue: 0 },
+    });
+    const { supabase } = sb({ invoices: [zal, roz] });
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(1000);
+  });
+
+  it('opłacony oryginał z korektą — wpłata oryginału zostaje, korekta nie jest wpływem', async () => {
+    const original = paid(1230, '2026-10-05T10:00:00Z');
+    const correction = invoice({
+      invoice_kind: 'correction', invoice_type: 'KOR', gross_total: -123, parent_invoice_id: original.id,
+    });
+    const { supabase } = sb({ invoices: [original, correction] });
+    expect(await paidThisMonth(supabase, TENANT, NOW)).toBe(1230);
+  });
+
+  it('nie czyta dzieci całej firmy (wpływy nie zależą od korekt ani ROZ)', async () => {
+    const { supabase, c } = sb({ invoices: [paid(10, '2026-10-05T10:00:00Z')] });
+    await paidThisMonth(supabase, TENANT, NOW);
+    expect(c.log).toHaveLength(1);
   });
 
   it('przyjęta opłacona faktura bez środowiska → wyjątek', async () => {

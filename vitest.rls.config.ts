@@ -18,6 +18,7 @@ export default defineConfig({
       'tests/rls-dziennik-prob-wysylki.test.ts',
       'tests/rls-faktura-abonamentu-faktway.test.ts',
       'tests/rls-dzieci-faktur.test.ts',
+      'tests/rls-lista-faktur-platnosc.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

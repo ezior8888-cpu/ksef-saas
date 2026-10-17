@@ -12,7 +12,7 @@ const result = vi.hoisted(() => ({ data: [] as unknown[], count: 0 }));
 vi.mock('@/lib/supabase/page-context', () => ({
   getPageContext: async () => {
     const chain: Record<string, unknown> = {};
-    for (const m of ['from', 'select', 'eq', 'neq', 'in', 'gte', 'lt', 'lte', 'or', 'order']) {
+    for (const m of ['from', 'select', 'eq', 'neq', 'in', 'gt', 'gte', 'lt', 'lte', 'or', 'order']) {
       chain[m] = (...args: unknown[]) => { calls.push([m, args]); return chain; };
     }
     chain.range = async (...args: unknown[]) => {
@@ -32,11 +32,13 @@ import {
   INVOICE_PAYMENT_FILTERS,
   invoiceListHref,
   isFilteredList,
+  orFilterString,
   pageRange,
   parseInvoiceListParams,
   paymentFilterSpec,
   sanitizeSearch,
   searchOrFilter,
+  type PaymentFilterOp,
 } from '@/lib/invoices/list-query';
 
 beforeEach(() => {
@@ -162,26 +164,54 @@ describe('P3: płatność, rodzaj i liczba na stronie (PLAN-FINORA §5)', () => 
     expect(invoiceListHref(p, { kind: 'final' })).toBe('/invoices?rodzaj=final');
   });
 
-  it('filtr płatności → warunki PostgREST', () => {
-    expect(paymentFilterSpec('wszystkie', '2026-10-17')).toBeNull();
-    expect(paymentFilterSpec('oplacone', '2026-10-17')).toEqual([
+  // Warunki §2.4 pkt 11 dostarcza strona (`receivableBaseFilterOps`); tu
+  // sprawdzamy, że filtr płatności zawsze je niesie i wylicza je leniwie.
+  const BASE: PaymentFilterOp[] = [
+    { op: 'eq', column: 'origin', value: 'app' },
+    { op: 'eq', column: 'ksef_status', value: 'accepted' },
+  ];
+  const base = vi.fn(() => BASE);
+
+  it('filtr płatności → warunki PostgREST (zawsze z warunkami należności)', () => {
+    expect(paymentFilterSpec('wszystkie', '2026-10-17', base)).toBeNull();
+    expect(base).not.toHaveBeenCalled();
+    expect(paymentFilterSpec('oplacone', '2026-10-17', base)).toEqual([
+      ...BASE,
       { op: 'eq', column: 'payment_status', value: 'paid' },
     ]);
-    expect(paymentFilterSpec('nieoplacone', '2026-10-17')).toEqual([
+    expect(paymentFilterSpec('nieoplacone', '2026-10-17', base)).toEqual([
+      ...BASE,
       { op: 'in', column: 'payment_status', value: ['unpaid', 'partial', 'overdue'] },
     ]);
   });
 
   it('po terminie z daty (dziś w Warszawie podane z zewnątrz), nie ze statusu overdue', () => {
-    expect(paymentFilterSpec('po_terminie', '2026-10-18')).toEqual([
+    expect(paymentFilterSpec('po_terminie', '2026-10-18', base)).toEqual([
+      ...BASE,
       { op: 'lt', column: 'payment_due_date', value: '2026-10-18' },
       { op: 'neq', column: 'payment_status', value: 'paid' },
     ]);
   });
 
   it('po terminie bez poprawnej daty „dziś” — błąd, nie filtr bez daty', () => {
-    expect(() => paymentFilterSpec('po_terminie', '')).toThrow();
-    expect(() => paymentFilterSpec('po_terminie', '2026-10-17T00:00:00Z')).toThrow();
+    expect(() => paymentFilterSpec('po_terminie', '', base)).toThrow();
+    expect(() => paymentFilterSpec('po_terminie', '2026-10-17T00:00:00Z', base)).toThrow();
+  });
+
+  it('warunek or() z gałęzi: gałąź z kilku warunków → and(...), wartości listy w nawiasie', () => {
+    expect(orFilterString([
+      [{ op: 'eq', column: 'invoice_kind', value: 'regular' }, { op: 'in', column: 'invoice_type', value: ['VAT', 'UPR'] }],
+      [{ op: 'eq', column: 'invoice_kind', value: 'advance' }, { op: 'in', column: 'invoice_type', value: ['ZAL'] }],
+    ])).toBe('and(invoice_kind.eq.regular,invoice_type.in.(VAT,UPR)),and(invoice_kind.eq.advance,invoice_type.in.(ZAL))');
+    expect(orFilterString([
+      [{ op: 'is', column: 'currency', value: null }],
+      [{ op: 'eq', column: 'currency', value: 'PLN' }],
+    ])).toBe('currency.is.null,currency.eq.PLN');
+  });
+
+  it('warunek or() ze znakiem składni w wartości — błąd, nie zepsuty filtr', () => {
+    expect(() => orFilterString([[{ op: 'eq', column: 'currency', value: 'PLN,EUR' }]])).toThrow();
+    expect(() => orFilterString([[{ op: 'in', column: 'invoice_type', value: ['VAT)'] }]])).toThrow();
   });
 });
 
@@ -223,6 +253,35 @@ describe('strona /invoices — zapytanie do bazy', () => {
   it('P3: nieopłacone → in(payment_status, unpaid/partial/overdue)', async () => {
     await InvoicesPage({ searchParams: Promise.resolve({ platnosc: 'nieoplacone' }) });
     expect(called('in')).toEqual([['payment_status', ['unpaid', 'partial', 'overdue']]]);
+  });
+
+  // C1 (rewizja E3): filtr płatności bez warunków §2.4 pkt 11 listował
+  // importy, szkice i korekty jako nieopłacone / po terminie, choć ich wiersze
+  // pokazują „—”, a kafel „Do zapłaty” ich nie liczy.
+  it.each(['oplacone', 'nieoplacone', 'po_terminie'])('C1: filtr %s niesie warunki należności (§2.4 pkt 11)', async (platnosc) => {
+    await InvoicesPage({ searchParams: Promise.resolve({ platnosc }) });
+    expect(called('eq')).toEqual(expect.arrayContaining([
+      ['origin', 'app'],
+      ['ksef_status', 'accepted'],
+      ['ksef_environment', 'test'], // KSEF_ENV z vitest.config.ts
+    ]));
+    expect(called('gt')).toContainEqual(['gross_total', 0]);
+    expect(called('or')).toEqual(expect.arrayContaining([
+      ['currency.is.null,currency.eq.PLN'],
+      ['and(invoice_kind.eq.regular,invoice_type.in.(VAT,UPR)),and(invoice_kind.eq.advance,invoice_type.in.(ZAL)),and(invoice_kind.eq.final,invoice_type.in.(ROZ))'],
+    ]));
+  });
+
+  it('C1: bez filtra płatności lista nie zawęża się do należności', async () => {
+    await InvoicesPage({ searchParams: Promise.resolve({}) });
+    expect(called('eq')).not.toContainEqual(['origin', 'app']);
+    expect(called('gt')).toEqual([]);
+  });
+
+  it('C1: wyszukiwanie i warunki należności to osobne or() (PostgREST łączy je przez AND)', async () => {
+    await InvoicesPage({ searchParams: Promise.resolve({ q: 'FV/1', platnosc: 'po_terminie' }) });
+    expect(called('or')).toContainEqual(['internal_number.ilike.%FV/1%,buyer_data->>name.ilike.%FV/1%']);
+    expect(called('or')).toHaveLength(3);
   });
 
   it('P3: po terminie liczone z daty (dziś w Warszawie), nie ze statusu overdue', async () => {
