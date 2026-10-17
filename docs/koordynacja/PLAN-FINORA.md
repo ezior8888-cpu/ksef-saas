@@ -1350,10 +1350,15 @@ Transactions, Monthly Analytics, Accounts i Invoice List.
 | 17.10.2026 | Audyt | (ten dokument) | — | gotowe | — | audyt demo Finory (22 strony + auth + ustawienia) i kodu `main` @ `1ded2147` |
 | 17.10.2026 | Krytyka planu | (ten dokument) | — | gotowe | — | 5 krytyków (dane, wykonalność, wizualna, produkt, kompletność) + sędzia: przyjęto 37 poprawek, odrzucono 1 |
 | 17.10.2026 | Decyzja D7 | (ten dokument) | — | gotowe | — | karty podatkowe dozwolone: przywrócony licznik limitu zwolnienia z VAT (240 000 zł, gotowe funkcje z `vat-limit.ts`) w P1/P2, „Odłóż na podatek” w P2 |
+| 17.10.2026 | E0 + nazwa FaktWay | #278 | ok. 10 (szacunek sesji w chmurze, bez wglądu w rozliczenie) | czeka na scalenie | — | §10 wypełniony z `faktflow-finora-src` @ `56394ef`; konflikty z planem w §10.2 (kontrast `primary` 3,73:1 blokuje E1); D8 i zmiana nazwy w kodzie aplikacji ze strażnikiem `nazwa-produktu.test.ts`. Teksty z bazy (abonament, odmowy 00148) i pliki FLO zostają z FaktFlow do osobnego PR |
 
 **Dla Bartosza:** `lib/flo/wrapped.ts` czyta nieodświeżany
 `mv_tenant_monthly_stats` (tor silnika). Zgłoszone, nie naprawiamy w tym
 planie.
 
-**Następny krok:** Bartosz wykonuje krok 0.1 (zakup + prywatne repo; konfiguracja
-motywu już wybrana, D2). Potem sesja w chmurze: **E0**.
+**Następny krok:** Bartosz decyduje o kolorze `primary` (§10.2 pkt 1; bez
+decyzji E1 bierze propozycję z §10.2) i scala #278. Potem sesja w chmurze:
+**E1** od świeżego `main` (fundament: zależności z §10.1, `components/ui/*`
+Finory na Base UI, preset z §10.1, skala SM według §10.1). Osobno, po
+rozstrzygnięciu szkicu #248: migracja nazwy FaktWay w bazie (wyjątki
+`DB_BOUND` w `tests/unit/nazwa-produktu.test.ts`).
