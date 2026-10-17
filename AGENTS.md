@@ -10,6 +10,11 @@
 > [`docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`](docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md),
 > zrób TYLKO wskazaną sesję według „Protokołu naprawy błędu” niżej, a na
 > końcu dopisz wiersz w dzienniku sesji (sekcja 9) z numerem PR.
+>
+> **„Kontynuuj plan Finora”** (nowy wygląd aplikacji na szablonie Finora):
+> przeczytaj [`docs/koordynacja/PLAN-FINORA.md`](docs/koordynacja/PLAN-FINORA.md),
+> zrób checklistę startową (sekcja 0) i pracuj od „Następny krok”
+> w dzienniku (sekcja 12).
 
 ## Projekt
 
