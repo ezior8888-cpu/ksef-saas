@@ -522,7 +522,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
       { id: ids.owner, name: 'Owner Decyzja' },
       { id: ids.admin, name: 'Admin Decyzja' },
       { id: ids.member, name: 'Member Decyzja' },
-      // Operator FaktFlow: użytkownik bez członkostwa w firmie (audit_logs.user_id → users).
+      // Operator FaktWay: użytkownik bez członkostwa w firmie (audit_logs.user_id → users).
       { id: ids.operator, name: 'Operator Decyzja' },
     ], { onConflict: 'id' });
     const { error: mErr } = await admin.from('memberships').insert([

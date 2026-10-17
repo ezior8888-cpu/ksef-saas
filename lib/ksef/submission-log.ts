@@ -452,7 +452,7 @@ export async function markKsefSubmissionsNumberTaken(params: {
     .update({
       status: 'number_taken' satisfies SubmissionStatus,
       error_code: 'NUMBER_TAKEN',
-      error_message: `Numer faktury zajęty w KSeF przez fakturę ${params.originalKsefNumber} spoza FaktFlow`.slice(0, 500),
+      error_message: `Numer faktury zajęty w KSeF przez fakturę ${params.originalKsefNumber} spoza FaktWay`.slice(0, 500),
       completed_at: new Date().toISOString(),
     })
     .eq('tenant_id', params.tenantId)
@@ -585,7 +585,7 @@ export async function recordKsefAcceptedSession(params: {
 
 /**
  * Inna faktura SPRZEDAŻY tej firmy z danym numerem KSeF (np. import historii)
- * — wtedy cudzy 440 dotyczy dokumentu znanego w FaktFlow i rozstrzyga
+ * — wtedy cudzy 440 dotyczy dokumentu znanego w FaktWay i rozstrzyga
  * operator. Tylko wychodzące (D-A4-1b-3, A0): faktura zakupowa z tym numerem
  * (np. sprzedaż firmy samej sobie odebrana skrzynką) nie jest zapisem naszej
  * sprzedaży i nie może zatrzymać porównania treści oryginału.

@@ -549,7 +549,7 @@ export async function runCoPilotSendPackage(data: Parameters<typeof exportsCoPil
     ${itemsHtml}
   </ul>
   <p style="color: #666; font-size: 13px; margin-top: 32px;">
-    Email wygenerowany automatycznie przez KSeF SaaS.<br/>
+    Email wygenerowany automatycznie przez FaktWay.<br/>
     W razie pytań prosimy o kontakt z właścicielem konta.
   </p>
 </body>

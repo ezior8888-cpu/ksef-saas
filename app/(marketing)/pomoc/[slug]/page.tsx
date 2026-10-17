@@ -30,9 +30,9 @@ export async function generateMetadata({
 }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const article = getHelpArticle(slug);
-  if (!article) return { title: 'Pomoc — FaktFlow' };
+  if (!article) return { title: 'Pomoc — FaktWay' };
   return {
-    title: `${article.title} — Pomoc FaktFlow`,
+    title: `${article.title} — Pomoc FaktWay`,
     description: article.summary,
   };
 }

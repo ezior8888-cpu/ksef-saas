@@ -51,7 +51,7 @@ export default function RefundIssued({
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            FaktFlow — faktury KSeF dla mikrofirm. Wiadomość automatyczna.
+            FaktWay — faktury KSeF dla mikrofirm. Wiadomość automatyczna.
           </Text>
         </Container>
       </Body>

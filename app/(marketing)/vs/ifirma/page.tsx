@@ -17,9 +17,9 @@ import { SUPPORT_EMAIL } from '@/lib/site';
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'KSeF SaaS vs iFirma 2026 — UI, push i KSeF',
+  title: 'FaktWay vs iFirma 2026 — UI, push i KSeF',
   description:
-    'Porównanie KSeF SaaS z iFirmą: interfejs, powiadomienia push, KSeF 2.0, OCR, cennik i migracja dla JDG oraz biur rachunkowych.',
+    'Porównanie FaktWay z iFirmą: interfejs, powiadomienia push, KSeF 2.0, OCR, cennik i migracja dla JDG oraz biur rachunkowych.',
 };
 
 const COMPARISON_ROWS = [
@@ -179,7 +179,7 @@ export default function IfirmaPage() {
         modelu web-first, co oznacza, że status KSeF odkrywasz dopiero po
         wejściu na skrzynkę mailową.{' '}
         <span className="font-editorial font-medium italic text-[var(--marketing-accent)]">
-          FaktFlow
+          FaktWay
         </span>{' '}
         stawia na świeży UI, PWA z pushami i flow zaprojektowany pod KSeF 2.0
         oraz OCR w jednym pakiecie — bo przecież &bdquo;widziałem status
@@ -208,7 +208,7 @@ export default function IfirmaPage() {
             w czasach, gdy smartfon był jeszcze gadżetem.
           </p>
           <p>
-            KSeF SaaS nie próbuje sklonować całej historii iFirma — celujemy w superscieżkę mikrofirmy: faktura,
+            FaktWay nie próbuje sklonować całej historii iFirma — celujemy w superscieżkę mikrofirmy: faktura,
             koszt, KPiR, KSeF, windykacja, księgowa. Dzięki temu możemy poświęcić więcej uwagi detalom UX (spacing,
             focus, dark mode) oraz kanałom realtime (push), które w codziennym życiu przedsiębiorcy zastępują
             „sprawdzę maila wieczorem”.
@@ -266,7 +266,7 @@ export default function IfirmaPage() {
           </p>
           <p>
             Starszy UI bywa jednocześnie zaletą dla użytkowników przyzwyczajonych do konkretnych ścieżek — jeśli
-            pracujesz 10 lat w tym samym menu, zmiana może boleć. KSeF SaaS adresuje osoby, które wolą odświeżone
+            pracujesz 10 lat w tym samym menu, zmiana może boleć. FaktWay adresuje osoby, które wolą odświeżone
             wzorce nawigacji i są gotowe na migrację pod warunkiem, że onboarding i Magiczny Import skrócą czas
             przejścia z tygodni do dni.
           </p>
@@ -299,7 +299,7 @@ export default function IfirmaPage() {
               { k: 'Warstwa wejścia', v: 'często atrakcyjna dla prostych faktur sprzedaży, ale bez pełnego stacku mobilnego i push.' },
               { k: 'Warstwa rozszerzeń', v: 'dodatkowe moduły, wyższe limity, integracje — koszt skokowy przy wzroście skali biura.' },
               { k: 'Koszty ukryte', v: 'czas pracy na szkoleniu nowych osób w złożonym UI oraz czas na ręczne sprawdzanie statusów, jeśli brak push.' },
-              { k: 'FaktFlow', v: `jedna stawka ${PRICE_PER_MONTH}, push + OCR + KSeF w jednym worku, ${TRIAL_DAYS} dni za darmo — czyli prostszy TCO dla mikrofirmy.` },
+              { k: 'FaktWay', v: `jedna stawka ${PRICE_PER_MONTH}, push + OCR + KSeF w jednym worku, ${TRIAL_DAYS} dni za darmo — czyli prostszy TCO dla mikrofirmy.` },
             ].map((item, i) => (
               <li
                 key={item.k}
@@ -405,7 +405,7 @@ export default function IfirmaPage() {
             , żeby zbudować graf wewnętrznych powiązań tematycznych.
           </p>
           <p>
-            Jeśli jesteś biurem rachunkowym i chcesz zaproponować klientom hybrydę (część na iFirma, część na FaktFlow), przygotujemy dla Ciebie szablon komunikatu RODO oraz harmonogram techniczny migracji paczkowej — napisz na {SUPPORT_EMAIL} z informacją o liczbie podmiotów.
+            Jeśli jesteś biurem rachunkowym i chcesz zaproponować klientom hybrydę (część na iFirma, część na FaktWay), przygotujemy dla Ciebie szablon komunikatu RODO oraz harmonogram techniczny migracji paczkowej — napisz na {SUPPORT_EMAIL} z informacją o liczbie podmiotów.
           </p>
         </section>
       </div>

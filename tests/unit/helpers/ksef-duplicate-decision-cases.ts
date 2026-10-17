@@ -36,7 +36,7 @@ export interface DuplicateCheckCase {
 
 export const DUP_TENANT_ID = '13131313-1313-4313-8313-131313131313';
 export const DUP_INVOICE_ID = '7a7a7a7a-0000-4000-8000-000000000001';
-/** Faktura Y — w FaktFlow ma już numer KSeF oryginału (`known-number`). */
+/** Faktura Y — w FaktWay ma już numer KSeF oryginału (`known-number`). */
 export const DUP_KNOWN_ID = '7a7a7a7a-0000-4000-8000-000000000002';
 export const DUP_KNOWN_NUMBER = 'FV/INNA/1';
 /** Numer naszego dokumentu (P_2), zajęty w KSeF. */
@@ -47,7 +47,7 @@ export const DUP_K = '1234567890-20261001-0100A0B0C0D0-1A';
 export const DUP_K2 = '1234567890-20261002-0200A0B0C0D0-2B';
 /** SHA-256 (hex) bajtów oryginału. */
 export const DUP_SHA = 'bb'.repeat(32);
-/** Program oryginału spoza FaktFlow. */
+/** Program oryginału spoza FaktWay. */
 export const DUP_PROGRAM = 'Inny Program 1.0';
 /** Moment decyzji zapisany w `original_check.decision.at`. */
 export const DUP_DECIDED_AT = '2026-10-05T10:00:00.000Z';
@@ -176,7 +176,7 @@ export const DUPLICATE_CHECK_CASES: ReadonlyArray<DuplicateCheckCase> = [
     choice: 'same_sale',
     allows: true,
   },
-  { name: 'oryginał z FaktFlow przy known-number (decyzja 12)', check: knownNumberCheck({ summary: { ...(validCheck().summary as Record<string, unknown>), systemInfo: 'KSeF SaaS v1.0' } }), choice: 'other_sale', allows: true },
+  { name: 'oryginał z FaktWay przy known-number (decyzja 12)', check: knownNumberCheck({ summary: { ...(validCheck().summary as Record<string, unknown>), systemInfo: 'KSeF SaaS v1.0' } }), choice: 'other_sale', allows: true },
   { name: 'nieznane klucze dodatkowe', check: validCheck({ cokolwiek: true }), choice: null, allows: true },
 ];
 
@@ -310,7 +310,7 @@ export function decisionFacts(over: {
   };
 }
 
-/** Fakty decydowalnej faktury `known-number`: Y w FaktFlow ma K i jest przyjęta (`holdsOriginal`). */
+/** Fakty decydowalnej faktury `known-number`: Y w FaktWay ma K i jest przyjęta (`holdsOriginal`). */
 export function knownNumberFacts(holdsOriginal = true, over: { check?: Record<string, unknown>; invoice?: Partial<DuplicateFactsInvoice> } = {}): DuplicateFactsShape {
   return decisionFacts({
     invoice: over.invoice,

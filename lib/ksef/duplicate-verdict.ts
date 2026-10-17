@@ -6,8 +6,8 @@
  * oryginału pobrany z KSeF z naszymi plikami.
  *
  * Kierunek bezpieczny prawnie: „numer zajęty” (klient wystawia z nowym
- * numerem) tylko wtedy, gdy oryginał NIE pochodzi z FaktFlow. Każda
- * wątpliwość — oryginał z FaktFlow o innej treści albo innej dacie
+ * numerem) tylko wtedy, gdy oryginał NIE pochodzi z FaktWay. Każda
+ * wątpliwość — oryginał z FaktWay o innej treści albo innej dacie
  * wytworzenia — idzie do operatora, bo może to być nasza wcześniejsza
  * wysyłka tej samej sprzedaży (ponowne wystawienie = dwie faktury).
  *
@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 
 import { DUPLICATE_DECISION_TEXTS } from './duplicate-decision';
 
-/** `<SystemInfo>` w nagłówku każdego pliku FA(3) z FaktFlow (fa3-generator, korekty, ZAL/ROZ). */
+/** `<SystemInfo>` w nagłówku każdego pliku FA(3) z FaktWay (fa3-generator, korekty, ZAL/ROZ). */
 export const FAKTFLOW_SYSTEM_INFO = 'KSeF SaaS v1.0';
 
 export type DuplicateVerdict =
@@ -29,7 +29,7 @@ export type DuplicateVerdict =
   | 'identical'
   /**
    * Nie wolno rozstrzygnąć automatycznie — operator: oryginał wygenerował
-   * FaktFlow (może to być nasza wcześniejsza wysyłka tej sprzedaży) albo ma
+   * FaktWay (może to być nasza wcześniejsza wysyłka tej sprzedaży) albo ma
    * tę samą treść co nasza faktura, tylko inny nagłówek (ta sama sprzedaż).
    */
   | 'operator'
@@ -160,7 +160,7 @@ export function numberTakenMessage(invoiceNumber: string, ksefNumber: string, s:
 
 /**
  * Komunikat werdyktu `known-number` (D-A4-1b-3 PR B, C16; trafia do `last_error`):
- * numer KSeF oryginału ma już dokument Y w FaktFlow. Gdy oryginał nie może być
+ * numer KSeF oryginału ma już dokument Y w FaktWay. Gdy oryginał nie może być
  * naszą wysyłką tego dokumentu, klient rozstrzyga na karcie faktury; gdy może
  * (`ownHistory`), klient decyzji nie dostaje — tekst nie mówi, że sprawa czeka
  * na niego. Bez „operatora” (reguła 07.10.2026).
@@ -186,7 +186,7 @@ export function operatorVerdictMessage(ksefNumber: string, cmp: DuplicateCompari
     );
   }
   return (
-    `KSeF ma już fakturę o tym numerze (${original}) wygenerowaną przez FaktFlow, ` +
+    `KSeF ma już fakturę o tym numerze (${original}) wygenerowaną przez FaktWay, ` +
     `ale ${cmp.sameContentExceptHeader ? 'z inną datą wytworzenia (treść zgodna)' : 'o innej treści'}. ` +
     'Najpewniej to wcześniejsza wysyłka tej faktury — do uzgodnienia przez operatora; nie wystawiaj jej ponownie.'
   );

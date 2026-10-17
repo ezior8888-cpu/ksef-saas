@@ -175,7 +175,7 @@ async function submissionsOf(invoiceId: string) {
 }
 
 /**
- * Faktura abonamentu FaktFlow (`stripe_invoice_id`) — powstaje tylko jako
+ * Faktura abonamentu FaktWay (`stripe_invoice_id`) — powstaje tylko jako
  * właściciel bazy: 00079 odmawia serwisowi zapisu tożsamości, a 00080 wymaga
  * wiersza `stripe_payments` z referencją płatności. Od 00115 wpłata musi mieć
  * potwierdzoną pełną parę PaymentIntent/Charge (`stripe_payment_refs_verified`,
@@ -458,7 +458,7 @@ describe.skipIf(!hasDatabase)('kolejkowanie wysyłki KSeF — RPC w transakcji z
       expect(duplicateCheckAllows(JSON.parse(text), null)).toBe(sql);
     });
 
-    it('R3 (billing, tylko jako właściciel bazy): faktura abonamentu FaktFlow z 440 — odmowa billing z numerem dokumentu, stan bez zmian', async () => {
+    it('R3 (billing, tylko jako właściciel bazy): faktura abonamentu FaktWay z 440 — odmowa billing z numerem dokumentu, stan bez zmian', async () => {
       const b = await billingInvoice({ ksef_status: 'failed', last_error_code: 'KSEF_DUPLICATE_RECONCILE' });
       const k = originalNumber(counter);
       const { error: markerError } = await admin.from('ksef_submissions').insert({

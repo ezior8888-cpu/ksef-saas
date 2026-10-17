@@ -17,9 +17,9 @@ import { SUPPORT_EMAIL } from '@/lib/site';
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'KSeF SaaS vs inFakt 2026 — gross invoices, OCR AI i cennik',
+  title: 'FaktWay vs inFakt 2026 — gross invoices, OCR AI i cennik',
   description:
-    'Porównanie KSeF SaaS z inFakt: faktury brutto, limity AI-OCR, pakiety cenowe, KSeF 2.0, mobile i migracja. Dla mikrofirm i freelancerów.',
+    'Porównanie FaktWay z inFakt: faktury brutto, limity AI-OCR, pakiety cenowe, KSeF 2.0, mobile i migracja. Dla mikrofirm i freelancerów.',
 };
 
 const COMPARISON_ROWS = [
@@ -184,7 +184,7 @@ export default function InfaktPage() {
         <strong className="font-semibold">drogiego stacku</strong>, gdzie
         &bdquo;pełna moc&rdquo; siedzi w wyższych pakietach i dodatkach.{' '}
         <span className="font-editorial font-medium italic text-[var(--marketing-accent)]">
-          FaktFlow
+          FaktWay
         </span>{' '}
         stawia na jedną, przewidywalną stawkę, OCR inspirowany pracą w terenie
         i flow zaprojektowany pod KSeF 2.0 od pierwszego dnia — bez dopłat za
@@ -202,7 +202,7 @@ export default function InfaktPage() {
             inFakt zbudował pozycję na polskim rynku SaaS księgowym jeszcze w erze, gdy KSeF był raczej obietnicą legislacyjną niż codziennym obowiązkiem. Produkt wyrosł z prostego fakturowania online, stopniowo rozszerzany o rozliczenia ZUS, magazyn czy współpracę z biurem rachunkowym. To doświadczenie widać po stronie stabilności biznesowej i rozpoznawalności marki — dla wielu księgowych &bdquo;inFakt&rdquo; to domyślny punkt odniesienia przy onboardingu klienta.
           </p>
           <p>
-            Z perspektywy architektury, typowy hosting inFakt to polskie centra danych i ścisłe trzymanie się lokalnych standardów compliance, co jest plusem dla firm szukających &bdquo;100% PL&rdquo;. Jednocześnie przy KSeF 2.0 liczy się nie tylko lokalizacja serwera, ale przepływ danych: jak szybko system odróżnia fałszywie pozytywny status wysyłki od realnego UPO, jak radzi sobie z wielostronicowymi fakturami kosztowymi i czy pozwala pracować na fakturach gross bez obejść w arkuszu. Tu właśnie pojawiają się różnice kultury produktowej: inFakt ewoluował z klasycznego e-fakturowania, podczas gdy FaktFlow projektujemy od zera pod mikrofirmę, która skanuje dokumenty w aucie i chce zamknąć KPiR tego samego dnia.
+            Z perspektywy architektury, typowy hosting inFakt to polskie centra danych i ścisłe trzymanie się lokalnych standardów compliance, co jest plusem dla firm szukających &bdquo;100% PL&rdquo;. Jednocześnie przy KSeF 2.0 liczy się nie tylko lokalizacja serwera, ale przepływ danych: jak szybko system odróżnia fałszywie pozytywny status wysyłki od realnego UPO, jak radzi sobie z wielostronicowymi fakturami kosztowymi i czy pozwala pracować na fakturach gross bez obejść w arkuszu. Tu właśnie pojawiają się różnice kultury produktowej: inFakt ewoluował z klasycznego e-fakturowania, podczas gdy FaktWay projektujemy od zera pod mikrofirmę, która skanuje dokumenty w aucie i chce zamknąć KPiR tego samego dnia.
           </p>
           <p>
             Warto też pamiętać, że &bdquo;historia produktu&rdquo; to nie tylko data założenia firmy, ale tempo wdrażania zmian ministerialnych. KSeF 2.0 wymusza krótsze SLA na poprawki, więcej telemetrii po stronie API MF oraz większą odporność na weekendowe maintenance. W takim środowisku liczy się, czy Twój dostawca traktuje OCR i walidację FA(3) jako rdzeń subskrypcji, czy jako moduł premium — i ile realnie zapłacisz, zanim &bdquo;zwykła&rdquo; faktura kosztowa przestanie być walką z formularzem.
@@ -265,7 +265,7 @@ export default function InfaktPage() {
             AI-OCR z kolei nie może być &bdquo;ładną ikonką&rdquo; w cenniku. Musi radzić sobie z krzywym skanem, drugą stroną faktury z regulaminem na odwrocie i tabelą pozycji, gdzie każda linia ma inną stawkę VAT. Ograniczenia modelu — limit stron, brak confidence score, brak uczenia z poprawek — przekładają się bezpośrednio na godziny Twojej pracy albo koszt księgowej. Dlatego w tabeli porównawczej celowo eksponujemy wiersze, które bolą najczęściej w rozmowach z naszymi beta-użytkownikami.
           </p>
           <p>
-            Trzeci filar to cena całkowita posiadania (TCO): nawet jeśli pakiet startowy wygląda atrakcyjnie, suma add-onów za OCR, dodatkowe firmy czy wyższe limity dokumentów bywa nieprzewidywalna. FaktFlow trzyma prostą zasadę: funkcje potrzebne do domknięcia KPiR i KSeF nie są zakładką &bdquo;Pro+&rdquo;, tylko rdzeniem produktu — stąd nacisk na jedną stawkę i {TRIAL_DAYS} dni za darmo jako realny hedge ryzyka dla mikrofirmy.
+            Trzeci filar to cena całkowita posiadania (TCO): nawet jeśli pakiet startowy wygląda atrakcyjnie, suma add-onów za OCR, dodatkowe firmy czy wyższe limity dokumentów bywa nieprzewidywalna. FaktWay trzyma prostą zasadę: funkcje potrzebne do domknięcia KPiR i KSeF nie są zakładką &bdquo;Pro+&rdquo;, tylko rdzeniem produktu — stąd nacisk na jedną stawkę i {TRIAL_DAYS} dni za darmo jako realny hedge ryzyka dla mikrofirmy.
           </p>
         </section>
 
@@ -295,8 +295,8 @@ export default function InfaktPage() {
             {[
               { k: 'Baza (najczęściej reklamowana stawka)', v: 'proste faktury sprzedaży, podstawowe rozliczenia, często sensowny start dla jednoosobowej działalności bez dużej skrzynki kosztowej.' },
               { k: 'Wyższe pakiety', v: 'więcej dokumentów, wielofirmowość, rozbudowane uprawnienia dla biura — tu cena rośnie skokowo, bo łączy się z limitami API i raportowania.' },
-              { k: 'AI / OCR / automatyzacje', v: 'często jako osobny moduł albo feature-gating — dokładnie te elementy, które w FaktFlow traktujemy jako standard przy mikrofirmie z dużą liczbą kosztów.' },
-              { k: 'FaktFlow (referencja)', v: `jedna stawka ${PRICE_PER_MONTH}, pełny OCR w pakiecie, Magiczny Import, Wkurzacz, Co-Pilot księgowego i ${TRIAL_DAYS} dni za darmo — bez tajnych „upgrade’ów”, żeby domknąć miesiąc.` },
+              { k: 'AI / OCR / automatyzacje', v: 'często jako osobny moduł albo feature-gating — dokładnie te elementy, które w FaktWay traktujemy jako standard przy mikrofirmie z dużą liczbą kosztów.' },
+              { k: 'FaktWay (referencja)', v: `jedna stawka ${PRICE_PER_MONTH}, pełny OCR w pakiecie, Magiczny Import, Wkurzacz, Co-Pilot księgowego i ${TRIAL_DAYS} dni za darmo — bez tajnych „upgrade’ów”, żeby domknąć miesiąc.` },
             ].map((item, i) => (
               <li
                 key={item.k}
@@ -348,7 +348,7 @@ export default function InfaktPage() {
             { k: 'Eksport z inFakt', v: 'pobierz CSV / JPK / ZIP zgodnie z dokumentacją eksportu — zachowaj kopie na dysku zewnętrznym (audyt RODO).' },
             { k: 'KSeF jako źródło prawdy', v: 'uruchom Magiczny Import: historia z KSeF (np. ostatnie 24 miesiące) + pliki z konkurencji — to skraca czas migracji z godzin do minut.' },
             { k: 'Walidacja brutto/netto', v: 'dla faktur gross przejdź próbkę 20 dokumentów i porównaj kwoty VAT z oryginałem — upewnij się, że nowy flow nie wymusza ręcznych korekt.' },
-            { k: 'Cut-over', v: 'ustal dzień przełączenia wysyłki nowych FA(3) tylko z FaktFlow, wyłącz duplikaty webhooków i poinformuj kontrahentów o ewentualnej zmianie numeracji.' },
+            { k: 'Cut-over', v: 'ustal dzień przełączenia wysyłki nowych FA(3) tylko z FaktWay, wyłącz duplikaty webhooków i poinformuj kontrahentów o ewentualnej zmianie numeracji.' },
             { k: 'Hypercare', v: 'przez 2 tygodnie monitoruj kolejkę KSeF, statusy UPO i raporty błędów — po stabilizacji zaplanuj szkolenie księgowej z Co-Pilotem.' },
           ].map((step, i) => (
             <li

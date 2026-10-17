@@ -171,7 +171,7 @@ export async function enrollTotpAction(): Promise<EnrollTotpResult> {
 
   const result = await supabase.auth.mfa.enroll({
     factorType: 'totp',
-    friendlyName: `FaktFlow ${new Date().toISOString().slice(0, 10)}`,
+    friendlyName: `FaktWay ${new Date().toISOString().slice(0, 10)}`,
   }).catch(() => null);
   if (!result || result.error || !result.data) return { ok: false, error: 'enroll_failed' };
   return {

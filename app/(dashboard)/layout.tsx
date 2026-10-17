@@ -75,7 +75,7 @@ export default async function DashboardLayout({
           {/* PODZIAŁ SZEROKOŚCI. Na telefonie lewa strona ma stałą szerokość
               wordmarku (`shrink-0`), a kurczy się prawa — inaczej długa nazwa
               organizacji („ORANGE POLSKA SPÓŁKA AKCYJNA") zjada cały pasek
-              i z „FaktFlow" zostaje samo „F". Od `lg` odwrotnie: rośnie lewa,
+              i z „FaktWay" zostaje samo „F". Od `lg` odwrotnie: rośnie lewa,
               bo to ona niesie tytuł strony. */}
           <div className="flex shrink-0 items-center gap-3 lg:min-w-0 lg:flex-1">
             {/* Na telefonie pasek nosi wordmark, nie tytuł strony: gdzie

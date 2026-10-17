@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { cn } from '@/lib/utils';
 
-/** Wordmark FaktFlow — identyczna typografia jak na landingu. */
+/** Wordmark FaktWay — identyczna typografia jak na landingu. */
 const WORDMARK_CLASS = 'marketing-wordmark text-[1.35rem]';
 
 /**
@@ -37,7 +37,7 @@ export function BrandWordmark({
           className,
         )}
       >
-        FaktFlow
+        FaktWay
       </span>
     );
 

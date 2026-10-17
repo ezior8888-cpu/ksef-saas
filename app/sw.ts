@@ -1,5 +1,5 @@
 // app/sw.ts
-// Service worker dla KSeF SaaS — offline caching + push notifications
+// Service worker dla FaktWay — offline caching + push notifications
 import type { PrecacheEntry, SerwistGlobalConfig } from 'serwist';
 import { CacheFirst, ExpirationPlugin, NetworkOnly, Serwist } from 'serwist';
 import { deleteLegacyRuntimeCaches, isPublicStaticAsset } from '@/lib/security/service-worker-cache';

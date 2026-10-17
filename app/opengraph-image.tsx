@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og';
 
-export const alt = 'KSeF SaaS — Faktury KSeF dla mikrofirm';
+export const alt = 'FaktWay — Faktury KSeF dla mikrofirm';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -50,7 +50,7 @@ export default function OgImage() {
               letterSpacing: '-0.03em',
             }}
           >
-            KSeF SaaS
+            FaktWay
           </div>
         </div>
         <div

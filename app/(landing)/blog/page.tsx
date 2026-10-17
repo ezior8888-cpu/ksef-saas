@@ -17,7 +17,7 @@ import { SiteNav } from '../_components/site-nav';
 import { Container } from '../_components/ui';
 
 export const metadata: Metadata = {
-  title: 'Blog | FaktFlow',
+  title: 'Blog | FaktWay',
   description:
     'Poradniki o KSeF, fakturach i prowadzeniu małej firmy. Konkretnie, bez urzędowego żargonu.',
 };

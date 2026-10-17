@@ -148,7 +148,7 @@ describe('przyciski po błędzie wysyłki', () => {
   it('do uzgodnienia / wstrzymana: bez przycisków, z wyjaśnieniem', () => {
     expect(buttons(render({ errorCode: 'KSEF_DUPLICATE_RECONCILE' }))).toEqual([]);
     // D-A4-1b-3 PR B (reguła 07.10.2026): duplikat 440 ma wyjście klienta (panel decyzji) i adres
-    // pomocy FaktFlow — tekst nie odsyła już do operatora.
+    // pomocy FaktWay — tekst nie odsyła już do operatora.
     expect(host!.textContent).not.toContain('operator');
     act(() => root?.unmount());
     expect(buttons(render({ errorCode: 'KSEF_PAUSED' }))).toEqual([]);
@@ -192,7 +192,7 @@ describe('A4b PR2b: dokument specjalny — przyciski wg faktów ponowienia z kop
     expect(info(el)).toBe(KSEF_SPECIAL_SEND_MESSAGES.transient(kind));
   });
 
-  it('ZAL bez kopii danych: tylko „Wróć do szkicu”, z powodem i adresem pomocy FaktFlow', () => {
+  it('ZAL bez kopii danych: tylko „Wróć do szkicu”, z powodem i adresem pomocy FaktWay', () => {
     const el = render({ invoiceKind: 'advance', facts: MISSING });
     expect(buttons(el)).toEqual(['Wróć do szkicu']);
     expect(info(el)).toContain('nie ponowimy automatycznie');
@@ -206,12 +206,12 @@ describe('A4b PR2b: dokument specjalny — przyciski wg faktów ponowienia z kop
     ['ROZ_HOLD_RECONCILE', 'final', [HELD, { ...HELD, sendData: 'missing' }], () => KSEF_SEND_MESSAGES.rozHold],
   ];
 
-  it.each(HOLD_CASES)('%s (%s): bez przycisków (decyzja a), bez obietnicy automatu, z adresem pomocy FaktFlow', (code, kind, factsList, message) => {
+  it.each(HOLD_CASES)('%s (%s): bez przycisków (decyzja a), bez obietnicy automatu, z adresem pomocy FaktWay', (code, kind, factsList, message) => {
     for (const facts of factsList) {
       const el = render({ errorCode: code, invoiceKind: kind, facts });
       expect(buttons(el)).toEqual([]);
       expect(info(el)).not.toMatch(/automatycznie/);
-      expect(info(el)).toContain('pomocy FaktFlow');
+      expect(info(el)).toContain('pomocy FaktWay');
       expect(info(el)).toContain(SUPPORT_EMAIL);
       expect(info(el)).toBe(message());
       unmount();
@@ -331,7 +331,7 @@ describe('A4b PR2b: pasek akcji faktury przekazuje fakty ponowienia i środowisk
 const DUPLICATE_PANEL_INFO =
   'KSeF ma już fakturę o tym numerze — szczegóły i dalsze kroki są wyżej, w ramce „W KSeF jest już faktura o tym numerze”. Nie wysyłaj tej faktury ponownie.';
 const DUPLICATE_INFO =
-  'KSeF ma już fakturę o tym numerze — tej faktury nie wysyłaj ponownie. Szczegóły są na karcie faktury; pytania: pomoc FaktFlow (pomoc@faktflow.pl), podaj numer faktury.';
+  'KSeF ma już fakturę o tym numerze — tej faktury nie wysyłaj ponownie. Szczegóły są na karcie faktury; pytania: pomoc FaktWay (pomoc@faktflow.pl), podaj numer faktury.';
 const NUMBER_TAKEN_INFO =
   'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie (szczegóły wyżej). Tego dokumentu nie wyślesz do KSeF. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.';
 

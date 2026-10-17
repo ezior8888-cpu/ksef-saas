@@ -134,7 +134,7 @@ export function OperatorDuplicateDecision({ invoiceId, internalNumber, view, dis
           </Table>
           <p className="text-xs text-muted-foreground">
             powód: <span className="font-mono">{view.reason}</span>
-            {view.knownInvoice ? ` · dokument w FaktFlow z tym numerem KSeF: ${view.knownInvoice.internalNumber ?? 'bez numeru'}` : ''}
+            {view.knownInvoice ? ` · dokument w FaktWay z tym numerem KSeF: ${view.knownInvoice.internalNumber ?? 'bez numeru'}` : ''}
           </p>
 
           <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={M.decideButton}>

@@ -2,11 +2,11 @@
 title: "Konfiguracja certyfikatu KSeF"
 category: "ksef"
 order: 2
-summary: "Jak połączyć FaktFlow z KSeF — certyfikat, token i wybór środowiska."
+summary: "Jak połączyć FaktWay z KSeF — certyfikat, token i wybór środowiska."
 updated: "2026-05-19"
 ---
 
-Zanim wyślesz pierwszą fakturę, FaktFlow musi mieć uprawnienia do działania w Twoim imieniu w KSeF.
+Zanim wyślesz pierwszą fakturę, FaktWay musi mieć uprawnienia do działania w Twoim imieniu w KSeF.
 
 ## Środowisko testowe vs produkcyjne
 
@@ -21,13 +21,13 @@ W ustawieniach KSeF wybierasz, na którym środowisku pracujesz. Zalecamy zaczą
 
 Dostęp do KSeF nadajesz przez certyfikat lub token uwierzytelniający, wygenerowany na stronie KSeF Ministerstwa Finansów. Certyfikat przypisany jest do NIP-u Twojej firmy.
 
-## Wgranie do FaktFlow
+## Wgranie do FaktWay
 
-W **Ustawienia → KSeF** wgrywasz certyfikat i klucz. FaktFlow szyfruje je przed zapisem (AES-256-GCM) — dane uwierzytelniające nigdy nie są przechowywane w postaci jawnej.
+W **Ustawienia → KSeF** wgrywasz certyfikat i klucz. FaktWay szyfruje je przed zapisem (AES-256-GCM) — dane uwierzytelniające nigdy nie są przechowywane w postaci jawnej.
 
 ## Weryfikacja połączenia
 
-Po wgraniu FaktFlow wykonuje testowe połączenie z KSeF. Zielony status oznacza, że wszystko działa. Jeśli pojawi się błąd, sprawdź:
+Po wgraniu FaktWay wykonuje testowe połączenie z KSeF. Zielony status oznacza, że wszystko działa. Jeśli pojawi się błąd, sprawdź:
 
 - czy certyfikat nie wygasł,
 - czy NIP w certyfikacie zgadza się z NIP-em organizacji,
@@ -35,7 +35,7 @@ Po wgraniu FaktFlow wykonuje testowe połączenie z KSeF. Zielony status oznacza
 
 ## Wygasanie certyfikatu
 
-Certyfikaty mają datę ważności. FaktFlow przypomni Ci mailem, zanim certyfikat wygaśnie — odnów go z wyprzedzeniem, żeby nie przerwać wystawiania faktur.
+Certyfikaty mają datę ważności. FaktWay przypomni Ci mailem, zanim certyfikat wygaśnie — odnów go z wyprzedzeniem, żeby nie przerwać wystawiania faktur.
 
 ## Co dalej?
 

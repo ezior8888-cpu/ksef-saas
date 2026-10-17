@@ -452,7 +452,7 @@ export async function emailInvoiceAction(
   const { user, tenantId } = context;
 
   // Limit na firmę PRZED generowaniem PDF (AUD-102): wysyłka idzie z domeny
-  // FaktFlow na dowolny adres. Limit w pamięci procesu przy braku Redisa
+  // FaktWay na dowolny adres. Limit w pamięci procesu przy braku Redisa
   // wystarcza — jedna instancja aplikacji.
   const quota = await checkRateLimit({
     bucket: 'invoice_email',

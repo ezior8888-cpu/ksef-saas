@@ -200,7 +200,7 @@ describe('KsefDuplicateDecision — panel decyzji klienta (D-A4-1b-3 PR B)', () 
     expect(t).not.toContain(PANEL.same.line4);
   });
 
-  it('U8a: treść zgodna / różna (known-number) — CONTENT_SAME / CONTENT_DIFFERENT; program nieznany — „poza FaktFlow”', async () => {
+  it('U8a: treść zgodna / różna (known-number) — CONTENT_SAME / CONTENT_DIFFERENT; program nieznany — „poza FaktWay”', async () => {
     await renderPanel(knownNumberView({ sameContent: true }));
     expect(text()).toContain(PANEL.contentSame);
 
@@ -307,7 +307,7 @@ describe('KsefDuplicateDecision — panel decyzji klienta (D-A4-1b-3 PR B)', () 
         { label: 'Nabywca', ksef: 'Jan Konsument', ours: 'Jan Konsument', same: true },
         { label: 'NIP nabywcy', ksef: null, ours: null, same: null },
         { label: 'Kwota brutto', ksef: '123.00 PLN', ours: '123.00 PLN', same: true },
-        { label: 'Program', ksef: 'Inny Program 1.0', ours: 'FaktFlow', same: null },
+        { label: 'Program', ksef: 'Inny Program 1.0', ours: 'FaktWay', same: null },
       ],
       needsConfirmation: { same_sale: true, other_sale: true },
     });

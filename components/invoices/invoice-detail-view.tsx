@@ -120,7 +120,7 @@ function vatRateLabel(rate: string | null): string {
   // AUD-70: usługa z art. 100 ust. 1 pkt 4 (FA(3) „np II”) — jak na PDF.
   if (rate === 'np_ii') return 'np. II';
   if (['zw', 'oo', 'np'].includes(rate)) return rate;
-  // W9: kod FA(3) z importu bez odpowiednika w FaktFlow („0 WDT”, „nieznana”…).
+  // W9: kod FA(3) z importu bez odpowiednika w FaktWay („0 WDT”, „nieznana”…).
   const imported = importedVatRateLabel(rate);
   if (imported) return `${rate} (${imported})`;
   return `${rate}%`;

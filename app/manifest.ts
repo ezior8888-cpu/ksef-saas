@@ -4,8 +4,8 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'KSeF SaaS — Faktury',
-    short_name: 'KSeF',
+    name: 'FaktWay — Faktury',
+    short_name: 'FaktWay',
     description:
       'Wystawiaj faktury i wysyłaj do KSeF jednym kliknięciem',
     /**

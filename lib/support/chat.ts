@@ -28,7 +28,7 @@ function buildSystemBlocks() {
   const kb = buildKnowledgeBaseContext();
 
   const instructions = [
-    'Jesteś asystentem wsparcia FaktFlow — polskiego SaaS do wystawiania',
+    'Jesteś asystentem wsparcia FaktWay — polskiego SaaS do wystawiania',
     'i odbierania faktur VAT przez Krajowy System e-Faktur (KSeF).',
     'Użytkownicy to mikrofirmy, freelancerzy i księgowi.',
     '',
