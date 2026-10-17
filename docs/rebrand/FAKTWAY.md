@@ -65,7 +65,8 @@ Z inwentarza Coolify (17.10.2026 17:46, `./scripts/ops/faktway-inwentarz.sh`):
   „FaktFlow” i `pomoc@faktflow.pl` — dlatego stara skrzynka musi odbierać
   pocztę, a test `jeden-adres-kontaktowy` dopuszcza starą domenę tylko w tym
   pliku. Naprawa: `CREATE OR REPLACE` z nowym numerem z rejestru + lustro
-  i migawka w tym samym PR.
+  i migawka w tym samym PR — **szkic #280 (migracja 00151, stos na tym PR)**;
+  wgrać w dniu przełączenia, przed wdrożeniem tego PR.
 
 PR jest szkicem. **Scalamy go dopiero w dniu przełączenia (etap E)**, bo
 zmienia adres pomocy w całej aplikacji na `pomoc@faktway.pl`.
@@ -209,7 +210,8 @@ Legenda: **[B]** tylko Bartosz (panel, konto, decyzja prawna),
     (a) `create_billing_vat_invoice` akceptuje `FaktWay — subskrypcja …` obok
     `FaktFlow — …` (także `notes` przy idempotencji), potem zmiana napisów
     w `lib/billing/self-invoice.ts`; (b) teksty `RAISE` z 00148 na FaktWay
-    i `pomoc@faktway.pl` + lustro w `lib/ksef/duplicate-decision.ts`.
+    i `pomoc@faktway.pl` + lustro w `lib/ksef/duplicate-decision.ts` —
+    #280, migracja 00151 (wgrać w dniu przełączenia razem z wdrożeniem).
 28. **[C]** `AGENTS.md`, runbooki i `scripts/ops/kontrola-faktur-ksef.sh` —
     adresy weryfikacyjne na `faktway.pl` (dopiero po przełączeniu, bo dziś
     opisują działającą produkcję).

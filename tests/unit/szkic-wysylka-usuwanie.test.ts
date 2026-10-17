@@ -257,7 +257,7 @@ describe('D-A4-1b-3 PR B: wysyłka szkicu wycofanego (wpis number_taken)', () =>
     const r = await sendDraftInvoiceAction('inv-1');
 
     expect(r).toEqual({ success: false, error: sendRefusal(NR, 'unmarked', null) });
-    if (!r.success) expect(r.error).toContain('przez inną fakturę Twojej firmy wystawioną poza FaktFlow');
+    if (!r.success) expect(r.error).toContain('przez inną fakturę Twojej firmy wystawioną poza FaktWay');
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
