@@ -601,7 +601,7 @@ function drawFooter(
     .stroke();
   doc.font('body').fontSize(7).fillColor('#aaaaaa');
   doc.text(
-    'Wygenerowano w FaktFlow — faktury KSeF dla mikrofirm.',
+    'Wygenerowano w FaktWay — faktury KSeF dla mikrofirm.',
     left,
     footY + 4,
     { width, align: 'center' },

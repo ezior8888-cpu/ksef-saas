@@ -156,7 +156,7 @@ function invoiceRow(patch: Row = {}): Row {
   };
 }
 
-/** Faktura Y — w FaktFlow ma numer KSeF oryginału (known-number). */
+/** Faktura Y — w FaktWay ma numer KSeF oryginału (known-number). */
 function yRow(patch: Row = {}): Row {
   return {
     id: Y_ID,

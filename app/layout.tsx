@@ -35,7 +35,7 @@ const fraunces = Fraunces({
   axes: ['opsz', 'SOFT'],
 });
 
-// Typografia panelu (prototyp „FaktFlow Dashboard"): Inter na interfejs,
+// Typografia panelu (prototyp „FaktWay Dashboard"): Inter na interfejs,
 // IBM Plex Mono na liczby, NIP-y, numery faktur i daty — dzięki stałej
 // szerokości znaku kwoty w kolumnach tabel wyrównują się do przecinka.
 // `latin-ext` jest KRYTYCZNE dla polskich znaków (ą, ć, ę, ł, ń, ó, ś, ź, ż).
@@ -56,14 +56,14 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: 'KSeF SaaS',
+  title: 'FaktWay',
   description: 'Faktury KSeF dla mikrofirm',
   // PWA / iOS (Safari) — manifest z `app/manifest.ts` nie wystarczy na iOS
-  applicationName: 'KSeF SaaS',
+  applicationName: 'FaktWay',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'KSeF',
+    title: 'FaktWay',
   },
   formatDetection: {
     telephone: false,

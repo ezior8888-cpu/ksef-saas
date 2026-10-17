@@ -1,5 +1,5 @@
 /**
- * Jedyne źródło ceny FaktFlow.
+ * Jedyne źródło ceny FaktWay.
  *
  * Decyzja Bartosza z 1 października 2026 (krok 8 planu automatyzacji):
  *   - jeden plan dla wszystkich, płatny co miesiąc — bez planu rocznego,

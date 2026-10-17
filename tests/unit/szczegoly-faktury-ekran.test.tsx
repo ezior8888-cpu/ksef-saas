@@ -420,7 +420,7 @@ describe('D-A4-1b-3 PR B: panel decyzji, karta błędu i baner szkicu wycofanego
   };
   const retiredSameKnown: RetiredDraftViewFixture = {
     title: BANNER.title(NR),
-    body: `Zapisano 02.10.2026, 10:30: to ta sama sprzedaż co faktura ${NR} w KSeF (numer KSeF ${K}), którą w FaktFlow ma dokument ${Y_NR}. Tego dokumentu nie wyślesz do KSeF. Jeśli to jednak inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.`,
+    body: `Zapisano 02.10.2026, 10:30: to ta sama sprzedaż co faktura ${NR} w KSeF (numer KSeF ${K}), którą w FaktWay ma dokument ${Y_NR}. Tego dokumentu nie wyślesz do KSeF. Jeśli to jednak inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.`,
     cta: null,
     knownInvoice: { id: Y_ID, internalNumber: Y_NR },
     sendRefusal: sendRefusal(NR, 'decided-same'),

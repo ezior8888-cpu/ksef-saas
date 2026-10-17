@@ -20,6 +20,8 @@
 
 Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (Krajowy System e-Faktur, Polska). Multi-tenant, solo-founder MVP, target: mikroprzedsiębiorcy i księgowi.
 
+**Nazwa produktu: FaktWay** (od 17.10.2026; wcześniej FaktFlow, robocza „KSeF SaaS”). W tekstach dla klienta pisz tylko „FaktWay” — pilnuje tego `tests/unit/nazwa-produktu.test.ts`. Domeny `faktflow.pl`, adresy e-mail, zmienne `FAKTFLOW_*` i identyfikatory techniczne zostają (plan Finora, D8).
+
 ## Stack (NIEZMIENNY)
 
 - Next.js 16 (App Router), TypeScript, React Server Components

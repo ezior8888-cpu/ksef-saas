@@ -5,7 +5,7 @@ import { SUPPORT_EMAIL } from '@/lib/site';
 export const revalidate = 86400;
 
 export const metadata: Metadata = {
-  title: 'Polityka prywatności KSeF SaaS',
+  title: 'Polityka prywatności FaktWay',
 };
 
 export default function PrivacyPage() {

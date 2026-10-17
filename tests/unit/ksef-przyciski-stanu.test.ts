@@ -31,7 +31,7 @@ import { SUPPORT_EMAIL } from '@/lib/site';
  * ale ze zdaniem, które nie obiecuje automatu. Kolejność blokad klienta:
  * rodzaj wstrzymany → dane → data; przy nieznanym środowisku KSeF nic nie
  * zlecamy. Decyzje z 07.10.2026: zamiast „uzgodni operator” (takiej ścieżki
- * w panelu nie ma) — adres pomocy FaktFlow; „ponowimy automatycznie”
+ * w panelu nie ma) — adres pomocy FaktWay; „ponowimy automatycznie”
  * w zdaniu i na znaczku statusu z jednej definicji (`automaticResendExpected`).
  */
 
@@ -330,7 +330,7 @@ describe('A2b / A4b PR2b: zdanie o automacie wg kodu (AUTO_REQUEUE_CODES), nie w
   );
 });
 
-describe('A4b PR2b: nieznane środowisko KSeF po stronie FaktFlow (environmentKnown)', () => {
+describe('A4b PR2b: nieznane środowisko KSeF po stronie FaktWay (environmentKnown)', () => {
   it.each([
     ['zwykła INFRA', 'regular', 'INFRA', STORED],
     ['KOR INFRA (bez środowiska rodzaj wstrzymany — nie mówimy o hamulcu PROD)', 'correction', 'INFRA', HELD],

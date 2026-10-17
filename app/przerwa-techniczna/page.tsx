@@ -4,7 +4,7 @@ import Link from 'next/link';
 import '@/styles/zova.css';
 
 export const metadata: Metadata = {
-  title: 'Przerwa techniczna — FaktFlow',
+  title: 'Przerwa techniczna — FaktWay',
   robots: { index: false, follow: false },
 };
 

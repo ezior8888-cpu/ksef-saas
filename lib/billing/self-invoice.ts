@@ -3,7 +3,7 @@
  * (Faza 25 Krok 4).
  *
  * Meta-rekursja: nasza apka wystawia fakturę VAT własnym pipeline'em KSeF.
- * Operator (FaktFlow Sp. z o.o.) jest sprzedawcą, klient płacący Stripe'a
+ * Operator (spółka prowadząca FaktWay) jest sprzedawcą, klient płacący Stripe'a
  * jest nabywcą.
  *
  * Założenia rozliczeniowe:
@@ -66,6 +66,9 @@ export function paidDateInPoland(paidAt: string): string {
   }).format(new Date(paidAt));
 }
 
+// Stara nazwa produktu w pozycji i w uwagach zostaje celowo (plan Finora,
+// D8): `create_billing_vat_invoice` (00110) porównuje oba teksty co do znaku
+// i odrzuca fakturę przy różnicy. Zmieniają się razem z migracją tej funkcji.
 function planLineName(plan: 'monthly' | 'annual', issueDate: string): string {
   const dateLabel = new Date(issueDate).toLocaleDateString('pl-PL', {
     year: 'numeric',

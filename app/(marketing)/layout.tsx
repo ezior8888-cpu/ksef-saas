@@ -8,8 +8,8 @@ import { SiteNav } from '@/app/(landing)/_components/site-nav';
 
 export const metadata: Metadata = {
   title: {
-    default: 'FaktFlow',
-    template: '%s | FaktFlow',
+    default: 'FaktWay',
+    template: '%s | FaktWay',
   },
 };
 

@@ -41,7 +41,7 @@ export default function TrialEnding({
     : `Twój trial kończy się za ${daysRemaining} dni`;
 
   const intro = isFinalDay
-    ? `Cześć ${tenantName}, jutro (${trialEndDate}) zakończy się 30-dniowy darmowy okres testowy FaktFlow. Karta zostanie obciążona za ${planLabel}.`
+    ? `Cześć ${tenantName}, jutro (${trialEndDate}) zakończy się 30-dniowy darmowy okres testowy FaktWay. Karta zostanie obciążona za ${planLabel}.`
     : `Cześć ${tenantName}, za ${daysRemaining} dni (${trialEndDate}) zakończy się Twój darmowy 30-dniowy trial. Karta zostanie obciążona za ${planLabel}.`;
 
   return (
@@ -80,7 +80,7 @@ export default function TrialEnding({
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            FaktFlow — faktury KSeF dla mikrofirm. Ta wiadomość została wysłana
+            FaktWay — faktury KSeF dla mikrofirm. Ta wiadomość została wysłana
             automatycznie. Pytania? Odpowiedz na ten email.
           </Text>
         </Container>

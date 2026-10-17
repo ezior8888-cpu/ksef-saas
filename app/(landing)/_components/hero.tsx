@@ -153,7 +153,7 @@ export function Hero() {
           <div className="relative mx-auto aspect-[969/579] w-full max-w-[969px] overflow-hidden rounded-[16px] bg-white shadow-[0_24px_60px_-20px_rgba(16,32,64,0.28)]">
             <Image
               src={asset.hero.dashboard}
-              alt="Pulpit FaktFlow"
+              alt="Pulpit FaktWay"
               fill
               sizes="(max-width: 1024px) 100vw, 969px"
               priority

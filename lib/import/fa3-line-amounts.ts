@@ -89,9 +89,9 @@ const NO_VAT_BUCKETS: Readonly<Record<string, string>> = {
   zw: 'P_13_7', np: 'P_13_8', np_ii: 'P_13_9', oo: 'P_13_10',
 };
 /**
- * Taryfa ryczałtowa taksówek — FaktFlow jej nie rozkłada (odmowa stawki z C5a).
+ * Taryfa ryczałtowa taksówek — FaktWay jej nie rozkłada (odmowa stawki z C5a).
  * Sumy P_13_4 (taksówki), P_13_5 (OSS) i P_13_11 (marża) nie mają stawki
- * FaktFlow — bez kontroli „suma bez pozycji” (odmowa stawki albo procedury).
+ * FaktWay — bez kontroli „suma bez pozycji” (odmowa stawki albo procedury).
  */
 const NOT_DISTRIBUTED = new Set(['4', '3']);
 const VAT_PAIRS: ReadonlyArray<readonly [string, string]> = [['P_13_1', 'P_14_1'], ['P_13_2', 'P_14_2'], ['P_13_3', 'P_14_3']];
@@ -425,9 +425,9 @@ export function fa3ImportLineAmounts(inv: ParsedInvoice): ImportLineAmounts {
     }
   }
 
-  // ── Stawki, których FaktFlow nie rozkłada ──
+  // ── Stawki, których FaktWay nie rozkłada ──
   for (const f of grossAtUndistributed) {
-    problems.push(`pozycja ${f.line.position}: ceny brutto przy stawce ${f.rate}, której FaktFlow nie rozkłada`);
+    problems.push(`pozycja ${f.line.position}: ceny brutto przy stawce ${f.rate}, której FaktWay nie rozkłada`);
   }
   return {
     rows,

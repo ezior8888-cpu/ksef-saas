@@ -7,7 +7,7 @@ import { SUPPORT_EMAIL } from '@/lib/site';
 export const revalidate = 86400;
 
 export const metadata: Metadata = {
-  title: 'Regulamin KSeF SaaS',
+  title: 'Regulamin FaktWay',
 };
 
 export default function TermsPage() {
@@ -19,7 +19,7 @@ export default function TermsPage() {
 
         <h2>§1. Postanowienia ogólne</h2>
         <p>
-          1. Niniejszy Regulamin określa zasady korzystania z usługi KSeF SaaS
+          1. Niniejszy Regulamin określa zasady korzystania z usługi FaktWay
           świadczonej przez [nazwa firmy], NIP [TWÓJ_NIP], z siedzibą w Poznaniu
           (zwaną dalej &quot;Usługodawcą&quot;).
         </p>
@@ -36,7 +36,7 @@ export default function TermsPage() {
             Ministerstwo Finansów
           </li>
           <li>
-            <strong>Usługa</strong> — FaktFlow dostępny pod adresem faktflow.pl
+            <strong>Usługa</strong> — FaktWay dostępny pod adresem faktflow.pl
           </li>
           <li>
             <strong>Użytkownik</strong> — osoba fizyczna lub prawna korzystająca z

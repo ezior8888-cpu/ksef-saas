@@ -1,7 +1,7 @@
 import Image from 'next/image';
 
 /**
- * Znaczek FaktFlow — **te same** `src` / `width` / `height` / klasy co na stronie
+ * Znaczek FaktWay — **te same** `src` / `width` / `height` / klasy co na stronie
  * głównej (`app/(marketing)/page.tsx` hero oraz `app/(marketing)/layout.tsx`).
  */
 export function FaktflowMark({
@@ -16,7 +16,7 @@ export function FaktflowMark({
   return (
     <Image
       src="/brand/faktflow-mark.png"
-      alt="FaktFlow"
+      alt="FaktWay"
       width={128}
       height={128}
       className={

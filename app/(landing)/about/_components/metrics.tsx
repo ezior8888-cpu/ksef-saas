@@ -10,7 +10,7 @@ import { Counter } from './counter';
  * ze źródła — format (M+, %, K+, jedno miejsce po przecinku) jest wierny.
  */
 const METRICS = [
-  { to: 1.2, suffix: ' mln', decimals: 1, label: 'Faktur w KSeF', body: 'Tyle dokumentów przeszło przez FaktFlow.' },
+  { to: 1.2, suffix: ' mln', decimals: 1, label: 'Faktur w KSeF', body: 'Tyle dokumentów przeszło przez FaktWay.' },
   { to: 92, suffix: '%', decimals: 0, label: 'Mniej klikania', body: 'Tyle czasu oszczędzają nasi użytkownicy.' },
   { to: 8, suffix: ' tys.', decimals: 0, label: 'Firm miesięcznie', body: 'Mikrofirmy i biura rachunkowe.' },
   { to: 99.9, suffix: '%', decimals: 1, label: 'Dostępność', body: 'Bo faktura nie może poczekać do jutra.' },

@@ -16,9 +16,9 @@ import {
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'KSeF SaaS vs wFirma 2026 — mobile, OCR i KSeF',
+  title: 'FaktWay vs wFirma 2026 — mobile, OCR i KSeF',
   description:
-    'Porównanie KSeF SaaS z wFirmą: aplikacja mobilna, OCR dokumentów kosztowych, KSeF 2.0, cennik i migracja dla JDG i mikrofirm.',
+    'Porównanie FaktWay z wFirmą: aplikacja mobilna, OCR dokumentów kosztowych, KSeF 2.0, cennik i migracja dla JDG i mikrofirm.',
 };
 
 const COMPARISON_ROWS = [
@@ -182,7 +182,7 @@ export default function WfirmaPage() {
         <strong className="font-semibold">ograniczenia OCR</strong> na trudnych
         kosztach (wielostronicowe PDF-y, słabe zdjęcia, batch).{' '}
         <span className="font-editorial font-medium italic text-[var(--marketing-accent)]">
-          FaktFlow
+          FaktWay
         </span>{' '}
         nie próbuje zastąpić całego ERP — koncentruje się na superscieżce: KSeF
         + OCR + KPiR + windykacja + księgowa, z PWA i pushami jako domyślny
@@ -270,7 +270,7 @@ export default function WfirmaPage() {
             ale batch, confidence i scenariusze trudnych zdjęć.
           </p>
           <p>
-            wFirma pozostaje mocna, gdy organizacja ma biuro, które zbiera dokumenty centralnie. KSeF SaaS celuje
+            wFirma pozostaje mocna, gdy organizacja ma biuro, które zbiera dokumenty centralnie. FaktWay celuje
             w scenariusz „ja jestem biurem”: sam skanujesz, sam kategoryzujesz, sam wysyłasz do KSeF, a księgowa
             dostaje gotowy pakiet przez Co-Pilota. To dwa różne modele operacyjne — ważne, żebyś wybrał świadomie,
             a nie przez przypadek, bo „tak robi znajomy”.
@@ -304,7 +304,7 @@ export default function WfirmaPage() {
               { k: 'Warstwa podstawowa', v: 'rozliczenia, faktury, często sensowny start bez pełnej „maszyny mobilnej”.' },
               { k: 'Warstwa rozszerzeń', v: 'dodatkowe firmy, wyższe limity dokumentów, integracje — koszt skokowy przy wzroście skali.' },
               { k: 'Kadry i płace', v: 'mocna strona wFirma — jeśli tego potrzebujesz, może to uzasadniać wyższy abonament nawet przy słabszym mobile OCR.' },
-              { k: 'FaktFlow', v: `jedna stawka ${PRICE_PER_MONTH}, mobile + OCR + KSeF w jednym worku, ${TRIAL_DAYS} dni za darmo — czyli przewidywalny TCO dla mikrofirmy bez działu IT.` },
+              { k: 'FaktWay', v: `jedna stawka ${PRICE_PER_MONTH}, mobile + OCR + KSeF w jednym worku, ${TRIAL_DAYS} dni za darmo — czyli przewidywalny TCO dla mikrofirmy bez działu IT.` },
             ].map((item, i) => (
               <li
                 key={item.k}
@@ -355,7 +355,7 @@ export default function WfirmaPage() {
             { k: 'Inwentaryzacja modułów', v: 'zaznacz, które funkcje wFirma są krytyczne (np. kadry) i czy zostają równolegle na okres przejściowy.' },
             { k: 'Eksport danych', v: 'pobierz zestawienia faktur, kosztów i kontrahentów w formatach obsługiwanych przez Magiczny Import; zachowaj kopie offline.' },
             { k: 'Import z KSeF', v: 'zsynchronizuj historię wysyłek FA z Ministerstwem — to redukuje ryzyko duplikatów przy ponownej rejestracji tych samych numerów.' },
-            { k: 'Test OCR', v: 'weź 30 najbrudniejszych skanów z ostatniego kwartału i sprawdź, ile z nich domyka się bez Excela w FaktFlow.' },
+            { k: 'Test OCR', v: 'weź 30 najbrudniejszych skanów z ostatniego kwartału i sprawdź, ile z nich domyka się bez Excela w FaktWay.' },
             { k: 'Cut-over komunikacji', v: 'poinformuj kontrahentów o ewentualnej zmianie danych do płatności i webhooków, jeśli integrujesz sklep online.' },
             { k: 'Okno stabilizacji', v: 'przez 14 dni monitoruj kolejkę KSeF, UPO i raporty błędów; dopiero potem wyłączaj stary rutynowy eksport z wFirmy.' },
           ].map((step, i) => (
@@ -410,7 +410,7 @@ export default function WfirmaPage() {
             zbiera też opis profilu dokumentów.
           </p>
           <p>
-            Jeśli jesteś biurem rachunkowym i rozważasz hybrydę (część klientów na wFirma, część na FaktFlow), opisz nam profil dokumentów — przygotujemy szablon komunikacji do klientów końcowych i checklistę zgód RODO na przeniesienie eksportów.
+            Jeśli jesteś biurem rachunkowym i rozważasz hybrydę (część klientów na wFirma, część na FaktWay), opisz nam profil dokumentów — przygotujemy szablon komunikacji do klientów końcowych i checklistę zgód RODO na przeniesienie eksportów.
           </p>
         </section>
       </div>

@@ -74,7 +74,7 @@ describe('describeDuplicateOriginal — panel dla klienta', () => {
       { label: 'Data wystawienia', value: '2026-09-28' },
       { label: 'Nabywca', value: 'Klient, NIP 5252241585' },
       { label: 'Kwota brutto', value: '123.00 PLN' },
-      { label: 'Program', value: 'FaktFlow' },
+      { label: 'Program', value: 'FaktWay' },
     ]);
     expect(v.note).toContain('Faktura FV/1');
     expect(v.note).toContain('Nie wystawiaj tej faktury ponownie');
@@ -143,15 +143,15 @@ describe('describeDuplicateOriginal — panel dla klienta', () => {
  * do niego (C16).
  */
 const PR_B_DOWNLOAD_REFUSED =
-  'Nie mogliśmy pobrać treści tej faktury z KSeF — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni); pytania: pomoc FaktFlow (pomoc@faktflow.pl), podaj numer faktury. Nie wystawiaj tej faktury ponownie.';
+  'Nie mogliśmy pobrać treści tej faktury z KSeF — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni); pytania: pomoc FaktWay (pomoc@faktflow.pl), podaj numer faktury. Nie wystawiaj tej faktury ponownie.';
 const PR_B_PENDING =
   'Nie udało się jeszcze sprawdzić treści tej faktury w KSeF — sprawdzimy ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl, podając numer faktury. Nie wystawiaj tej faktury ponownie.';
 const prBDefault = (doc: string) =>
-  `${doc} nie została przyjęta, bo KSeF ma już fakturę Twojej firmy o tym numerze (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktFlow (pomoc@faktflow.pl), podaj numer faktury. Nie wystawiaj tej faktury ponownie.`;
+  `${doc} nie została przyjęta, bo KSeF ma już fakturę Twojej firmy o tym numerze (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktWay (pomoc@faktflow.pl), podaj numer faktury. Nie wystawiaj tej faktury ponownie.`;
 const prBOwnHistory = (doc: string) =>
-  `${doc} nie została przyjęta, bo KSeF ma już wcześniejszą wersję tej faktury wysłaną z FaktFlow (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktFlow (pomoc@faktflow.pl), podaj numer faktury. Nie wystawiaj tej faktury ponownie.`;
+  `${doc} nie została przyjęta, bo KSeF ma już wcześniejszą wersję tej faktury wysłaną z FaktWay (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktWay (pomoc@faktflow.pl), podaj numer faktury. Nie wystawiaj tej faktury ponownie.`;
 const prBKnownNumber = (y: string, nr: string) =>
-  `W FaktFlow numer KSeF ${K} ma już dokument ${y} — te dane się nie zgadzają i musimy je wyjaśnić, zanim zdecydujesz, czym jest ten dokument. Napisz do nas: pomoc@faktflow.pl, podając numer ${nr}. Nie wystawiaj tej faktury ponownie.`;
+  `W FaktWay numer KSeF ${K} ma już dokument ${y} — te dane się nie zgadzają i musimy je wyjaśnić, zanim zdecydujesz, czym jest ten dokument. Napisz do nas: pomoc@faktflow.pl, podając numer ${nr}. Nie wystawiaj tej faktury ponownie.`;
 
 describe('U2a: parseDuplicateCheck — decyzja klienta (00148)', () => {
   it('zapisana decyzja wraca jako {choice, via, at}; zniekształcona — bez klucza', () => {
@@ -224,7 +224,7 @@ describe('U2b–U2d: notatki karty bez „zajmujemy się” i operatora, z adres
   it('strażnik: notatka 403 bez zmian (InvoiceRead, Ustawienia → KSeF)', () => {
     const note = describeDuplicateOriginal('FV/1', K, check({ reason: 'download-refused', httpStatus: 403, summary: null, sha256: null })).note;
     expect(note).toBe(
-      'Nie mogliśmy pobrać treści tej faktury z KSeF — dane logowania KSeF w FaktFlow nie mają uprawnienia do odczytu ' +
+      'Nie mogliśmy pobrać treści tej faktury z KSeF — dane logowania KSeF w FaktWay nie mają uprawnienia do odczytu ' +
       'faktur (InvoiceRead). Sprawdź uprawnienia w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach → KSeF. ' +
       'Nie wystawiaj tej faktury ponownie.',
     );

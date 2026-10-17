@@ -1,5 +1,5 @@
 /**
- * Adres strony i jedyny adres kontaktowy FaktFlow (krok 10 planu automatyzacji).
+ * Adres strony i jedyny adres kontaktowy FaktWay (krok 10 planu automatyzacji).
  *
  * Dawniej w kodzie było siedem adresów w dwóch domenach. `ksef-saas.pl` nie
  * jest już zarejestrowana (NASK, 1.10.2026) — każdy mógł ją kupić i odbierać
