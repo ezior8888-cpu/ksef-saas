@@ -1163,5 +1163,5 @@ Remix Icon) · Prymitywy (Base UI / Radix): _do uzupełnienia_ ·
 `mv_tenant_monthly_stats` (tor silnika). Zgłoszone, nie naprawiamy w tym
 planie.
 
-**Następny krok:** Bartosz wykonuje krok 0.1 (zakup + prywatne repo; preset już wybrany —
-presetu). Potem sesja w chmurze: **E0**.
+**Następny krok:** Bartosz wykonuje krok 0.1 (zakup + prywatne repo; konfiguracja
+motywu już wybrana, D2). Potem sesja w chmurze: **E0**.
