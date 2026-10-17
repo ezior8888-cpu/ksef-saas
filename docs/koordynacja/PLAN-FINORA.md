@@ -46,7 +46,7 @@ otwarta i spisana) + odczyt kodu `main` @ `1ded2147`.
 2. Utwórz prywatne repo `faktflow-finora-src`, wrzuć rozpakowany szablon
    bez zmian, nadaj dostęp kontu, na którym działa sesja w chmurze.
 3. Wpisz właściciela repo w punkt 2 checklisty wyżej.
-4. Wybierz preset (Corporate albo Modern Minimal) i wpisz jego nazwę w D2.
+4. ~~Wybierz preset~~ — zrobione 17.10: Modern Minimal, Outfit, Light, Compact, SM, Inset, Default (D2).
 
 ---
 
@@ -55,7 +55,7 @@ otwarta i spisana) + odczyt kodu `main` @ `1ded2147`.
 | # | Decyzja |
 |---|---|
 | D1 | Jedyny szablon to **Finora**. NexaCRM porzucona — nie bierz z niej niczego. |
-| D2 | Kolorystyka: **jasny motyw, niebieski akcent** — gotowy wariant z panelu personalizacji Finory (zrzut od Bartosza: niebieskie słupki, białe karty, biały pasek boczny). Ciemny motyw zostaje jako drugi. Panelu personalizacji klient NIE dostaje. Preset: **Corporate** albo **Modern Minimal**, jedyne niebieskie w demo (Perplexity jest morski, Material Design fioletowy). Wybiera Bartosz przed E0: w demo ikona palety w nagłówku → Theme Preset → Corporate / Modern Minimal, Color Mode → Light, i porównanie ze swoim zrzutem. Corporate ma szaroniebieskie tło, lekko przyciemnione karty i niebieską aktywną pozycję menu. Modern Minimal ma tło i karty czysto białe, a aktywną pozycję menu prawie czarną (`sidebar-primary` oklch(0.20 0 0)). |
+| D2 | **Konfiguracja Finory wybrana przez Bartosza 17.10.2026** (panel „Theme Customizer” w demo): **Theme Preset: Modern Minimal** (niebieski) · **Font: Outfit** · **Color Mode: Light** jako domyślny (Dark zostaje jako przełącznik użytkownika, System też) · **Content Layout: Compact** · **Scale: SM** · **Sidebar Variant: Inset** · **Sidebar Mode: Default**. E0 spisuje z `../finora-src` dokładne wartości tych ustawień (zmienne CSS presetu, font, klasy skali i układu) do §10, E1 ustawia je na stałe w kodzie. Panelu personalizacji klient NIE dostaje. |
 | D3 | Układ stron bierzemy z Finory **prawie bez zmian**. Zmieniamy treść, dane i podpisy, nie siatkę. Każdy dolar za szablon ma pracować. |
 | D4 | **FLO**: miejsce i forma przyjdą z projektu Claude Design. Do tego czasu obecne komponenty FLO stoją w wyznaczonym slocie u góry pulpitu bez zmian. `components/flo/*`, `app/(dashboard)/flo/*`, `content/flo/*`, `app/(dashboard)/settings/flo/*`, `e2e/tests/flo-*.spec.ts` należą do Masła — NIE edytuj ich. `lib/flo/*` należy do toru silnika — też nie. |
 | D5 | Strona sprzedażowa (landing) — poza zakresem. |
@@ -1163,5 +1163,5 @@ Remix Icon) · Prymitywy (Base UI / Radix): _do uzupełnienia_ ·
 `mv_tenant_monthly_stats` (tor silnika). Zgłoszone, nie naprawiamy w tym
 planie.
 
-**Następny krok:** Bartosz wykonuje krok 0.1 (zakup + prywatne repo + wybór
+**Następny krok:** Bartosz wykonuje krok 0.1 (zakup + prywatne repo; preset już wybrany —
 presetu). Potem sesja w chmurze: **E0**.
