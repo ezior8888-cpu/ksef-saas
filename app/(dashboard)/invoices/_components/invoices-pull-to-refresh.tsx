@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { InvoiceList } from '@/components/invoices/invoice-list';
 import { PullToRefresh } from '@/components/pwa/pull-to-refresh';
 
-import type { InvoiceRow } from '@/components/invoices/invoice-row-types';
+import type { InvoiceFactsById, InvoiceRow } from '@/components/invoices/invoice-row-types';
 
 export function InvoicesPullToRefresh({
   tenantId,
@@ -13,6 +13,8 @@ export function InvoicesPullToRefresh({
   listKey,
   filtered = false,
   summary,
+  facts,
+  today,
 }: {
   tenantId: string;
   initialInvoices: InvoiceRow[];
@@ -22,6 +24,10 @@ export function InvoicesPullToRefresh({
   filtered?: boolean;
   /** Opis zakresu pozycji pod nagłówkiem tabeli. */
   summary?: string;
+  /** Fakty płatności wierszy z serwera (id → fakty). */
+  facts?: InvoiceFactsById;
+  /** Dziś w Europe/Warsaw (RRRR-MM-DD). */
+  today?: string;
 }) {
   const router = useRouter();
 
@@ -33,6 +39,8 @@ export function InvoicesPullToRefresh({
         initialInvoices={initialInvoices}
         filtered={filtered}
         summary={summary}
+        facts={facts}
+        today={today}
       />
     </PullToRefresh>
   );

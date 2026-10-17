@@ -1,29 +1,41 @@
-import Link from 'next/link';
-import { cn } from '@/lib/utils';
-import { PlusCircle } from 'lucide-react';
-
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { getPageContext } from '@/lib/supabase/page-context';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import {
-  INVOICE_PAGE_SIZE,
   INVOICE_STATUS_FILTERS,
-  invoiceListHref,
   isFilteredList,
   pageRange,
   parseInvoiceListParams,
+  paymentFilterSpec,
   searchOrFilter,
 } from '@/lib/invoices/list-query';
-import { InvoicesPullToRefresh } from './_components/invoices-pull-to-refresh';
+import {
+  LIST_ROW_FACT_COLUMNS,
+  loadInvoiceListRowFacts,
+  type InvoiceListRowFacts,
+  type ListRowFactsRow,
+} from '@/lib/invoices/list-row-facts';
+import { getPageContext } from '@/lib/supabase/page-context';
 import { BatchPdfDownload } from '@/components/invoices/batch-pdf-download';
-import type { InvoiceRow } from '@/components/invoices/invoice-row-types';
+import type { InvoiceFactsById, InvoiceRow } from '@/components/invoices/invoice-row-types';
+import { InvoiceStatTiles } from './_components/invoice-stat-tiles';
+import { InvoicesPagination } from './_components/invoices-pagination';
+import { InvoicesPullToRefresh } from './_components/invoices-pull-to-refresh';
+import { InvoicesToolbar } from './_components/invoices-toolbar';
 
 export const dynamic = 'force-dynamic';
 
+/** Kolumny listy: widok wiersza + pola płatności i błędu KSeF + fakty §2.4 pkt 11. */
+const LIST_COLUMNS = `id, internal_number, issue_date, buyer_data, gross_total, ksef_status, ksef_number, created_at, xml_storage_path, payment_status, payment_due_date, paid_amount, currency, invoice_kind, last_error_code, ${LIST_ROW_FACT_COLUMNS}`;
+
+type ListQueryRow = InvoiceRow & ListRowFactsRow;
+
 /**
- * Lista faktur wystawionych z wyszukiwaniem, filtrem statusu i okresu oraz
- * stronicowaniem w bazie (F-086). Parametry w adresie — działa bez JS
- * (formularz GET) i daje się zapisać w zakładkach.
+ * Lista faktur wystawionych (P3, PLAN-FINORA §5): kafle, pasek filtrów,
+ * tabela Finory od `lg` i karty na telefonie. Serwer jest właścicielem
+ * danych, filtrów i stronicowania — parametry w adresie (formularz GET działa
+ * bez JS, stan da się zapisać w zakładkach). Wyszukiwanie, filtry i strony
+ * liczy baza na pełnym zbiorze (F-086).
  */
 export default async function InvoicesPage({
   searchParams,
@@ -32,18 +44,33 @@ export default async function InvoicesPage({
 }) {
   const { supabase, tenantId } = await getPageContext();
   const params = parseInvoiceListParams((await searchParams) ?? {});
-  const [rangeFrom, rangeTo] = pageRange(params.page);
+  const today = todayInWarsaw();
+  const [rangeFrom, rangeTo] = pageRange(params.page, params.perPage);
 
   let query = supabase
     .from('invoices')
-    .select(
-      'id, internal_number, issue_date, buyer_data, gross_total, ksef_status, ksef_number, created_at, xml_storage_path',
-      { count: 'exact' },
-    )
+    .select(LIST_COLUMNS, { count: 'exact' })
     .eq('tenant_id', tenantId)
     .eq('direction', 'outgoing');
   const statuses = INVOICE_STATUS_FILTERS[params.status].statuses;
   if (statuses) query = query.in('ksef_status', [...statuses]);
+  if (params.kind !== 'wszystkie') query = query.eq('invoice_kind', params.kind);
+  for (const cond of paymentFilterSpec(params.payment, today) ?? []) {
+    switch (cond.op) {
+      case 'eq':
+        query = query.eq(cond.column, cond.value);
+        break;
+      case 'neq':
+        query = query.neq(cond.column, cond.value);
+        break;
+      case 'lt':
+        query = query.lt(cond.column, cond.value);
+        break;
+      case 'in':
+        query = query.in(cond.column, [...cond.value]);
+        break;
+    }
+  }
   if (params.from) query = query.gte('issue_date', params.from);
   if (params.to) query = query.lte('issue_date', params.to);
   const search = searchOrFilter(params.q);
@@ -54,132 +81,85 @@ export default async function InvoicesPage({
     .order('id', { ascending: false })
     .range(rangeFrom, rangeTo);
 
-  const rows = (invoices ?? []) as InvoiceRow[];
+  const rows = (invoices ?? []) as unknown as ListQueryRow[];
   const total = count ?? rows.length;
-  const pages = Math.max(1, Math.ceil(total / INVOICE_PAGE_SIZE));
   const filtered = isFilteredList(params);
+
+  // Fakty wierszy tej strony (≤ 50): ikona płatności, „Do zapłaty”, „Korekta”.
+  // Błąd odczytu nie chowa listy — wiersze dostają „—”, a kafle mają własne granice błędów.
+  let facts = new Map<string, InvoiceListRowFacts>();
+  let factsError: string | null = null;
+  if (!error && rows.length > 0) {
+    try {
+      facts = await loadInvoiceListRowFacts(supabase, tenantId, rows);
+    } catch (e) {
+      factsError = e instanceof Error ? e.message : 'Nie udało się policzyć płatności';
+    }
+  }
+  const factsById: InvoiceFactsById = Object.fromEntries(facts);
+
   const listKey = rows
-    .map(
-      (row) =>
-        `${row.id}:${row.ksef_status}:${String(row.internal_number ?? '')}:${String(row.ksef_number ?? '')}:${String(row.xml_storage_path ?? '')}`
-    )
+    .map((row) => {
+      const f = factsById[row.id];
+      return [
+        row.id,
+        row.ksef_status,
+        row.internal_number ?? '',
+        row.ksef_number ?? '',
+        row.xml_storage_path ?? '',
+        row.payment_status ?? '',
+        row.payment_due_date ?? '',
+        String(row.paid_amount ?? ''),
+        row.currency ?? '',
+        row.invoice_kind ?? '',
+        row.last_error_code ?? '',
+        f ? `${f.payment ?? '-'}/${f.outstanding ?? '-'}/${f.canCorrect ? 1 : 0}` : '',
+      ].join(':');
+    })
     .join('|');
 
   return (
-    <div className="space-y-8 pb-10 text-[var(--ff-on-surface)]">
+    <div className="space-y-6 pb-10">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-            Faktury wystawione
-          </h1>
-          <p className="text-sm text-[var(--ff-text-muted)]">
+          <h1 className="text-2xl font-semibold tracking-tight">Faktury wystawione</h1>
+          <p className="text-muted-foreground text-sm">
             Faktury sprzedażowe — szkice, wysłane i przyjęte w KSeF
           </p>
         </div>
-        {/* `flex-wrap` i pełna szerokość poniżej `sm`: na 375 px pasek
-            rozpychał się do 452 px, więc przycisk „Nowa faktura" był przycięty
-            przy prawej krawędzi. Strona nie przewijała się w bok, bo treść jest
-            obcinana — czyli defekt nie dawał o sobie znać niczym poza tym, że
-            przycisku po prostu nie dało się dokliknąć.
-            Na telefonie „Nowa faktura" jest i tak w dolnej nawigacji, ale
-            przycięty przycisk wygląda jak zepsuta strona. */}
-        <div className="flex w-full flex-wrap items-end gap-3 sm:w-auto">
-          <BatchPdfDownload />
-          <Link
-            href="/invoices/new"
-            className={cn(buttonVariants({ variant: 'glass-primary' }), 'flex-1 sm:flex-none')}
-          >
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Nowa faktura
-          </Link>
-        </div>
+        <BatchPdfDownload />
       </div>
 
-      <form
-        method="get"
-        action="/invoices"
-        className="ff-glass-pane flex flex-wrap items-end gap-3 rounded-[var(--ff-radius-lg)] p-4"
-      >
-        <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-[12px] font-semibold text-[var(--ff-text-muted)]">
-          Szukaj
-          <Input
-            name="q"
-            defaultValue={params.q}
-            placeholder="Numer, nabywca, NIP albo kwota brutto"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-[12px] font-semibold text-[var(--ff-text-muted)]">
-          Status
-          <select
-            name="status"
-            defaultValue={params.status}
-            className="h-9 rounded-md border border-[var(--ff-border)] bg-transparent px-3 text-sm text-[var(--ff-on-surface)]"
-          >
-            {Object.entries(INVOICE_STATUS_FILTERS).map(([value, f]) => (
-              <option key={value} value={value}>
-                {f.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-[12px] font-semibold text-[var(--ff-text-muted)]">
-          Wystawione od
-          <Input type="date" name="od" defaultValue={params.from ?? ''} />
-        </label>
-        <label className="flex flex-col gap-1 text-[12px] font-semibold text-[var(--ff-text-muted)]">
-          do
-          <Input type="date" name="do" defaultValue={params.to ?? ''} />
-        </label>
-        <div className="flex gap-2">
-          <Button type="submit" variant="glass-primary">
-            Filtruj
-          </Button>
-          {filtered && (
-            <Link href="/invoices" className={buttonVariants({ variant: 'outline' })}>
-              Wyczyść
-            </Link>
-          )}
-        </div>
-      </form>
+      <InvoiceStatTiles supabase={supabase} tenantId={tenantId} />
+
+      <Card className="gap-0 py-0 shadow-none">
+        <InvoicesToolbar params={params} filtered={filtered} />
+      </Card>
 
       {error ? (
-        <div className="rounded-[var(--ff-radius-lg)] border border-[var(--ff-danger)]/25 bg-[var(--ff-danger-tint)] px-5 py-4 text-sm text-[var(--ff-danger)]">
-          Nie udało się pobrać faktur: {error.message}
-        </div>
+        <Alert variant="destructive">
+          <AlertTitle>Nie udało się pobrać faktur: {error.message}</AlertTitle>
+        </Alert>
       ) : (
         <>
+          {factsError ? (
+            <Alert>
+              <AlertTitle>Nie udało się policzyć płatności</AlertTitle>
+              <AlertDescription>
+                Kolumny „Płatność”, „Do zapłaty” i akcja „Korekta” są chwilowo ukryte: {factsError}
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <InvoicesPullToRefresh
             tenantId={tenantId}
             listKey={listKey}
             initialInvoices={rows}
+            facts={factsById}
+            today={today}
             filtered={filtered}
-            summary={
-              total === 0
-                ? undefined
-                : `${rangeFrom + 1}–${rangeFrom + rows.length} z ${total} • sortowanie wg daty utworzenia`
-            }
+            summary={total === 0 ? undefined : 'Sortowanie wg daty utworzenia'}
           />
-          {pages > 1 && (
-            <nav className="flex items-center justify-between gap-3 text-sm" aria-label="Strony listy faktur">
-              {params.page > 1 ? (
-                <Link className="font-semibold text-[var(--ff-primary)]" href={invoiceListHref(params, { page: params.page - 1 })}>
-                  ← Poprzednia
-                </Link>
-              ) : (
-                <span />
-              )}
-              <span className="text-[var(--ff-text-muted)]">
-                Strona {Math.min(params.page, pages)} z {pages}
-              </span>
-              {params.page < pages ? (
-                <Link className="font-semibold text-[var(--ff-primary)]" href={invoiceListHref(params, { page: params.page + 1 })}>
-                  Następna →
-                </Link>
-              ) : (
-                <span />
-              )}
-            </nav>
-          )}
+          {total > 0 ? <InvoicesPagination params={params} total={total} /> : null}
         </>
       )}
     </div>
