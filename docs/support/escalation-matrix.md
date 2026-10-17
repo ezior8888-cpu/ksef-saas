@@ -40,6 +40,19 @@ Priorytet ocenia człowiek przy przeglądaniu eskalacji — AI go nie ustala.
 - **Zwroty / reklamacje płatności** — patrz `docs/support/refund-policy.md`.
 - **Żądania RODO** (eksport, usunięcie konta) — user robi to sam w
   ustawieniach. Eskalacja tylko, gdy user stracił dostęp do konta.
+- **Usunięcie firmy (organizacji)** — od 15.10.2026 tylko przez pomoc:
+  przycisk w ustawieniach niczego nie zapisuje i kieruje na adres pomocy
+  (`components/settings/account-actions.ts`). Aplikacja nie umie jeszcze
+  wyłączyć ani usunąć firmy — flagi `tenants.deleted_at` / `is_active`
+  niczego nie blokują. Postępowanie:
+  1. Upewnij się, że pisze właściciel: adres nadawcy = e-mail konta
+     z rolą `owner` w firmie o podanym NIP.
+  2. Zaproponuj eksport danych przed usunięciem (Księgowość → Eksport).
+  3. Abonament właściciel anuluje sam: Ustawienia → Subskrypcja
+     i rozliczenia → panel Stripe. Bez tego opłaty idą dalej.
+  4. Zgłoś sprawę Bartoszowi — wyłączenie dostępu i usunięcie danych firmy
+     wymaga decyzji i ręcznej procedury. Nie ustawiaj flag w bazie „na
+     próbę”: dają złudzenie usunięcia, a firma działa dalej.
 
 ## Po rozwiązaniu
 

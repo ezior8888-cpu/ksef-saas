@@ -1,12 +1,21 @@
 'use client';
 
-import Image from 'next/image';
 import { motion } from 'framer-motion';
 
 import { DrawnVideo } from '@/components/ui/drawn-video';
 import { asset } from '../_assets';
 import { MaskReveal, MaskRevealWords } from './mask-reveal';
 import { Container } from './ui';
+
+const INTEGRATIONS = [
+  'KSeF (Ministerstwo Finansów)',
+  'REGON (GUS)',
+  'Biała lista VAT',
+  'VIES',
+  'Kursy walut NBP',
+  'Import z Fakturowni, inFaktu, wFirmy i iFirmy (CSV)',
+  'Logowanie przez Google',
+];
 
 /** Oryginał: nagłówek 550 wyśrodkowany, POD nim pas 946 z filmem i logotypami. */
 export function Integrations() {
@@ -19,8 +28,8 @@ export function Integrations() {
           </h2>
           <MaskReveal delay={0.18}>
             <p className="z-lead text-[var(--z-muted)]">
-              Pobierzemy dane z banku, poczty i sklepu, żebyś nie
-              przepisywał ich ręcznie.
+              Dane kontrahentów pobieramy z rejestrów publicznych, faktury
+              z KSeF, a historię przeniesiesz z innego programu do faktur.
             </p>
           </MaskReveal>
         </div>
@@ -40,26 +49,25 @@ export function Integrations() {
               />
             </motion.div>
 
-          <div className="flex w-full flex-wrap items-center justify-center gap-x-12 gap-y-8">
-            {asset.integrations.logos.map((src, i) => (
-              <motion.div
-                key={src}
+          {/* Do 15.10.2026: fikcyjne logotypy z szablonu i obietnica
+              „pobierzemy dane z banku, poczty i sklepu” — takich integracji
+              nie ma. Lista niżej ma pokrycie w kodzie (lib/ksef, lib/gus,
+              lib/validation, lib/nbp, lib/import/csv-parsers, logowanie Google).
+              Nowa pozycja tylko razem z działającą integracją. */}
+          <ul className="flex w-full flex-wrap items-center justify-center gap-3">
+            {INTEGRATIONS.map((name, i) => (
+              <motion.li
+                key={name}
                 initial={{ opacity: 0, y: 10 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.4 }}
                 transition={{ duration: 0.55, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
-                className="flex h-7 items-center"
+                className="z-body rounded-full border border-[var(--z-300)] bg-white px-4 py-2 text-[var(--z-black)]"
               >
-                <Image
-                  src={src}
-                  alt="Logo integracji"
-                  width={48}
-                  height={28}
-                  className="h-7 w-auto object-contain"
-                />
-              </motion.div>
+                {name}
+              </motion.li>
             ))}
-          </div>
+          </ul>
         </div>
       </Container>
     </section>

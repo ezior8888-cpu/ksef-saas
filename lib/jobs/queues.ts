@@ -121,6 +121,9 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.process-offline-queue', cron: '*/5 * * * *', tz: TZ },
   { queue: 'cron.reminder-scheduler', cron: '0 * * * *', tz: TZ },
   { queue: 'cron.retention-delete', cron: '0 4 * * *', tz: TZ },
+  // Retencja czatu pomocy: „do 24 miesięcy od ostatniej wiadomości” (polityka
+  // prywatności). Codziennie — przy kadencji miesięcznej rozmowa żyłaby 25.
+  { queue: 'cron.support-chat-retention', cron: '30 3 * * *', tz: TZ },
   { queue: 'cron.trial-countdown-emails', cron: '0 9 * * *', tz: TZ },
   { queue: 'cron.upo-retry-stale', cron: '5 * * * *', tz: TZ },
   { queue: 'cron.verify-backup', cron: '0 3 * * 0', tz: TZ },

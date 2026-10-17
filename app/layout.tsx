@@ -7,6 +7,13 @@ import {
   IBM_Plex_Mono,
 } from 'next/font/google';
 
+// Ikony panelu z własnego serwera (pakiet `material-symbols`, Apache-2.0).
+// Do 15.10.2026 arkusz i czcionka szły z fonts.googleapis.com / fonts.gstatic.com
+// na KAŻDEJ stronie — adres IP odwiedzającego trafiał do Google bez zgody
+// (LG München I, 3 O 17493/20: 100 € zadośćuczynienia, potem fala wezwań).
+// `next/font/google` pobiera czcionki przy budowaniu, ale ikon Material Symbols
+// nie obsługuje — stąd pakiet. Pilnuje: tests/unit/bez-czcionek-google.test.ts.
+import 'material-symbols/outlined.css';
 import './globals.css';
 import { AnalyticsProvider } from '@/components/analytics/analytics-provider';
 import { SentryClientInit } from '@/components/sentry-client-init';
@@ -56,10 +63,12 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: 'KSeF SaaS',
+  // Marka to FaktFlow. „KSeF SaaS” (nazwa robocza) łączyła się z nazwą
+  // państwowego systemu i mogła sugerować produkt Ministerstwa Finansów.
+  title: 'FaktFlow',
   description: 'Faktury KSeF dla mikrofirm',
   // PWA / iOS (Safari) — manifest z `app/manifest.ts` nie wystarczy na iOS
-  applicationName: 'KSeF SaaS',
+  applicationName: 'FaktFlow',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -111,18 +120,6 @@ export default function RootLayout({
             malowaniem, gdy klient wybrał ciemny. Kolejność ma znaczenie:
             skrypt musi być pierwszym elementem <head>. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        {/* Nie @import w globals.css — Tailwind rozwija CSS i @import musi być na początku pliku. */}
-        {/* eslint-disable-next-line @next/next/no-page-custom-font -- App Router; Material Symbols dla dashboardu */}
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
-        />
       </head>
       <body className="min-h-screen font-sans antialiased text-foreground">
         <SentryClientInit />

@@ -26,7 +26,10 @@ const QA = [
   },
   {
     q: 'Gdzie trzymacie moje dane?',
-    a: 'Na serwerach w Niemczech, szyfrowane. Faktury przechowujemy dziesięć lat, tak jak wymagają przepisy.',
+    // Do 15.10.2026: „szyfrowane” (bez rozróżnienia, co) i „dziesięć lat” —
+    // dane trzymamy przez czas umowy (regulamin § 7 ust. 6); 10 lat
+    // przechowuje faktury KSeF, czyli Ministerstwo Finansów.
+    a: 'Na serwerach w Niemczech. Połączenia są szyfrowane, a tokeny KSeF zapisujemy zaszyfrowane. Dokumenty trzymamy przez cały czas korzystania z FaktFlow i w każdej chwili możesz je wyeksportować. Faktury wysłane do KSeF przechowuje też Ministerstwo Finansów.',
   },
   {
     q: 'Czy mogę zrezygnować w każdej chwili?',

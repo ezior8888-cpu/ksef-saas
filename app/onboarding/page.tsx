@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 
 import { BrandWordmark } from '@/components/brand/brand-wordmark';
@@ -7,6 +8,7 @@ import { OnboardingForm } from '@/components/onboarding/form';
 import { FIRST_COMPANY_CLOSED_MESSAGE, isSignupClosed } from '@/lib/feature-flags/signups';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
 import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
+import { LEGAL_GATE_PATH, needsTermsAcceptance } from '@/lib/legal/acceptance';
 
 interface OnboardingPageProps {
   searchParams: Promise<{
@@ -37,7 +39,12 @@ export default async function OnboardingPage(props: OnboardingPageProps) {
   if (sp.invite) query.set('invite', sp.invite);
   if (sp.action) query.set('action', sp.action);
   const returnTo = '/onboarding' + (query.size ? '?' + query.toString() : '');
-  await requireVerifiedUserForPage(returnTo);
+  const { user } = await requireVerifiedUserForPage(returnTo);
+  // Konto z Google zakłada się bez naszego formularza — tu łapiemy je przed
+  // utworzeniem pierwszej firmy (bramka śpi, dopóki dokumenty są robocze).
+  if (needsTermsAcceptance(user.app_metadata)) {
+    redirect(`${LEGAL_GATE_PATH}?next=${encodeURIComponent(returnTo)}`);
+  }
 
   const cookieStore = await cookies();
   const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;

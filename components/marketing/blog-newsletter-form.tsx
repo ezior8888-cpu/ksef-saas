@@ -74,6 +74,18 @@ export function BlogNewsletterForm() {
       >
         {pending ? 'Zapisuję…' : 'Zapisz się'}
       </button>
+      {/* Obowiązek informacyjny przy zbieraniu adresu (art. 13 RODO) — skrót
+          z odesłaniem; kliknięcie „Zapisz się” jest wyraźnym działaniem
+          potwierdzającym zgodę na newsletter. */}
+      <p className="text-[11px] leading-relaxed text-[var(--blog-text-metadata)]">
+        Klikając „Zapisz się”, zgadzasz się na otrzymywanie newslettera FaktFlow
+        e-mailem. Zgodę wycofasz w każdej chwili linkiem w wiadomości.
+        Administrator i Twoje prawa:{' '}
+        <a href="/legal/polityka-prywatnosci" className="underline underline-offset-2">
+          polityka prywatności
+        </a>
+        .
+      </p>
     </form>
   );
 }

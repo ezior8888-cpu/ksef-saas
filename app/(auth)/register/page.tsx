@@ -14,6 +14,8 @@ import {
   authTitleClass,
 } from '@/components/auth/auth-form-styles';
 import { TurnstileWidget } from '@/components/auth/turnstile-widget';
+import { LegalInline } from '@/components/legal/legal-document';
+import { MARKETING_STATEMENT, TERMS_STATEMENT } from '@/lib/legal/versions';
 import { isSignupClosed, SIGNUPS_CLOSED_MESSAGE } from '@/lib/feature-flags/signups';
 import { loginWithGoogle } from '../login/actions';
 import { signupWithEmail } from './actions';
@@ -31,6 +33,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   'email rate limit exceeded':
     'Przekroczono limit wysyłki maili. Poczekaj kilka minut i spróbuj ponownie.',
   signups_disabled: SIGNUPS_CLOSED_MESSAGE,
+  terms_required:
+    'Aby założyć konto, zaakceptuj Regulamin i Umowę powierzenia (pierwsze pole wyboru).',
 };
 
 export default async function RegisterPage({
@@ -101,6 +105,16 @@ export default async function RegisterPage({
           </svg>
           Zarejestruj przez Google
         </Button>
+        {/* Konto z Google powstaje bez naszego formularza — wyraźną akceptację
+            zbiera bramka /onboarding/zgody (lib/legal/acceptance.ts), gdy
+            dokumenty przestaną być wersją roboczą. */}
+        <p className={`mt-2 text-center text-xs leading-relaxed ${authMutedTextClass}`}>
+          Rejestrując się przez Google, akceptujesz{' '}
+          <LegalInline
+            text="[Regulamin](/legal/regulamin) i [Umowę powierzenia](/legal/umowa-powierzenia) oraz potwierdzasz zapoznanie się z [Polityką prywatności](/legal/polityka-prywatnosci)."
+            linkClassName={authLinkClass}
+          />
+        </p>
       </form>
 
       <AuthDivider />
@@ -149,6 +163,32 @@ export default async function RegisterPage({
             Min. 12 znaków, mała + duża litera, cyfra, znak specjalny. Sprawdzamy w bazie wycieków.
           </p>
         </div>
+        {/* Zgody: pierwsze pole obowiązkowe (sprawdza je też serwer), drugie
+            dobrowolne i domyślnie odznaczone (art. 7 RODO, art. 398 PKE).
+            Brzmienie z lib/legal/versions.ts — to samo trafia do zapisu. */}
+        <div className="space-y-3">
+          <label className={`flex items-start gap-2.5 text-xs leading-relaxed ${authMutedTextClass}`}>
+            <input
+              type="checkbox"
+              name="terms"
+              value="on"
+              required
+              className="mt-0.5 h-4 w-4 shrink-0 accent-current"
+            />
+            <span>
+              <LegalInline text={TERMS_STATEMENT.text} linkClassName={authLinkClass} /> (wymagane)
+            </span>
+          </label>
+          <label className={`flex items-start gap-2.5 text-xs leading-relaxed ${authMutedTextClass}`}>
+            <input
+              type="checkbox"
+              name="marketing"
+              value="on"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-current"
+            />
+            <span>{MARKETING_STATEMENT.text} (dobrowolne)</span>
+          </label>
+        </div>
         <TurnstileWidget action="register" theme="light" />
         <Button type="submit" size="lg" className={authPrimaryButtonClass}>
           Utwórz konto
@@ -159,16 +199,6 @@ export default async function RegisterPage({
         Masz już konto?{' '}
         <Link href="/login" className={authLinkClass}>
           Zaloguj się
-        </Link>
-      </p>
-      <p className={`text-center text-xs ${authMutedTextClass}`}>
-        Rejestrując się akceptujesz{' '}
-        <Link href="/legal/regulamin" className={authLinkClass}>
-          regulamin
-        </Link>{' '}
-        i{' '}
-        <Link href="/legal/polityka-prywatnosci" className={authLinkClass}>
-          politykę prywatności
         </Link>
       </p>
     </div>

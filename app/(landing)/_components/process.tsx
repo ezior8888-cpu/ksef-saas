@@ -1,29 +1,28 @@
 'use client';
 
-import Image from 'next/image';
 import { motion } from 'framer-motion';
 
-import { asset } from '../_assets';
 import { Container, SectionHeading } from './ui';
 
+// Bez obrazków od 15.10.2026: kroki ilustrowały akcje Apple, Microsoft
+// i Walmart oraz wykresy w dolarach z szablonu, nie FaktFlow.
+// Krok 3: numer KSeF przychodzi po przyjęciu faktury przez system
+// ministerstwa — „jedno kliknięcie i masz numer” obiecywało za dużo.
 const STEPS = [
   {
     n: '01',
     title: 'Podłącz firmę',
     body: 'Wpisujesz NIP, resztę danych pobieramy z rejestru.',
-    image: asset.process.stepA,
   },
   {
     n: '02',
     title: 'Wystaw fakturę',
-    body: 'Uzupełniasz pozycje, my pilnujemy poprawności pliku.',
-    image: asset.process.stepC,
+    body: 'Uzupełniasz pozycje, a program sprawdza plik ze schemą KSeF przed wysyłką.',
   },
   {
     n: '03',
     title: 'Wyślij do KSeF',
-    body: 'Jedno kliknięcie i masz numer oraz potwierdzenie.',
-    image: asset.process.stepB,
+    body: 'Jedno kliknięcie wysyła fakturę. Gdy KSeF ją przyjmie, widzisz numer KSeF i potwierdzenie odbioru.',
   },
 ];
 
@@ -51,15 +50,6 @@ export function Process() {
               }}
               className="flex flex-col gap-6 rounded-[20px] bg-white p-6 transition-shadow duration-300 hover:shadow-[0_16px_40px_-16px_rgba(16,32,64,0.22)]"
             >
-              <div className="flex h-[180px] items-center justify-center">
-                <Image
-                  src={s.image}
-                  alt={s.title}
-                  width={307}
-                  height={307}
-                  className="h-full w-auto object-contain"
-                />
-              </div>
               <div className="flex flex-col gap-2">
                 <span className="z-small text-[var(--z-muted)]">{s.n}</span>
                 <h3 className="z-h4">{s.title}</h3>

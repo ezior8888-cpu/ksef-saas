@@ -28,7 +28,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 const SUCCESS_MESSAGES: Record<string, string> = {
   check_email: 'Konto utworzone! Sprawdź swoją skrzynkę pocztową — wysłaliśmy link aktywacyjny.',
-  account_deleted: 'Zapisaliśmy żądanie usunięcia firmy. Zostałeś wylogowany — konto zostanie trwale usunięte po upływie okresu retencji (30 dni), o ile nie cofniesz decyzji z pomocą techniczną.',
+  // Bez `account_deleted` od 15.10.2026: usuwanie firmy z aplikacji jest
+  // wstrzymane (components/settings/account-actions.ts), a komunikat obiecywał
+  // trwałe usunięcie po 30 dniach, którego nic nie wykonywało.
   session_expired: 'Wylogowaliśmy Cię po godzinie bezczynności. Zaloguj się ponownie, aby kontynuować.',
 };
 

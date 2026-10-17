@@ -1,11 +1,13 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { ArrowRight, Check, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { LegalInline } from '@/components/legal/legal-document';
 import { Button } from '@/components/ui/button';
 import { PRICE_GROSS, PRICE_NET, TRIAL_DAYS } from '@/lib/billing/pricing';
+import { CHECKOUT_STATEMENT } from '@/lib/legal/versions';
 
 import { startCheckoutAction } from '../actions';
 
@@ -16,20 +18,23 @@ const FEATURES = [
   'Wkurzacz Dłużników',
   'Magiczny import z konkurencji',
   'Co-Pilot Księgowego',
-  'PWA mobilna z OCR',
+  // Dawniej „PWA mobilna z OCR” — panel na telefonie jest wyłączony (/mobile).
+  'Odczyt paragonów (AI) z limitem dziennym i miesięcznym',
   'Wsparcie po polsku',
 ];
 
 interface PlanCardProps {
   isPending: boolean;
   onSelect: () => void;
+  statementAccepted: boolean;
+  onStatementChange: (accepted: boolean) => void;
 }
 
 /**
  * Jeden plan miesięczny (decyzja z 1 października 2026, lib/billing/pricing.ts).
  * Plan roczny nie jest sprzedawany — akcja zakupu też go odrzuca.
  */
-function PlanCard({ isPending, onSelect }: PlanCardProps) {
+function PlanCard({ isPending, onSelect, statementAccepted, onStatementChange }: PlanCardProps) {
   return (
     <div className="ff-glass-pane relative rounded-[var(--ff-radius-lg)] border-emerald-500/40 bg-emerald-500/5 p-6 shadow-glass-lg">
       <div className="absolute -top-3 right-6 rounded-full bg-emerald-500/90 px-3 py-1 text-xs font-semibold text-white">
@@ -56,11 +61,25 @@ function PlanCard({ isPending, onSelect }: PlanCardProps) {
         z VAT · {PRICE_NET} netto
       </p>
 
+      {/* Oświadczenie przed płatnością — brzmienie z lib/legal/versions.ts,
+          serwer odrzuca zakup bez niego (startCheckoutAction). */}
+      <label className="mt-6 flex items-start gap-2.5 text-xs leading-relaxed text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={statementAccepted}
+          onChange={(e) => onStatementChange(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0"
+        />
+        <span>
+          <LegalInline text={CHECKOUT_STATEMENT.text} linkClassName="underline underline-offset-2" />
+        </span>
+      </label>
+
       <Button
         size="lg"
         variant="glass-primary"
-        className="mt-6 w-full"
-        disabled={isPending}
+        className="mt-4 w-full"
+        disabled={isPending || !statementAccepted}
         onClick={onSelect}
       >
         {isPending ? (
@@ -87,11 +106,12 @@ function PlanCard({ isPending, onSelect }: PlanCardProps) {
 
 export function PlanCards() {
   const [isPending, startTransition] = useTransition();
+  const [statementAccepted, setStatementAccepted] = useState(false);
 
   const handleSelect = () => {
     startTransition(async () => {
       try {
-        await startCheckoutAction('monthly');
+        await startCheckoutAction('monthly', statementAccepted);
         // `startCheckoutAction` rzuca NEXT_REDIRECT — kod tu nie dotrze przy
         // sukcesie. Toast wyląduje gdy redirect wróci z `?error=...`.
       } catch (e) {
@@ -106,7 +126,12 @@ export function PlanCards() {
 
   return (
     <div className="max-w-md">
-      <PlanCard isPending={isPending} onSelect={handleSelect} />
+      <PlanCard
+        isPending={isPending}
+        onSelect={handleSelect}
+        statementAccepted={statementAccepted}
+        onStatementChange={setStatementAccepted}
+      />
     </div>
   );
 }
