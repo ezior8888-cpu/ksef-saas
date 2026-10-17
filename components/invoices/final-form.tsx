@@ -69,6 +69,15 @@ export interface FinalInvoiceFormProps {
   advanceInvoices: AdvanceOptionRow[];
 }
 
+// E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
+const PAYMENT_METHOD_ITEMS = [
+  { value: 'transfer', label: 'Przelew' },
+  { value: 'cash', label: 'Gotówka' },
+  { value: 'card', label: 'Karta' },
+  { value: 'compensation', label: 'Kompensata' },
+  { value: 'other', label: 'Inna' },
+] as const
+
 function advanceLabel(row: AdvanceOptionRow): string {
   const num = row.internal_number?.trim() || row.ksef_number?.trim() || row.id.slice(0, 8);
   return num;
@@ -510,19 +519,21 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
             <Label className={labelClass}>Metoda</Label>
             <Select
               value={paymentMethodWatch}
-              onValueChange={(v) =>
+              items={PAYMENT_METHOD_ITEMS}
+              onValueChange={(v) => {
+                if (v == null) return
                 form.setValue('paymentMethod', v as FinalFormIn['paymentMethod'])
-              }
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="transfer">Przelew</SelectItem>
-                <SelectItem value="cash">Gotówka</SelectItem>
-                <SelectItem value="card">Karta</SelectItem>
-                <SelectItem value="compensation">Kompensata</SelectItem>
-                <SelectItem value="other">Inna</SelectItem>
+                {PAYMENT_METHOD_ITEMS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

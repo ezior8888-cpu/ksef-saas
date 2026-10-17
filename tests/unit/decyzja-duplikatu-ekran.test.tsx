@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * Do PR B komponentu nie było: karta pokazywała tylko dane oryginału i notę
  * „Zajmujemy się tym”.
  *
- * Prawdziwe: `KsefDuplicateDecision`, checkbox (radix). Zastąpione: akcja
+ * Prawdziwe: `KsefDuplicateDecision`, checkbox. Zastąpione: akcja
  * serwerowa, `next/navigation`, `next/link`, `sonner` i dialog (bez portalu).
  */
 

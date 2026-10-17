@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
+import { cookies } from 'next/headers';
 import { assertDashboardShellAccess } from '@/lib/dashboard-shell-data';
-import { signOut } from '../(auth)/login/actions';
 import DashboardOrgHeader, {
   OrgSwitcherHeaderSkeleton,
 } from '@/app/(dashboard)/_components/dashboard-org-header';
@@ -8,17 +8,20 @@ import { DashboardPageHeading } from '@/app/(dashboard)/_components/dashboard-pa
 import { DashboardRouteFlags } from '@/components/dashboard/dashboard-route-flags';
 import { DashboardVerificationBannerSlot } from '@/app/(dashboard)/_components/dashboard-verification-banner';
 import { KsefHealthBanner } from '@/app/(dashboard)/_components/ksef-health-banner';
+import { AppHeader } from '@/components/dashboard/app-header';
+import { AppSidebar } from '@/components/dashboard/app-sidebar';
 import { BottomNav } from '@/components/dashboard/bottom-nav';
-import { BrandWordmark } from '@/components/brand/brand-wordmark';
+import { Footer } from '@/components/dashboard/footer';
 import { PrefetchDashboardRoutes } from '@/components/dashboard/prefetch-dashboard-routes';
 import { PrefetchExportsRoute } from '@/components/dashboard/exports-route-client';
-import { Sidebar } from '@/components/dashboard/sidebar';
-import { ThemeToggle } from '@/components/dashboard/theme-toggle';
 import { WelcomeModal } from '@/components/dashboard/welcome-modal';
 import { IdleWatcher } from '@/components/auth/idle-watcher';
 import { InstallPrompt } from '@/components/pwa/install-prompt-lazy';
 import { AnalyticsIdentify } from '@/components/analytics/analytics-identify';
 import { SupportWidget } from '@/components/support/support-widget';
+import { PortalContainerProvider } from '@/components/ui/portal-container';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { getAllHelpArticles } from '@/lib/help/articles';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { createClient } from '@/lib/supabase/server';
@@ -57,6 +60,16 @@ export default async function DashboardLayout({
   } = await supabase.auth.getUser();
   const activeOrg = await getActiveOrgIdFromCookies();
 
+  // Stan paska bocznego (rozwinięty / zwinięty do ikon) z ciasteczka, które
+  // zapisuje `SidebarProvider` — bez tego pasek „skakałby" po hydracji.
+  const sidebarOpen = (await cookies()).get('sidebar_state')?.value !== 'false';
+
+  // Imię do menu avatara, jeśli GoTrue je ma (Google OAuth: `full_name`).
+  const metaName: unknown =
+    user?.user_metadata?.full_name ?? user?.user_metadata?.name;
+  const userName =
+    typeof metaName === 'string' && metaName.trim() ? metaName.trim() : undefined;
+
   // Mapa slug → tytuł dla chipsów cytowań w support widgecie.
   const helpArticleTitles: Record<string, string> = Object.fromEntries(
     getAllHelpArticles().map((a) => [a.slug, a.title]),
@@ -65,91 +78,75 @@ export default async function DashboardLayout({
   // `100dvh`, nie `100vh`: na iOS Safari `100vh` to wysokość okna BEZ pasków
   // przeglądarki, więc dolna krawędź szkieletu chowa się pod paskiem adresu.
   // Wysokość nagłówka niesie `.ff-shell-header` (tokeny `--ff-header-h`
-  // i `--ff-safe-t`), stąd brak `h-20` niżej.
+  // i `--ff-safe-t`), stąd brak `h-20` w `AppHeader`.
+  //
+  // SZKIELET FINORY (plan Finora P0, E2). `SidebarProvider` jest korzeniem
+  // i nosi `ff-dashboard` (tokeny, skala SM, motyw). `PortalContainerProvider`
+  // stoi w środku korzenia, ale POZA animowanym `.ff-route-template`, żeby
+  // menu, okna i podpowiedzi Base UI dziedziczyły tokeny, a `transform`
+  // animacji trasy nie przypinał ich do pudełka strony.
+  //
+  // ŁAŃCUCH WYSOKOŚCI EKRANU AGENTA — nie wstawiaj opakowań:
+  // `.ff-shell-scroll` > JEDEN `<div>` (kontener max-w) > baner, baner KSeF,
+  // `{children}` jako OSTATNIE dziecko. Blokada z `globals.css`
+  // (`html.ff-route-dashboard .ff-shell-scroll > div`) liczy na tę budowę,
+  // dlatego stopka obok kontenera jest `<footer>`, nie `<div>`.
   return (
-    <div className="ff-dashboard relative flex h-[100dvh] min-h-0 overflow-hidden text-[var(--ff-on-surface)]">
-      <Sidebar />
+    <TooltipProvider>
+      <SidebarProvider
+        defaultOpen={sidebarOpen}
+        className="ff-dashboard relative h-[100dvh] min-h-0 overflow-hidden text-[var(--ff-on-surface)]"
+      >
+        <PortalContainerProvider>
+          <AppSidebar />
 
-      <main className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="ff-shell-header sticky top-0 z-40 flex w-full shrink-0 items-center justify-between gap-3 px-4 sm:px-[var(--ff-container-padding)]">
-          {/* PODZIAŁ SZEROKOŚCI. Na telefonie lewa strona ma stałą szerokość
-              wordmarku (`shrink-0`), a kurczy się prawa — inaczej długa nazwa
-              organizacji („ORANGE POLSKA SPÓŁKA AKCYJNA") zjada cały pasek
-              i z „FaktWay" zostaje samo „F". Od `lg` odwrotnie: rośnie lewa,
-              bo to ona niesie tytuł strony. */}
-          <div className="flex shrink-0 items-center gap-3 lg:min-w-0 lg:flex-1">
-            {/* Na telefonie pasek nosi wordmark, nie tytuł strony: gdzie
-                jesteśmy, mówi podświetlony slot dolnej nawigacji, a marka nie
-                ma innego miejsca — sidebar z wordmarkiem jest schowany. */}
-            {/* Ukrycie na opakowaniu, nie przez `className` wordmarku: ten prop
-                trafia do wewnętrznego `<span>`, więc `lg:hidden` chowałby napis,
-                a pusty odsyłacz zostawałby w kolejności tabulacji. */}
-            <div className="shrink-0 lg:hidden">
-              <BrandWordmark
-                href="/dashboard"
-                variant="app"
-                className="text-[19px]"
-              />
-            </div>
-            <div className="hidden min-w-0 lg:block">
-              <DashboardPageHeading />
-            </div>
-          </div>
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3 lg:flex-none lg:shrink-0">
-            <Suspense fallback={<OrgSwitcherHeaderSkeleton />}>
-              <DashboardOrgHeader />
-            </Suspense>
-            <ThemeToggle />
-            {/* Wylogowanie zeszło na telefonie do arkusza „Więcej" — nagłówek
-                ma tam 56 px i dzieli się już między wordmark, przełącznik
-                organizacji i motyw. */}
-            <form action={signOut} className="hidden lg:block">
-              <button
-                type="submit"
-                aria-label="Wyloguj"
-                className="flex size-10 shrink-0 items-center justify-center rounded-[10px] border border-[var(--ff-border)] bg-[var(--ff-surface)] text-[var(--ff-text-muted)] transition-colors hover:text-[var(--ff-text)]"
-              >
-                <span className="material-symbols-outlined text-[18px] leading-none">
-                  logout
-                </span>
-              </button>
-            </form>
-          </div>
-        </header>
+          <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+            <AppHeader
+              orgSwitcher={
+                <Suspense fallback={<OrgSwitcherHeaderSkeleton />}>
+                  <DashboardOrgHeader />
+                </Suspense>
+              }
+              pageHeading={<DashboardPageHeading />}
+              user={user?.email ? { email: user.email, name: userName } : null}
+            />
 
-        <div className="ff-shell-scroll min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto min-h-0 w-full max-w-[1500px] px-4 pb-12 sm:px-[var(--ff-container-padding)]">
-            {/* Na dashboardzie ten baner stoi w prawej szynie — szeroki
-                wariant chowa CSS. Na pozostałych stronach zostaje. */}
-            <div className="ff-shell-banner">
-              <Suspense fallback={null}>
-                <DashboardVerificationBannerSlot />
-              </Suspense>
+            <div className="ff-shell-scroll min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto min-h-0 w-full max-w-[1500px] px-4 pb-12 sm:px-[var(--ff-container-padding)]">
+                {/* Na dashboardzie ten baner stoi w prawej szynie — szeroki
+                    wariant chowa CSS. Na pozostałych stronach zostaje. */}
+                <div className="ff-shell-banner">
+                  <Suspense fallback={null}>
+                    <DashboardVerificationBannerSlot />
+                  </Suspense>
+                </div>
+                <Suspense fallback={null}>
+                  <KsefHealthBanner />
+                </Suspense>
+                {children}
+              </div>
+              <Footer />
             </div>
-            <Suspense fallback={null}>
-              <KsefHealthBanner />
-            </Suspense>
-            {children}
-          </div>
-        </div>
-      </main>
+          </SidebarInset>
 
-      <BottomNav />
-      <DashboardRouteFlags />
-      <InstallPrompt />
-      <PrefetchDashboardRoutes />
-      <PrefetchExportsRoute />
-      <IdleWatcher />
-      {user && activeOrg && (
-        <AnalyticsIdentify
-          userId={user.id}
-          tenantId={activeOrg}
-        />
-      )}
-      <SupportWidget articleTitles={helpArticleTitles} />
-      <Suspense fallback={null}>
-        <WelcomeModal />
-      </Suspense>
-    </div>
+          <BottomNav />
+          <DashboardRouteFlags />
+          <InstallPrompt />
+          <PrefetchDashboardRoutes />
+          <PrefetchExportsRoute />
+          <IdleWatcher />
+          {user && activeOrg && (
+            <AnalyticsIdentify
+              userId={user.id}
+              tenantId={activeOrg}
+            />
+          )}
+          <SupportWidget articleTitles={helpArticleTitles} />
+          <Suspense fallback={null}>
+            <WelcomeModal />
+          </Suspense>
+        </PortalContainerProvider>
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }

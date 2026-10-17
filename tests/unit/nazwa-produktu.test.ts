@@ -53,7 +53,9 @@ function walk(dir: string): string[] {
 }
 
 // „KSeF SaaS” bez wersji po spacji; `KSeF SaaS v1.0` (SystemInfo) przepuszcza.
-const OLD_NAMES = /FaktFlow|KSeF SaaS(?! v\d)/;
+// `Fakt<span …>Flow` — nazwa rozbita na znaczniki (dwukolorowy znak marki);
+// tak przetrwała zmianę nazwy w E0, bo w tekście pliku nie ma „FaktFlow”.
+const OLD_NAMES = /FaktFlow|Fakt(?:<[^>]*>)+Flow|KSeF SaaS(?! v\d)/;
 
 function oldNameHits(): string[] {
   const hits: string[] = [];

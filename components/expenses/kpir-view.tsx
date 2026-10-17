@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Download, ExternalLink } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
 import { formatPlMoney } from '@/lib/format/pl';
@@ -152,12 +152,13 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <Button variant="outline" size="lg" asChild className={exportBtnClass}>
-          <Link href={exportHref}>
-            <Download className="mr-2 h-4 w-4" />
-            Eksport KPiR
-          </Link>
-        </Button>
+        <Link
+          href={exportHref}
+          className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), exportBtnClass)}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Eksport KPiR
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 gap-[var(--ff-gutter)] md:grid-cols-3">

@@ -211,7 +211,11 @@ pasek na telefonie: Flo / Faktury / Nowa / Miesiąc / Więcej). Szkielet:
     zapisie wiersza. Każda karta z tą sumą ma podpis „Bez importów i faktur
     skorygowanych” (jak `/payments/overdue`). Test: szkic, import, korekta
     in minus, oryginał z korektą, ROZ z zaliczkami, inne środowisko, faktura
-    po terminie ze statusem `unpaid`.
+    po terminie ze statusem `unpaid`. Filtr płatności listy faktur (P3)
+    stosuje te warunki przez PostgREST (`receivableBaseFilterOps`) bez
+    warunku dzieci — PostgREST nie wyrazi NOT EXISTS na wierszu rodzica, więc
+    oryginał z korektą zostaje w wyniku filtra z „—” w kolumnie płatności
+    (E3, przegląd C1).
 12. **Koszty** czytamy jedną drogą, tak jak `/przeplywy` i eksport
     (`fetchExpensesForExport` w `lib/exports/data-fetcher.ts`): `expenses`
     z `is_deductible = true` → `readCompletePages` →
@@ -234,8 +238,13 @@ pasek na telefonie: Flo / Faktury / Nowa / Miesiąc / Więcej). Szkielet:
     tę samą usługę daje 3 000 zł, nie 4 000 zł; korekta `before_after`
     10 → 9 szt. nie dodaje sprzedaży.
 14. **Wpłaty:** stron nie zasilamy z `payments` ani `payment_imports`.
-    Wpływy to `invoices.paid_amount` faktur sprzedaży z pkt 11 według
-    `paid_at`, czyli dnia potwierdzenia, nie przelewu. Podpis karty:
+    Wpływy to `invoices.paid_amount > 0` faktur sprzedaży z pkt 11 według
+    `paid_at`, czyli dnia potwierdzenia, nie przelewu — z warunkami
+    faktury z pkt 11, ale **bez warunku dzieci i bez warunku
+    `payment_status`**. Wpłacone pieniądze nie znikają, gdy faktura dostanie
+    korektę, a ROZ płaci resztę po zaliczkach, więc wpłata zaliczki i wpłata
+    ROZ to osobne wpływy (E3, przegląd C2: zaliczka 1 000 zł + ROZ
+    3 000 zł = 4 000 zł). Wzór: `paidThisMonth` w `lib/invoices/list-stats.ts`. Podpis karty:
     „według oznaczonych wpłat”. Gdy w okresie nie ma żadnej opłaconej
     faktury, pokazujemy pusty stan „Oznaczaj wpłaty, a pokażemy wpływy”,
     nigdy „0 zł”. Daty `paid_at` nie porównujemy z terminem płatności.
@@ -510,7 +519,9 @@ szkice, VAT należny, sprzedaż brutto, termin VAT) są w tych kartach.
   decyzja o duplikacie KSeF (440), komunikat błędu KSeF; plus link Korekta
   jak w P3. „Drukuj” otwiera PDF z `/api/invoices/[id]/pdf` w nowej karcie.
   Dokumentem jest PDF, a `window.print()` wydrukowałby szkielet panelu. Kod
-  QR w podglądzie generujesz z `lib/ksef/qr-codes.ts`. Telefon (poniżej
+  QR w podglądzie to KOD I z `lib/ksef/qr-verification.ts`, ten sam co
+  w PDF (`lib/ksef/qr-codes.ts` to podpisany KOD II dla faktur offline, poza
+  ścieżką produkcyjną; poprawione w E3). Telefon (poniżej
   `lg`): plakietka statusu KSeF i główna akcja („Wyślij do KSeF” albo
   „Pobierz UPO”) stoją NAD dokumentem (`order-first`), reszta prawej kolumny
   pod nim. **Logiki i zasad zgody nie zmieniamy** — przenosimy JSX.
@@ -1110,7 +1121,7 @@ etapu (§9 „Oszczędzanie”).
 | Ikony | **Remix Icon** `@remixicon/react` 4.9.0 (komponenty `Ri…`) | dodać |
 | Wykresy | **recharts** 3.8.0 + `src/components/ui/chart.tsx` (ChartContainer, ChartTooltip, ChartLegend) | dodać |
 | Paleta ⌘K | `cmdk` 1.1.1 przez `src/components/ui/command.tsx` | dodać (E2) |
-| Tabele | `@tanstack/react-table` 8.21.3 | dodać w E3 (pierwsza tabela Finory) |
+| Tabele | `@tanstack/react-table` 8.21.3 | NIE dodajemy (decyzja E3, 17.10): tabela P3 stoi na prymitywach `ui/table` + stan z adresu; E6 i E8 robią tak samo |
 | Daty w formularzach | `date-fns` 4.4.0, `react-day-picker` 10.0.1 (`ui/calendar.tsx`, `src/views/pages/invoices/invoice-date-field.tsx`) | dodać dopiero w etapie, który ich użyje (P5, filtry dat) |
 | NIE dodajemy | `next-themes` (u nas jest w `package.json`, ale motywem rządzi `lib/theme/theme.ts`), `nuqs` (filtry przez adres i `invoiceListHref`), `zustand` i `src/store/*` (dane z serwera), `react-use` (tylko ciasteczko ustawień), `motion` (tylko listy z inwestycji; animację daje nasz `framer-motion`: `AnimatePresence` ma to samo API), `react-19-credit-card`, `geist` (Geist mamy z `next/font`) | — |
 | `globals.css` Finory (247 linii) | `@import 'shadcn/tailwind.css'` (nasz `shadcn` 4.3.0 ma ten eksport), `@custom-variant dark (&:is(.dark *))` (zgodne z klasą `dark` z `lib/theme/theme.ts`), `@theme inline` z `--font-heading: var(--font-sans)` i skalą promieni od `--radius: 0.625rem`, klasy `.input-default/-lg/-sm`, odstępy przycisków `[data-slot='button'].h-9/.h-10:not(.px-6)`, kursory `cursor: pointer` dla przycisków, opcji i pozycji menu, reguły druku | przenieść te bloki; reguły `.rccs` (karty płatnicze) i `[data-theme-scale='lg']` pominąć |
@@ -1200,6 +1211,15 @@ Masło na punkcie kontrolnym).
    `--primary-foreground: oklch(0.20 0 0)` (ciemny tekst na jasnoniebieskim
    przycisku, 5,85:1 jako tekst na karcie). `--ring` i `chart-*` bez zmian.
    Bez decyzji E1 bierze tę propozycję, bo inaczej CI dostępności padnie.
+   **Wykonane w E1 (bez osobnej decyzji):** `--primary` jak w propozycji.
+   `--destructive` ciemniej/jaśniej niż w propozycji, bo przycisk
+   i plakietka `destructive` mają tekst na WŁASNYM półprzezroczystym tle
+   (jasny /10, ciemny /20), także na karcie i w oknie dialogowym: jasny
+   `oklch(0.53 0.21 27)` (4,95:1), ciemny `oklch(0.8 0.14 22)` (4,85:1).
+   `--ff-accent-tint` = 6% (jasny) / 10% (ciemny) `--primary` na karcie,
+   bo akcent jako tekst na `--accent` presetu miał 4,43:1. Wszystko liczy
+   `tests/unit/finora-motyw.test.ts`. Stany najechania (hover) zostają jak
+   w Finorze.
 2. **§9 „Dodatki”, motyw i font** pisał „skala `md`, pasek `default`”.
    D2 to skala **`sm`** i wariant **`inset`**. Poprawione niżej w §9.
 3. **„Komplet zmiennych … (z `shadow-*`)”** — preset Modern Minimal nie ma
@@ -1350,15 +1370,39 @@ Transactions, Monthly Analytics, Accounts i Invoice List.
 | 17.10.2026 | Audyt | (ten dokument) | — | gotowe | — | audyt demo Finory (22 strony + auth + ustawienia) i kodu `main` @ `1ded2147` |
 | 17.10.2026 | Krytyka planu | (ten dokument) | — | gotowe | — | 5 krytyków (dane, wykonalność, wizualna, produkt, kompletność) + sędzia: przyjęto 37 poprawek, odrzucono 1 |
 | 17.10.2026 | Decyzja D7 | (ten dokument) | — | gotowe | — | karty podatkowe dozwolone: przywrócony licznik limitu zwolnienia z VAT (240 000 zł, gotowe funkcje z `vat-limit.ts`) w P1/P2, „Odłóż na podatek” w P2 |
-| 17.10.2026 | E0 + nazwa FaktWay | #278 | ok. 10 (szacunek sesji w chmurze, bez wglądu w rozliczenie) | czeka na scalenie | — | §10 wypełniony z `faktflow-finora-src` @ `56394ef`; konflikty z planem w §10.2 (kontrast `primary` 3,73:1 blokuje E1); D8 i zmiana nazwy w kodzie aplikacji ze strażnikiem `nazwa-produktu.test.ts`. Teksty z bazy (abonament, odmowy 00148) i pliki FLO zostają z FaktFlow do osobnego PR |
+| 17.10.2026 | E0 + nazwa FaktWay | #278 | ok. 10 (szacunek sesji w chmurze, bez wglądu w rozliczenie) | scalone 17.10 | — | §10 wypełniony z `faktflow-finora-src` @ `56394ef`; konflikty z planem w §10.2 (kontrast `primary` 3,73:1 blokuje E1); D8 i zmiana nazwy w kodzie aplikacji ze strażnikiem `nazwa-produktu.test.ts`. Teksty z bazy (abonament, odmowy 00148) i pliki FLO zostają z FaktFlow do osobnego PR |
+| 17.10.2026 | E1 | #282 (szkic, E2 dojdzie do tego PR) | brak wglądu w rozliczenie; agenci: mapowanie 1,7 mln tokenów (mocny model — za drogo, od teraz tańsze), porty 0,3 mln (Sonnet), przegląd 0,5 mln | gotowe, czeka na E2 w tym samym PR (stos, §9 „Wdrożenia”) | — | prymitywy Finory na Base UI (16 + `chart`), preset z poprawkami kontrastu, aliasy `--ff-*`, wątek FLO przypięty do dawnych kolorów (`.ff-flo-legacy` + arkusz kolejki), skala SM na `.ff-dashboard`, Outfit, `.zova` odizolowana, Select z `items`, linki bez `asChild`, usunięte `radix-ui` i `next-themes`. Przegląd: 3 soczewki, 1 potwierdzona usterka (kontrast `destructive` na karcie w ciemnym) — poprawiona |
+| 17.10.2026 | E2 | #282 (razem z E1) | brak wglądu w rozliczenie; agenci: mapowanie 0,37 mln (Sonnet), budowa 0,55 mln (Sonnet + szkielet na mocnym modelu), przegląd 1,24 mln (szukanie Sonnet, weryfikacja mocny model), poprawki (Sonnet) | gotowe, czeka na punkt kontrolny | — | szkielet Finory (pasek inset zwijany do ikon, stan z ciasteczka, nagłówek z przełącznikiem firmy, menu avatara, stopka), nawigacja §4 z istniejących tras (zgoda Bartosza na zmianę `dashboard-nav-config.ts`: „kontynuuj wszystko”, 17.10), dolny pasek na ikonach Remix, ⌘K z wyszukiwaniem faktur i kontrahentów, portale Base UI w kontenerze `.ff-dashboard`, banery jako Alert, `error`/`loading` bez szkła; znak marki w panelu „Fakt\|Way” (był rozbity „Fakt\|Flow” — strażnik nazwy łapie teraz i taki zapis). Przegląd: 9 usterek średnich (bąbelek pomocy nad oknami, podświetlenie po „Wstecz”, kontrast paska i awatara, zdublowana pozycja ⌘K) + 5 drobnych — poprawione z testami |
+| 17.10.2026 | E3 | #282 (razem z E1 i E2) | brak wglądu w rozliczenie; agenci: budowa (dane na mocnym modelu, lista i podgląd na Sonnecie), przegląd 1,38 mln (szukanie Sonnet + dane na mocnym modelu, weryfikacja mocny model), poprawki 0,71 mln (dane mocny model, UI Sonnet, weryfikacja mocny model) | gotowe, czeka na punkt kontrolny | — | P3 lista faktur (kafle, pasek filtrów `platnosc`/`rodzaj`/`na_stronie`, tabela z zaznaczaniem i PDF zaznaczonych, paginacja Finory, karty na telefonie), P4 podgląd (dokument + karty „Status” i „Dokument”, VAT per stawka w walucie faktury, kod QR KOD I, „Korekta”, „Drukuj” jako PDF w nowej karcie), `lib/dashboard/receivables.ts`, `list-row-facts`, `list-stats`, `batch-pdf ?ids=`; bez `@tanstack/react-table` (tabela na prymitywach, decyzja przed E6). Karty UPO, błędu KSeF i e-maila bez szkła. Przegląd: 10 potwierdzonych (2 to ten sam `limit(50)` formularza korekty — osobna sesja z sugerowanego zadania, nie w tym PR), 3 obalone; 8 poprawionych z czerwonymi testami + 6 drobnych z weryfikacji poprawek. Filtr `not.eq.{}` i kilka `or()` naraz sprawdzone na prawdziwym PostgREST (job RLS) |
+
+**Decyzje po E3 (Bartosz 17.10: „odpowiedz sam, ma być jak najbardziej
+poprawnie”):** (1) lista `/invoices` dalej pokazuje faktury ze wszystkich
+środowisk KSeF — to rejestr dokumentów, niczego nie chowamy; liczby (kafle,
+płatność, filtr płatności) liczą tylko aktywne środowisko. (2) „Opłacone
+w tym miesiącu” liczy faktury opłacone w całości (`paid_at`), bo §2.4 pkt 14
+zabrania czytania `payments`. (3) „Faktury w tym miesiącu” już rozdziela
+przyjęte i szkice — bez zmian. (4) Strażnik środowiska kafla „Do zapłaty”
+tylko na otwartych należnościach, jak `/payments/overdue`. (5) Bez
+`@tanstack/react-table` (§10.1). (6) Oryginał z korektą zostaje w wyniku
+filtra płatności z „—”: lista po id dzieci w adresie nie skaluje się,
+a widok w bazie to migracja bez zysku dla liczb (kafle liczą poprawnie).
 
 **Dla Bartosza:** `lib/flo/wrapped.ts` czyta nieodświeżany
 `mv_tenant_monthly_stats` (tor silnika). Zgłoszone, nie naprawiamy w tym
 planie.
 
-**Następny krok:** Bartosz decyduje o kolorze `primary` (§10.2 pkt 1; bez
-decyzji E1 bierze propozycję z §10.2) i scala #278. Potem sesja w chmurze:
-**E1** od świeżego `main` (fundament: zależności z §10.1, `components/ui/*`
-Finory na Base UI, preset z §10.1, skala SM według §10.1). Osobno, po
-rozstrzygnięciu szkicu #248: migracja nazwy FaktWay w bazie (wyjątki
-`DB_BOUND` w `tests/unit/nazwa-produktu.test.ts`).
+**Następny krok:** **punkt kontrolny E1+E2+E3** (§9): Bartosz albo Masło
+oglądają panel lokalnie — jasny i ciemny motyw; 375, 768 i 1440 px; pasek
+rozwinięty i zwinięty; obok demo Finory — i uruchamiają Playwright 03, 04,
+06, 07 i `flo-*` (CI PR ich nie odpala). Lista rzeczy do obejrzenia jest
+w opisie #282 (E3: `/invoices` z filtrami, paginacją i zaznaczaniem,
+`/invoices/[id]` szkicu, wysłanej, przyjętej i odrzuconej faktury). Decyzje
+z E3 rozstrzygnięte (wyżej). Potem scalenie #282 i wdrożenie
+(`./scripts/ops/wdroz-produkcje.sh` z sesji lokalnej). Dopiero
+po „idź dalej”: poprawki z punktu kontrolnego osobnym PR, potem osobny mały
+PR strefy czasowej (§2.4 pkt 10), potem **E4** (P1 Pulpit z slotem FLO,
+`lib/dashboard/costs.ts`, `getSalesSeries`). Osobno: poprawka `limit(50)`
+formularza korekty (link „Korekta” z E3 dla starszych faktur ląduje na
+wyborze bez tej faktury) idzie z sesji z sugerowanego zadania; po rozstrzygnięciu
+szkicu #248 migracja nazwy FaktWay w bazie (wyjątki `DB_BOUND`
+w `tests/unit/nazwa-produktu.test.ts`).

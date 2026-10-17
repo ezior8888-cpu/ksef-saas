@@ -55,6 +55,10 @@ describe('separate RLS test configuration', () => {
       'tests/rls-dziennik-prob-wysylki.test.ts',
       // 00152: faktura za abonament w obu nazwach produktu (FaktFlow, FaktWay).
       'tests/rls-faktura-abonamentu-faktway.test.ts',
+      // Plan Finora E3: dzieci faktur (korekta, ROZ) przez prawdziwy PostgREST.
+      'tests/rls-dzieci-faktur.test.ts',
+      // Plan Finora E3 / C1: filtr płatności listy faktur (kilka or()) przez PostgREST.
+      'tests/rls-lista-faktur-platnosc.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

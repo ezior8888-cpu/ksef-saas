@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CloudOff, X } from 'lucide-react';
+import { RiAlertLine, RiCloseLine, RiCloudOffLine } from '@remixicon/react';
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import type { KsefHealthSnapshot } from '@/lib/ksef/health-status';
 
@@ -55,7 +56,7 @@ export function KsefHealthBannerClient({ initial }: Props) {
   if (dismissedLevel === snapshot.level) return null;
 
   const isDown = snapshot.level === 'down';
-  const Icon = isDown ? CloudOff : AlertTriangle;
+  const Icon = isDown ? RiCloudOffLine : RiAlertLine;
 
   const title = isDown
     ? snapshot.isMfOutage
@@ -77,46 +78,29 @@ export function KsefHealthBannerClient({ initial }: Props) {
   };
 
   return (
-    <div
+    <Alert
       role="status"
       aria-live="polite"
+      variant={isDown ? 'destructive' : 'default'}
       className={cn(
-        'rounded-2xl border px-4 py-3 backdrop-blur-xl flex items-start gap-3',
-        isDown
-          ? 'border-red-500/30 bg-red-500/8'
-          : 'border-amber-500/30 bg-amber-500/8',
+        'pr-10',
+        !isDown &&
+          'border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] text-[var(--ff-warn-text)]',
       )}
     >
-      <Icon
-        className={cn(
-          'h-5 w-5 shrink-0 mt-0.5',
-          isDown
-            ? 'text-red-600 dark:text-red-400'
-            : 'text-amber-600 dark:text-amber-400',
-        )}
-        aria-hidden
-      />
-      <div className="flex-1 min-w-0">
-        <p
-          className={cn(
-            'text-sm font-semibold',
-            isDown
-              ? 'text-red-700 dark:text-red-300'
-              : 'text-amber-700 dark:text-amber-300',
-          )}
-        >
-          {title}
-        </p>
-        <p className="text-sm text-foreground/80 mt-0.5 leading-relaxed">{description}</p>
-      </div>
+      <Icon aria-hidden />
+      <AlertTitle className="font-semibold">{title}</AlertTitle>
+      <AlertDescription className={cn(!isDown && 'text-[var(--ff-warn-text)]')}>
+        {description}
+      </AlertDescription>
       <button
         type="button"
         onClick={handleDismiss}
         aria-label="Schowaj baner"
-        className="shrink-0 rounded-lg p-1 transition-colors hover:bg-foreground/10"
+        className="hover:bg-foreground/10 absolute top-1.5 right-1.5 shrink-0 p-1 transition-colors"
       >
-        <X className="h-4 w-4 text-muted-foreground" aria-hidden />
+        <RiCloseLine className="text-muted-foreground size-4" aria-hidden />
       </button>
-    </div>
+    </Alert>
   );
 }

@@ -2,11 +2,34 @@
 
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { FileArchive, Loader2 } from 'lucide-react';
+import { RiFileZipLine, RiLoader4Line } from '@remixicon/react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { saveBlob } from '@/lib/download';
+
+/** Komunikat dla klienta z kodu błędu endpointu `/api/invoices/batch-pdf`. */
+export function batchPdfErrorMessage(code: string | undefined): string {
+  switch (code) {
+    case 'no_invoices':
+      return 'Brak faktur w tym miesiącu.';
+    case 'too_many':
+      return 'Za dużo faktur w miesiącu (limit 100). Skontaktuj się z pomocą.';
+    case 'offline_qr_unavailable':
+      return 'Paczka zawiera fakturę offline bez wymaganego kodu CERTYFIKAT. Pobierz ją po nadaniu numeru KSeF.';
+    case 'not_found':
+      return 'Nie znaleziono zaznaczonych faktur. Odśwież listę i spróbuj ponownie.';
+    case 'invalid_ids':
+      return 'Zaznacz od 1 do 100 faktur.';
+    case 'busy':
+    case 'rate_limited':
+      return 'Za dużo paczek naraz. Odczekaj chwilę i spróbuj ponownie.';
+    case 'pdf_state_changed':
+      return 'Faktura zmieniła stan w trakcie przygotowania paczki. Spróbuj ponownie.';
+    default:
+      return 'Nie udało się przygotować paczki ZIP.';
+  }
+}
 
 /**
  * Pobranie ZIP z PDF wszystkich faktur wybranego miesiąca (Faza 33 Krok 7).
@@ -38,15 +61,7 @@ export function BatchPdfDownload() {
           const body = (await res.json().catch(() => ({}))) as {
             error?: string;
           };
-          toast.error(
-            body.error === 'no_invoices'
-              ? 'Brak faktur w tym miesiącu.'
-              : body.error === 'too_many'
-                ? 'Za dużo faktur w miesiącu (limit 100). Skontaktuj się z pomocą.'
-                : body.error === 'offline_qr_unavailable'
-                  ? 'Paczka zawiera fakturę offline bez wymaganego kodu CERTYFIKAT. Pobierz ją po nadaniu numeru KSeF.'
-                : 'Nie udało się przygotować paczki ZIP.',
-          );
+          toast.error(batchPdfErrorMessage(body.error));
           return;
         }
         const blob = await res.blob();
@@ -74,14 +89,49 @@ export function BatchPdfDownload() {
           className="w-40"
         />
       </div>
-      <Button variant="glass" onClick={download} disabled={isPending}>
+      <Button variant="outline" onClick={download} disabled={isPending}>
         {isPending ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          <RiLoader4Line className="animate-spin" />
         ) : (
-          <FileArchive className="h-4 w-4 mr-2" />
+          <RiFileZipLine />
         )}
         ZIP
       </Button>
     </div>
+  );
+}
+
+/**
+ * „Pobierz PDF zaznaczonych (N)” — ZIP z faktur zaznaczonych w tabeli
+ * (`/api/invoices/batch-pdf?ids=…`; serwer sprawdza, że wszystkie należą do
+ * aktywnej firmy). Ukryty, gdy nic nie zaznaczono.
+ */
+export function SelectedPdfDownload({ ids }: { ids: readonly string[] }) {
+  const [isPending, start] = useTransition();
+  if (ids.length === 0) return null;
+
+  const download = () => {
+    start(async () => {
+      try {
+        const res = await fetch(`/api/invoices/batch-pdf?ids=${ids.join(',')}`);
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          toast.error(batchPdfErrorMessage(body.error));
+          return;
+        }
+        const cd = res.headers.get('Content-Disposition') ?? '';
+        const filename = cd.match(/filename="(.+?)"/)?.[1] ?? 'Faktury_zaznaczone.zip';
+        saveBlob(await res.blob(), filename);
+      } catch {
+        toast.error('Błąd połączenia przy pobieraniu paczki.');
+      }
+    });
+  };
+
+  return (
+    <Button variant="outline" size="sm" onClick={download} disabled={isPending}>
+      {isPending ? <RiLoader4Line className="animate-spin" /> : <RiFileZipLine />}
+      {`Pobierz PDF zaznaczonych (${ids.length})`}
+    </Button>
   );
 }
