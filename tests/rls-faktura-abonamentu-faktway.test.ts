@@ -149,7 +149,7 @@ async function linkedInvoice(payment: Payment): Promise<string | null> {
 
 async function cleanup() {
   await admin.from('stripe_payments').delete().eq('tenant_id', CUSTOMER);
-  await admin.from('subscriptions').delete().eq('tenant_id', CUSTOMER);
+  // Subskrypcję (bez zapisu dla serwisu, 00078) usuwa kaskada z firmy klienta.
   // Strażnik 00079 pozwala serwisowi usunąć fakturę za abonament tylko po
   // terminie retencji — ustawiamy go w przeszłości.
   await admin.from('invoices')
@@ -166,15 +166,36 @@ describe.skipIf(!hasDatabase)('faktura za abonament pod nazwą FaktWay (00151)',
       { id: CUSTOMER, nip: '9876543210', name: 'Klient Testowy', stripe_customer_id: STRIPE_CUSTOMER },
     ]);
     if (tenantsError) throw new Error(`insert tenants: ${tenantsError.message}`);
-    const { data, error } = await admin.from('subscriptions').insert({
-      tenant_id: CUSTOMER,
-      stripe_subscription_id: STRIPE_SUBSCRIPTION,
-      stripe_customer_id: STRIPE_CUSTOMER,
-      stripe_price_id: 'price_rls',
-      status: 'active',
-      plan: 'monthly',
-    }).select('id').single();
-    if (error) throw new Error(`insert subscription: ${error.message}`);
+    // Subskrypcje zapisuje tylko dzierżawa synchronizacji (00078), jak webhook.
+    const { data: claim, error: claimError } = await admin
+      .rpc('claim_stripe_subscription_sync', { p_subscription_id: STRIPE_SUBSCRIPTION })
+      .single<{ claimed: boolean; claim_token: string; fence: number }>();
+    if (claimError || !claim?.claimed) throw new Error(`claim subscription: ${claimError?.message ?? 'busy'}`);
+    const { data: applied, error: applyError } = await admin.rpc('apply_stripe_subscription_sync', {
+      p_subscription_id: STRIPE_SUBSCRIPTION,
+      p_claim_token: claim.claim_token,
+      p_fence: claim.fence,
+      p_snapshot: {
+        tenant_id: CUSTOMER,
+        stripe_subscription_id: STRIPE_SUBSCRIPTION,
+        stripe_customer_id: STRIPE_CUSTOMER,
+        stripe_price_id: 'price_rls',
+        status: 'active',
+        plan: 'monthly',
+        current_period_start: null,
+        current_period_end: null,
+        trial_start: null,
+        trial_end: null,
+        cancel_at_period_end: false,
+        canceled_at: null,
+      },
+    });
+    if (applyError || applied !== true) throw new Error(`apply subscription: ${applyError?.message ?? 'not written'}`);
+    const { data, error } = await admin.from('subscriptions')
+      .select('id')
+      .eq('stripe_subscription_id', STRIPE_SUBSCRIPTION)
+      .single();
+    if (error) throw new Error(`read subscription: ${error.message}`);
     subscriptionId = data.id as string;
   });
 
