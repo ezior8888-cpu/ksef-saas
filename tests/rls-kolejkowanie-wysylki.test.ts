@@ -382,6 +382,7 @@ describe.skipIf(!hasDatabase)('kolejkowanie wysyłki KSeF — RPC w transakcji z
       const { DUPLICATE_DECISION_SQL_TEXTS, fillSqlText, retiredDraftSendRefusal } = await decisionPolicy();
       const message = (refusal as { message?: string }).message;
       expect(message).toBe(fillSqlText(DUPLICATE_DECISION_SQL_TEXTS.TRIGGER_AUTO.template, number, `fakturę ${k}`));
+      expect(message).toContain('poza FaktWay'); // marka od 00151
       // Wiersze z bazy w typie parametru polityki (spec nie przypina typu wiersza).
       const rows = (await submissionsOf(id)) as unknown as Parameters<typeof retiredDraftSendRefusal>[1];
       expect(message).toBe(retiredDraftSendRefusal(number, rows));
@@ -458,7 +459,7 @@ describe.skipIf(!hasDatabase)('kolejkowanie wysyłki KSeF — RPC w transakcji z
       expect(duplicateCheckAllows(JSON.parse(text), null)).toBe(sql);
     });
 
-    it('R3 (billing, tylko jako właściciel bazy): faktura abonamentu FaktFlow z 440 — odmowa billing z numerem dokumentu, stan bez zmian', async () => {
+    it('R3 (billing, tylko jako właściciel bazy): faktura abonamentu FaktWay z 440 — odmowa billing z numerem dokumentu, stan bez zmian', async () => {
       const b = await billingInvoice({ ksef_status: 'failed', last_error_code: 'KSEF_DUPLICATE_RECONCILE' });
       const k = originalNumber(counter);
       const { error: markerError } = await admin.from('ksef_submissions').insert({
@@ -482,6 +483,7 @@ describe.skipIf(!hasDatabase)('kolejkowanie wysyłki KSeF — RPC w transakcji z
 
       const { DUPLICATE_DECISION_SQL_TEXTS, fillSqlText } = await decisionPolicy();
       expect(error?.message).toBe(fillSqlText(DUPLICATE_DECISION_SQL_TEXTS.billing.template, b.number));
+      expect(error?.message).not.toMatch(/faktflow/i); // marka od 00151
     });
   });
 });

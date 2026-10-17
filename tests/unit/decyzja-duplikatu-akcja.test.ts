@@ -285,8 +285,9 @@ describe('decideKsefDuplicateAction — decyzja klienta przy nierozstrzygniętym
     expect(r).toEqual({ success: false, error: fill(SQL.payments, NR) });
     const error = r.success ? '' : r.error;
     expect(error).toContain(NR);
-    // Tekst odmowy „payments” to lustro RAISE z 00148 — stara domena do nowej migracji.
-    expect(error).toContain('pomoc@faktflow.pl');
+    // Tekst odmowy „payments” to lustro RAISE (00148, marka FaktWay od 00151).
+    expect(error).toContain('pomoc@faktway.pl');
+    expect(error).not.toMatch(/faktflow/i);
     expect(m.rpc).not.toHaveBeenCalled();
   });
 
