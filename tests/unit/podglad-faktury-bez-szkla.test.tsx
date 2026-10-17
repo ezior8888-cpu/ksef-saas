@@ -82,7 +82,7 @@ describe('przycisk e-maila — bez wariantu glass', () => {
 
   it('zamknięty i rozwinięty: przyciski outline / default, żadnego glass', () => {
     act(() => root.render(<EmailInvoiceButton invoiceId="i-1" />));
-    expect(host.textContent).toContain('Wyślij mailem');
+    expect(host.textContent).toContain('Wyślij e-mailem');
     expect(host.innerHTML).not.toMatch(SZKLO);
 
     const open = host.querySelector('button');

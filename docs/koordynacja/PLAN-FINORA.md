@@ -1373,20 +1373,23 @@ Transactions, Monthly Analytics, Accounts i Invoice List.
 | 17.10.2026 | E0 + nazwa FaktWay | #278 | ok. 10 (szacunek sesji w chmurze, bez wglądu w rozliczenie) | scalone 17.10 | — | §10 wypełniony z `faktflow-finora-src` @ `56394ef`; konflikty z planem w §10.2 (kontrast `primary` 3,73:1 blokuje E1); D8 i zmiana nazwy w kodzie aplikacji ze strażnikiem `nazwa-produktu.test.ts`. Teksty z bazy (abonament, odmowy 00148) i pliki FLO zostają z FaktFlow do osobnego PR |
 | 17.10.2026 | E1 | #282 (szkic, E2 dojdzie do tego PR) | brak wglądu w rozliczenie; agenci: mapowanie 1,7 mln tokenów (mocny model — za drogo, od teraz tańsze), porty 0,3 mln (Sonnet), przegląd 0,5 mln | gotowe, czeka na E2 w tym samym PR (stos, §9 „Wdrożenia”) | — | prymitywy Finory na Base UI (16 + `chart`), preset z poprawkami kontrastu, aliasy `--ff-*`, wątek FLO przypięty do dawnych kolorów (`.ff-flo-legacy` + arkusz kolejki), skala SM na `.ff-dashboard`, Outfit, `.zova` odizolowana, Select z `items`, linki bez `asChild`, usunięte `radix-ui` i `next-themes`. Przegląd: 3 soczewki, 1 potwierdzona usterka (kontrast `destructive` na karcie w ciemnym) — poprawiona |
 | 17.10.2026 | E2 | #282 (razem z E1) | brak wglądu w rozliczenie; agenci: mapowanie 0,37 mln (Sonnet), budowa 0,55 mln (Sonnet + szkielet na mocnym modelu), przegląd 1,24 mln (szukanie Sonnet, weryfikacja mocny model), poprawki (Sonnet) | gotowe, czeka na punkt kontrolny | — | szkielet Finory (pasek inset zwijany do ikon, stan z ciasteczka, nagłówek z przełącznikiem firmy, menu avatara, stopka), nawigacja §4 z istniejących tras (zgoda Bartosza na zmianę `dashboard-nav-config.ts`: „kontynuuj wszystko”, 17.10), dolny pasek na ikonach Remix, ⌘K z wyszukiwaniem faktur i kontrahentów, portale Base UI w kontenerze `.ff-dashboard`, banery jako Alert, `error`/`loading` bez szkła; znak marki w panelu „Fakt\|Way” (był rozbity „Fakt\|Flow” — strażnik nazwy łapie teraz i taki zapis). Przegląd: 9 usterek średnich (bąbelek pomocy nad oknami, podświetlenie po „Wstecz”, kontrast paska i awatara, zdublowana pozycja ⌘K) + 5 drobnych — poprawione z testami |
+| 17.10.2026 | E3 | #282 (razem z E1 i E2) | brak wglądu w rozliczenie; agenci: budowa (dane na mocnym modelu, lista i podgląd na Sonnecie), przegląd 1,38 mln (szukanie Sonnet + dane na mocnym modelu, weryfikacja mocny model), poprawki 0,71 mln (dane mocny model, UI Sonnet, weryfikacja mocny model) | gotowe, czeka na punkt kontrolny | — | P3 lista faktur (kafle, pasek filtrów `platnosc`/`rodzaj`/`na_stronie`, tabela z zaznaczaniem i PDF zaznaczonych, paginacja Finory, karty na telefonie), P4 podgląd (dokument + karty „Status” i „Dokument”, VAT per stawka w walucie faktury, kod QR KOD I, „Korekta”, „Drukuj” jako PDF w nowej karcie), `lib/dashboard/receivables.ts`, `list-row-facts`, `list-stats`, `batch-pdf ?ids=`; bez `@tanstack/react-table` (tabela na prymitywach, decyzja przed E6). Karty UPO, błędu KSeF i e-maila bez szkła. Przegląd: 10 potwierdzonych (2 to ten sam `limit(50)` formularza korekty — osobna sesja z sugerowanego zadania, nie w tym PR), 3 obalone; 8 poprawionych z czerwonymi testami + 6 drobnych z weryfikacji poprawek. Filtr `not.eq.{}` i kilka `or()` naraz sprawdzone na prawdziwym PostgREST (job RLS) |
 
 **Dla Bartosza:** `lib/flo/wrapped.ts` czyta nieodświeżany
 `mv_tenant_monthly_stats` (tor silnika). Zgłoszone, nie naprawiamy w tym
 planie.
 
-**Następny krok:** **punkt kontrolny E1+E2** (§9): Bartosz albo Masło
+**Następny krok:** **punkt kontrolny E1+E2+E3** (§9): Bartosz albo Masło
 oglądają panel lokalnie — jasny i ciemny motyw; 375, 768 i 1440 px; pasek
 rozwinięty i zwinięty; obok demo Finory — i uruchamiają Playwright 03, 04,
 06, 07 i `flo-*` (CI PR ich nie odpala). Lista rzeczy do obejrzenia jest
-w opisie #282. Potem scalenie #282 („Scalenie E1, E2”) i wdrożenie. Dopiero
-po „idź dalej”: poprawki z punktu kontrolnego osobnym PR, a następnie
-**E3** (P3 Faktury + P4 Podgląd + `lib/dashboard/receivables.ts`); przed
-startem E3 `gh pr list --state open` (§9 „Dodatki” E3). Przed E4 osobny mały
-PR strefy czasowej (§2.4 pkt 10). Kanwa pulpitu jest biała jak w Finorze,
-a wątek FLO ma dawne kolory, typografię Outfit i skalę SM — do oceny Masła.
-Osobno, po rozstrzygnięciu szkicu #248: migracja nazwy FaktWay w bazie
-(wyjątki `DB_BOUND` w `tests/unit/nazwa-produktu.test.ts`).
+w opisie #282 (E3: `/invoices` z filtrami, paginacją i zaznaczaniem,
+`/invoices/[id]` szkicu, wysłanej, przyjętej i odrzuconej faktury). Decyzje
+z E3 dla Bartosza — w opisie #282. Potem scalenie #282 i wdrożenie. Dopiero
+po „idź dalej”: poprawki z punktu kontrolnego osobnym PR, potem osobny mały
+PR strefy czasowej (§2.4 pkt 10), potem **E4** (P1 Pulpit z slotem FLO,
+`lib/dashboard/costs.ts`, `getSalesSeries`). Osobno: poprawka `limit(50)`
+formularza korekty (link „Korekta” z E3 dla starszych faktur ląduje na
+wyborze bez tej faktury) idzie z sesji z sugerowanego zadania; po rozstrzygnięciu
+szkicu #248 migracja nazwy FaktWay w bazie (wyjątki `DB_BOUND`
+w `tests/unit/nazwa-produktu.test.ts`).
