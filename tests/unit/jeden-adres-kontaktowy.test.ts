@@ -20,11 +20,6 @@ const EXTENSIONS = /\.(tsx?|mdx?)$/;
 // w lib/email/send.ts (odpowiedzi idą na SUPPORT_EMAIL przez Reply-To) —
 // te same co RESEND_FROM_* na produkcji.
 const ALLOWED_FAKTWAY = new Set([SUPPORT_EMAIL, 'powiadomienia@faktway.pl', 'kontakt@faktway.pl']);
-// Stara domena (zmiana marki 10.2026) zostaje tylko w lustrze tekstów RAISE
-// migracji 00148 — zmieni je dopiero nowa migracja. Do tego czasu
-// pomoc@faktflow.pl musi odbierać pocztę (ops/poczta/worker.mjs).
-const OLD_DOMAIN_ALLOWED_FILES = new Set(['lib/ksef/duplicate-decision.ts']);
-
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -62,10 +57,11 @@ describe('jeden adres kontaktowy', () => {
     expect(others).toEqual([]);
   });
 
-  it('adresy @faktflow.pl tylko w lustrze tekstów SQL 00148 (zmiana marki)', () => {
-    const others = scan(/[a-z0-9._-]+@(?:[a-z0-9-]+\.)*faktflow\.pl/gi)
-      .filter((hit) => !OLD_DOMAIN_ALLOWED_FILES.has(hit.split(':')[0]));
-    expect(others).toEqual([]);
+  // Zmiana marki 10.2026: ostatnie adresy w dawnej domenie (lustro tekstów RAISE
+  // z 00148) przepisała migracja 00151. Skrzynka w dawnej domenie dalej odbiera
+  // pocztę (ops/poczta/worker.mjs) — dla starych maili, nie dla nowych tekstów.
+  it('żadnych adresów @faktflow.pl (zmiana marki)', () => {
+    expect(scan(/[a-z0-9._-]+@(?:[a-z0-9-]+\.)*faktflow\.pl/gi)).toEqual([]);
   });
 
   it('adres strony z NEXT_PUBLIC_APP_URL, bez końcowego ukośnika; domyślnie faktway.pl', () => {

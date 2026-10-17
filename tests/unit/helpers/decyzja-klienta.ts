@@ -5,7 +5,7 @@
  *
  * Teksty to kopia słowo w słowo tabel 2.11 specyfikacji PR B (decyzje Bartosza
  * 07.10.2026). Po stronie kodu żyją w `lib/ksef/duplicate-decision.ts`
- * (`DUPLICATE_DECISION_TEXTS`, `DUPLICATE_DECISION_SQL_TEXTS`) i w 00148 —
+ * (`DUPLICATE_DECISION_TEXTS`, `DUPLICATE_DECISION_SQL_TEXTS`) i w 00148 / 00151 —
  * przechodzą przegląd prawnika przed KSeF PROD (decyzje A i 8). Zmiana tekstu
  * po przeglądzie = zmiana tutaj, w module i w migracji.
  *
@@ -147,14 +147,14 @@ export function fill(template: string, ...args: string[]): string {
 }
 
 export const SQL = {
-  kind: 'Dokument % to korekta, faktura zaliczkowa albo rozliczeniowa — tej decyzji nie zapiszesz jeszcze w FaktFlow. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.',
-  knownStale: 'Dokument w FaktFlow, który ma albo miał numer KSeF %, nie zgadza się już z naszym zapisem — sprawdzimy fakturę w KSeF ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl. Nie wystawiaj dokumentu % ponownie.',
-  payments: 'Na dokumencie % są zapisane wpłaty — decyzji nie zapiszemy, dopóki wpłaty są przy tym dokumencie. W FaktFlow nie zmienisz ich sam: napisz do nas: pomoc@faktflow.pl, podając numer dokumentu — ustalimy, przy której fakturze je zapisać. Nie wystawiaj go ponownie.',
-  env: 'Dane faktury % sprawdziliśmy w środowisku KSeF „%”, a FaktFlow pracuje teraz w środowisku „%” — tej decyzji nie zapiszesz. Nie wystawiaj dokumentu % ponownie i napisz do nas: pomoc@faktflow.pl.',
+  kind: 'Dokument % to korekta, faktura zaliczkowa albo rozliczeniowa — tej decyzji nie zapiszesz jeszcze w FaktWay. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktway.pl, podając numer dokumentu.',
+  knownStale: 'Dokument w FaktWay, który ma albo miał numer KSeF %, nie zgadza się już z naszym zapisem — sprawdzimy fakturę w KSeF ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktway.pl. Nie wystawiaj dokumentu % ponownie.',
+  payments: 'Na dokumencie % są zapisane wpłaty — decyzji nie zapiszemy, dopóki wpłaty są przy tym dokumencie. W FaktWay nie zmienisz ich sam: napisz do nas: pomoc@faktway.pl, podając numer dokumentu — ustalimy, przy której fakturze je zapisać. Nie wystawiaj go ponownie.',
+  env: 'Dane faktury % sprawdziliśmy w środowisku KSeF „%”, a FaktWay pracuje teraz w środowisku „%” — tej decyzji nie zapiszesz. Nie wystawiaj dokumentu % ponownie i napisz do nas: pomoc@faktway.pl.',
   triggerSame: 'Dokument % jest wycofany: to ta sama sprzedaż co faktura % w KSeF. Tego dokumentu nie wyślesz do KSeF.',
   triggerOther: 'Dokument % jest wycofany: numer jest zajęty w KSeF przez fakturę %. Tego dokumentu nie wyślesz do KSeF — tę sprzedaż wystaw jako nową fakturę z nowym numerem.',
-  triggerAuto: 'Numer % jest zajęty w KSeF przez % wystawioną poza FaktFlow — tego dokumentu nie wyślesz do KSeF (KSeF odrzuciłby go jako duplikat). Jeśli to inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.',
-  triggerDelete: 'Wycofanego dokumentu % nie usuniesz: zajmuje numer, który w KSeF ma już %, i zostaje w FaktFlow, żeby ten numer nie został podpowiedziany ponownie. Jeśli musisz go usunąć, napisz do nas: pomoc@faktflow.pl.',
+  triggerAuto: 'Numer % jest zajęty w KSeF przez % wystawioną poza FaktWay — tego dokumentu nie wyślesz do KSeF (KSeF odrzuciłby go jako duplikat). Jeśli to inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.',
+  triggerDelete: 'Wycofanego dokumentu % nie usuniesz: zajmuje numer, który w KSeF ma już %, i zostaje w FaktWay, żeby ten numer nie został podpowiedziany ponownie. Jeśli musisz go usunąć, napisz do nas: pomoc@faktway.pl.',
 } as const;
 
 /** Odmowa wysyłki szkicu wycofanego (`retiredDraftSendRefusal`) = tekst wyzwalacza 00148. */
