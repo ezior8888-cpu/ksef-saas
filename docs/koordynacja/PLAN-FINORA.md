@@ -510,7 +510,9 @@ szkice, VAT należny, sprzedaż brutto, termin VAT) są w tych kartach.
   decyzja o duplikacie KSeF (440), komunikat błędu KSeF; plus link Korekta
   jak w P3. „Drukuj” otwiera PDF z `/api/invoices/[id]/pdf` w nowej karcie.
   Dokumentem jest PDF, a `window.print()` wydrukowałby szkielet panelu. Kod
-  QR w podglądzie generujesz z `lib/ksef/qr-codes.ts`. Telefon (poniżej
+  QR w podglądzie to KOD I z `lib/ksef/qr-verification.ts`, ten sam co
+  w PDF (`lib/ksef/qr-codes.ts` to podpisany KOD II dla faktur offline, poza
+  ścieżką produkcyjną; poprawione w E3). Telefon (poniżej
   `lg`): plakietka statusu KSeF i główna akcja („Wyślij do KSeF” albo
   „Pobierz UPO”) stoją NAD dokumentem (`order-first`), reszta prawej kolumny
   pod nim. **Logiki i zasad zgody nie zmieniamy** — przenosimy JSX.
