@@ -17,6 +17,7 @@ export default defineConfig({
       'tests/rls-decyzja-duplikatu.test.ts',
       'tests/rls-dziennik-prob-wysylki.test.ts',
       'tests/rls-faktura-abonamentu-faktway.test.ts',
+      'tests/rls-dzieci-faktur.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],
