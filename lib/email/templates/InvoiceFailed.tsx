@@ -47,7 +47,7 @@ export default function InvoiceFailed({
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            Wiadomość automatyczna z systemu KSeF SaaS.
+            Wiadomość automatyczna z systemu FaktWay.
           </Text>
         </Container>
       </Body>

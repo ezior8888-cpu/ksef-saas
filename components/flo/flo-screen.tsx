@@ -66,7 +66,7 @@ export function FloScreen({
         <>
           {/* NA TELEFONIE NAGŁÓWEK AGENTA WRACA. Dashboard chowa go, bo pasek
               nad nim niesie tytuł „Dashboard” — ale poniżej `lg` w pasku stoi
-              wordmark FaktWay, więc bez tego agent nigdzie się nie przedstawia
+              wordmark FaktFlow, więc bez tego agent nigdzie się nie przedstawia
               i ekran wygląda jak lista powiadomień bez nadawcy.
               Odznaki „TRYB 3” tu NIE MA i nie będzie — powód w `flo-header.tsx`. */}
           <div className="lg:hidden">

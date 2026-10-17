@@ -25,7 +25,7 @@ import type { BuyerParty, PaymentInfo } from '@/types/invoice';
  * Tożsamość zapisów z silnikiem importu pilnuje osobny strażnik
  * (`import-wiersze-tozsamosc.test.ts`); tu tylko czystość i kształt wyniku.
  *
- * Pliki wejściowe jak w strażniku: ff-23 z generatora FaktFlow (stały
+ * Pliki wejściowe jak w strażniku: ff-23 z generatora FaktWay (stały
  * `generatedAt`, NIP fikcyjne: sprzedawca 1234567890, nabywca 1111111111)
  * oraz statyczny `ceny-brutto.xml` (kwoty pozycji z ceny brutto, pola
  * `ksefLineFields` i `lineAmountProblems` w `fa3_data`).
@@ -49,7 +49,7 @@ const TRANSFER: Omit<PaymentInfo, 'amountDue'> = {
   currency: 'PLN', dueDate: '2026-09-24', method: 'transfer', bankAccount: '61109010140000071219812874',
 };
 
-/** Plik taki, jaki FaktFlow wysyła do KSeF (stały `generatedAt`; bez `validate` — NIP fikcyjny). */
+/** Plik taki, jaki FaktWay wysyła do KSeF (stały `generatedAt`; bez `validate` — NIP fikcyjny). */
 function ff23Xml(): string {
   const invoice = finalizeInvoice({
     internalNumber: 'FV/CZ/23',

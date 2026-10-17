@@ -59,7 +59,7 @@ describe('D-A4-2: ENV_MISMATCH — powrót do szkicu, decyzja klienta', () => {
   it('korekta: także szkic (zdarzenia nie trzeba odtwarzać — wysyłka zaczyna się od nowa)', () => {
     const b = failedInvoiceButtons({ ...FAILED, invoiceKind: 'correction', canManage: true });
     expect(b).toMatchObject({ resend: false, reset: true });
-    // A4b PR2b (decyzje 07.10.2026): zablokowany szkic → pomoc FaktFlow, nie „uzgodni operator”
+    // A4b PR2b (decyzje 07.10.2026): zablokowany szkic → pomoc FaktWay, nie „uzgodni operator”
     // (takiej ścieżki w panelu nie ma); szkicu korekty nie wyślesz — od nowa z dzisiejszą datą.
     expect(b?.info).not.toMatch(/uzgodni (ją|go) operator/);
     expect(b?.info).toContain(SUPPORT_EMAIL);

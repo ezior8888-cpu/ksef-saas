@@ -7,7 +7,7 @@
  * skrzynkę, a test `jeden-adres-kontaktowy` pilnuje, żeby stara domena nie
  * wróciła. Poczta przychodząca: docs/runbooks/skrzynka-pomoc.md.
  *
- * Zmiana marki FaktFlow → FaktWay (10.2026): `pomoc@faktflow.pl` przyjmuje
+ * Zmiana domeny na faktway.pl (10.2026): `pomoc@faktflow.pl` przyjmuje
  * pocztę dalej (Cloudflare Email Routing na obu domenach), ale w kodzie jest
  * już tylko nowy adres. Stara domena: `lib/legacy-host-redirect.ts`.
  */

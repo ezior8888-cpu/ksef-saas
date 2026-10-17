@@ -255,7 +255,7 @@ export interface DuplicateDecisionSqlText {
  * Test U16e sprawdza, że każdy wzorzec stoi w 00148 zaraz po `RAISE EXCEPTION '`.
  *
  * Zmiana marki na FaktWay: te wzorce celowo NIE są przepisane. Wgrana migracja 00148
- * rzuca je z nazwą „FaktFlow” i adresem pomocy w dawnej domenie, a testy RLS porównują
+ * rzuca je z dawną nazwą produktu i adresem pomocy w dawnej domenie, a testy RLS porównują
  * `error.message` z bazy z tym lustrem słowo w słowo. Zmiana tekstu = nowa migracja
  * (kolejny numer z rejestru) z `CREATE OR REPLACE` funkcji i wyzwalaczy, a w tym samym
  * PR aktualizacja tego lustra. Do tego czasu adres w dawnej domenie obsługuje poczta
