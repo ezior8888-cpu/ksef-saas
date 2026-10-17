@@ -24,9 +24,10 @@ export default function manifest(): MetadataRoute.Manifest {
      * jest jasny od 30.08.2026. Na telefonie widać to wprost: przy dodaniu do
      * ekranu głównego ekran startowy błyskał czernią, a pasek stanu w trybie
      * `standalone` zostawał czarny nad białym interfejsem.
-     * Wartości zgodne z `--ff-bg` i `--ff-surface` z `app/globals.css`.
+     * Wartości zgodne z `--background` presetu Finora (jasny) z
+     * `app/globals.css`; manifest nie ma wariantu ciemnego.
      */
-    background_color: '#f7f8fa',
+    background_color: '#ffffff',
     theme_color: '#ffffff',
     lang: 'pl-PL',
     categories: ['business', 'finance', 'productivity'],

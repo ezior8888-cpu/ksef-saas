@@ -51,6 +51,9 @@ export default async function DashboardHomePage() {
     loadAgent(),
   ]);
 
+  // `ff-flo-legacy` na korzeniu każdej gałęzi: wątek FLO zostaje w dawnych
+  // kolorach, choć reszta panelu przeszła na preset Finory (plan Finora, E1;
+  // reguła w `app/globals.css`). E4 przenosi klasę na sam slot FLO.
   const szyna = (
     <>
       <Suspense fallback={null}>
@@ -62,7 +65,7 @@ export default async function DashboardHomePage() {
 
   if (!agent.ok) {
     return (
-      <div className="grid h-full grid-cols-1 items-start gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="ff-flo-legacy grid h-full grid-cols-1 items-start gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section
           role="status"
           className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-[22px] py-5"
@@ -79,7 +82,7 @@ export default async function DashboardHomePage() {
 
   if (agent.proposals.length === 0) {
     return (
-      <div className="flex h-full min-h-0 flex-col gap-3 py-4">
+      <div className="ff-flo-legacy flex h-full min-h-0 flex-col gap-3 py-4">
         {agent.fixtures ? <PasekAtrap /> : null}
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex min-h-0 flex-col gap-3">
@@ -101,7 +104,7 @@ export default async function DashboardHomePage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 py-4">
+    <div className="ff-flo-legacy flex h-full min-h-0 flex-col gap-3 py-4">
       {agent.fixtures ? <PasekAtrap /> : null}
 
       <SectionErrorBoundary label="Flo" fallback={szyna}>
