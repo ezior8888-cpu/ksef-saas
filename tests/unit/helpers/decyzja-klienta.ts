@@ -175,7 +175,7 @@ export const CLIENT = {
   role: 'Decyzję, czym jest ten dokument, zapisuje właściciel lub administrator firmy — poproś go o to. Nie wystawiaj tej faktury ponownie.',
   stale: 'Dane faktury w KSeF zmieniły się od otwarcia strony — odśwież stronę i zdecyduj jeszcze raz.',
   confirm: 'Zaznacz „Rozumiem skutki” i zapisz decyzję jeszcze raz.',
-  generic: 'Nie udało się zapisać decyzji. Spróbuj ponownie za chwilę; jeśli błąd się powtarza, napisz do nas: pomoc@faktflow.pl.',
+  generic: 'Nie udało się zapisać decyzji. Spróbuj ponownie za chwilę; jeśli błąd się powtarza, napisz do nas: pomoc@faktway.pl.',
   toastSame: (nr: string) => `Zapisano: ta sama sprzedaż. Dokument ${nr} jest wycofany.`,
   toastOther: 'Zapisano: inna sprzedaż. Wystaw ją jako nową fakturę z nowym numerem.',
   historyReadFailed: 'Nie udało się sprawdzić historii wysyłki tej faktury — spróbuj ponownie za chwilę.',
@@ -183,7 +183,7 @@ export const CLIENT = {
   retiredEmailRefusal: (nr: string) =>
     `Dokumentu ${nr} nie wyślesz e-mailem: jest wycofany, bo jego numer jest zajęty w KSeF przez inną fakturę, więc nie jest fakturą dla nabywcy. Jeśli to inna sprzedaż, wystaw nową fakturę z nowym numerem i wyślij ją.`,
   knownNumberNote: (k: string, y: string, nr: string) =>
-    `W FaktWay numer KSeF ${k} ma już dokument ${y} — te dane się nie zgadzają i musimy je wyjaśnić, zanim zdecydujesz, czym jest ten dokument. Napisz do nas: pomoc@faktflow.pl, podając numer ${nr}. Nie wystawiaj tej faktury ponownie.`,
+    `W FaktWay numer KSeF ${k} ma już dokument ${y} — te dane się nie zgadzają i musimy je wyjaśnić, zanim zdecydujesz, czym jest ten dokument. Napisz do nas: pomoc@faktway.pl, podając numer ${nr}. Nie wystawiaj tej faktury ponownie.`,
 } as const;
 
 /** Panel decyzji (2.11.B „Panel”, dialogi). `program` jak `DuplicateDecisionView.program`. */
@@ -194,14 +194,14 @@ export const PANEL = {
   contentSame: 'Treść pozycji jest taka sama jak w fakturze w KSeF — różni się tylko nagłówek pliku.',
   contentDifferent: 'Treść pozycji różni się od faktury w KSeF.',
   knownNumberLine: (k: string, y: string, nr: string) =>
-    `W FaktWay numer KSeF ${k} ma już dokument ${y}. Twoja decyzja dotyczy tylko dokumentu ${nr}; jeśli dane dokumentu ${y} nie zgadzają się z fakturą w KSeF, napisz do nas: pomoc@faktflow.pl, podając oba numery.`,
+    `W FaktWay numer KSeF ${k} ma już dokument ${y}. Twoja decyzja dotyczy tylko dokumentu ${nr}; jeśli dane dokumentu ${y} nie zgadzają się z fakturą w KSeF, napisz do nas: pomoc@faktway.pl, podając oba numery.`,
   knownLink: (y: string) => `Zobacz dokument ${y}`,
   columns: ['W KSeF', 'Ten dokument'] as const,
   differs: 'różni się',
   buttonSame: 'To ta sama sprzedaż',
   buttonOther: 'To inna sprzedaż',
   support: (nr: string) =>
-    `Nie wiesz, co wybrać? Napisz do nas: pomoc@faktflow.pl, podając numer ${nr}. Do tego czasu nie wystawiaj tej faktury ponownie.`,
+    `Nie wiesz, co wybrać? Napisz do nas: pomoc@faktway.pl, podając numer ${nr}. Do tego czasu nie wystawiaj tej faktury ponownie.`,
   same: {
     line1: (nrK: string, k: string, program: string | null) =>
       `Fakturą tej sprzedaży zostaje faktura ${nrK} z KSeF (numer KSeF ${k}), ${programNom(program)} — tam ją rozliczasz i korygujesz.`,
@@ -212,7 +212,7 @@ export const PANEL = {
     line3: (k: string) =>
       `FaktWay nie ujmie faktury ${k} w JPK ani w KPiR — jeśli składasz je z FaktWay, uwzględnij ją osobno.`,
     line3Known: (nr: string, k: string, y: string) =>
-      `Dokument ${nr} nie trafi do JPK ani do KPiR w FaktWay. Fakturę ${k} FaktWay zna jako dokument ${y} — sprawdź, czy jego dane zgadzają się z danymi z KSeF w tabeli; jeśli nie, napisz do nas: pomoc@faktflow.pl, podając oba numery.`,
+      `Dokument ${nr} nie trafi do JPK ani do KPiR w FaktWay. Fakturę ${k} FaktWay zna jako dokument ${y} — sprawdź, czy jego dane zgadzają się z danymi z KSeF w tabeli; jeśli nie, napisz do nas: pomoc@faktway.pl, podając oba numery.`,
     line4: 'Jeśli to jednak inna sprzedaż, zostanie bez faktury — wystaw ją wtedy jako nową fakturę z nowym numerem.',
     checkbox: (k: string, nr: string) =>
       `Rozumiem skutki: faktura ${k} w KSeF dokumentuje tę samą sprzedaż co dokument ${nr}, mimo różnic zaznaczonych w tabeli.`,
@@ -229,7 +229,7 @@ export const PANEL = {
         ? `FaktWay nie ujmuje faktury ${k} w JPK ani w KPiR — rozliczasz ją w programie „${program}”.`
         : `FaktWay nie ujmuje faktury ${k} w JPK ani w KPiR — rozliczasz ją tam, gdzie ją wystawiono.`,
     line4Known: (k: string, y: string) =>
-      `Fakturę ${k} FaktWay zna jako dokument ${y} — sprawdź, czy jego dane zgadzają się z danymi z KSeF w tabeli; jeśli nie, napisz do nas: pomoc@faktflow.pl, podając oba numery.`,
+      `Fakturę ${k} FaktWay zna jako dokument ${y} — sprawdź, czy jego dane zgadzają się z danymi z KSeF w tabeli; jeśli nie, napisz do nas: pomoc@faktway.pl, podając oba numery.`,
     checkbox: (k: string, nr: string) =>
       `Rozumiem skutki: faktura ${k} w KSeF dokumentuje inną sprzedaż niż dokument ${nr}.`,
     confirm: 'Zapisz: inna sprzedaż',

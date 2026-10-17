@@ -11,6 +11,8 @@
  * CZYSTY moduł (importowany w komponencie): bez KSeF, bazy i Node.
  */
 
+import { SUPPORT_EMAIL } from '@/lib/site';
+
 import type { OriginalInvoiceSummary } from './duplicate-verdict';
 
 /** Dlaczego automat nie rozstrzygnął duplikatu — to samo słowo w danych, alarmie i runbooku. */
@@ -185,19 +187,19 @@ const DONT_REISSUE = 'Nie wystawiaj tej faktury ponownie.';
 export const DUPLICATE_ORIGINAL_NOTES = {
   /** `known-number` bez decyzji w panelu (zapis PR A bez danych, własna historia, known-stale). */
   KNOWN_NUMBER_NOTE: (k: string, y: string, nr: string) =>
-    `W FaktWay numer KSeF ${k} ma już dokument ${y} — te dane się nie zgadzają i musimy je wyjaśnić, zanim zdecydujesz, czym jest ten dokument. Napisz do nas: pomoc@faktflow.pl, podając numer ${nr}. ${DONT_REISSUE}`,
+    `W FaktWay numer KSeF ${k} ma już dokument ${y} — te dane się nie zgadzają i musimy je wyjaśnić, zanim zdecydujesz, czym jest ten dokument. Napisz do nas: ${SUPPORT_EMAIL}, podając numer ${nr}. ${DONT_REISSUE}`,
   /** Odnośnik do dokumentu Y (`/invoices/{Y.id}`). */
   KNOWN_LINK: (y: string) => `Zobacz dokument ${y}`,
   /** Odmowa pobrania inna niż 403. */
   DOWNLOAD_REFUSED_NOTE:
-    `Nie mogliśmy pobrać treści tej faktury z KSeF — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni); pytania: pomoc FaktWay (pomoc@faktflow.pl), podaj numer faktury. ${DONT_REISSUE}`,
+    `Nie mogliśmy pobrać treści tej faktury z KSeF — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni); pytania: pomoc FaktWay (${SUPPORT_EMAIL}), podaj numer faktury. ${DONT_REISSUE}`,
   /** Pobranie, magazyn albo archiwum chwilowo nieudane — panel widać dopiero po wyczerpaniu ponowień joba. */
   PENDING_NOTE:
-    `Nie udało się jeszcze sprawdzić treści tej faktury w KSeF — sprawdzimy ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl, podając numer faktury. ${DONT_REISSUE}`,
+    `Nie udało się jeszcze sprawdzić treści tej faktury w KSeF — sprawdzimy ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: ${SUPPORT_EMAIL}, podając numer faktury. ${DONT_REISSUE}`,
   DEFAULT_NOTE: (doc: string) =>
-    `${doc} nie została przyjęta, bo KSeF ma już fakturę Twojej firmy o tym numerze (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktWay (pomoc@faktflow.pl), podaj numer faktury. ${DONT_REISSUE}`,
+    `${doc} nie została przyjęta, bo KSeF ma już fakturę Twojej firmy o tym numerze (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktWay (${SUPPORT_EMAIL}), podaj numer faktury. ${DONT_REISSUE}`,
   OWN_HISTORY_NOTE: (doc: string) =>
-    `${doc} nie została przyjęta, bo KSeF ma już wcześniejszą wersję tej faktury wysłaną z FaktWay (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktWay (pomoc@faktflow.pl), podaj numer faktury. ${DONT_REISSUE}`,
+    `${doc} nie została przyjęta, bo KSeF ma już wcześniejszą wersję tej faktury wysłaną z FaktWay (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktWay (${SUPPORT_EMAIL}), podaj numer faktury. ${DONT_REISSUE}`,
 } as const;
 
 /** Dzień w Polsce (Europe/Warsaw) jako RRRR-MM-DD — nie dzień w UTC. */

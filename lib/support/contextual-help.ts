@@ -20,7 +20,7 @@ interface RouteHelp {
 const ROUTE_HELP: RouteHelp[] = [
   {
     prefix: '/settings/billing',
-    slugs: ['plany-i-cennik', 'okres-probny-trial', 'platnosci-i-faktury-za-faktflow'],
+    slugs: ['plany-i-cennik', 'okres-probny-trial', 'platnosci-i-faktury-za-faktway'],
   },
   {
     prefix: '/settings/security',
@@ -60,7 +60,7 @@ const ROUTE_HELP: RouteHelp[] = [
   },
   {
     prefix: '/dashboard',
-    slugs: ['pierwsze-kroki-w-faktflow', 'czym-jest-ksef'],
+    slugs: ['pierwsze-kroki-w-faktway', 'czym-jest-ksef'],
   },
 ];
 
