@@ -1,4 +1,4 @@
-# Plan wdrożenia szablonu Finora w FaktFlow
+# Plan wdrożenia szablonu Finora w FaktWay
 
 > **„Kontynuuj plan Finora”** — sesja czyta ten plik od góry, robi checklistę
 > startową (sekcja 0) i pracuje od wiersza „Następny krok” w dzienniku
@@ -61,6 +61,7 @@ otwarta i spisana) + odczyt kodu `main` @ `1ded2147`.
 | D5 | Strona sprzedażowa (landing) — poza zakresem. |
 | D6 | Nowe funkcje podpatrzone u konkurencji, które pasują do ekranów Finory, robimy (sekcja 8). Bez kombinowania: najprostsza poprawna wersja. |
 | D7 | **Karty podatkowe na ekranach są dozwolone** (decyzja Bartosza 17.10.2026: „nie ma żadnych problemów z prawem”): licznik limitu zwolnienia z VAT, „Odłóż na podatek”, VAT należny. To liczniki faktów, nie porady. Wyłączniki `tax.*` w `lib/flo/flags.ts` dotyczą propozycji agenta FLO i zostają bez zmian (D4). Gdziekolwiek niżej karta podatkowa jest opisana jako „wstrzymana do opinii prawnika”, wygrywa D7. |
+| D8 | **Produkt nazywa się FaktWay** (zmiana nazwy 17.10.2026, wcześniej FaktFlow). W interfejsie, mailach, PDF, pomocy i na nowych ekranach Finory piszesz tylko „FaktWay” (pilnuje tego `tests/unit/nazwa-produktu.test.ts`). Domeny `faktflow.pl`, adresy e‑mail, zmienne środowiskowe `FAKTFLOW_*`, adresy stron pomocy i identyfikatory techniczne (`ff-*`, `--ff-*`, `faktflow-original`) zostają bez zmian do osobnej decyzji. |
 
 ---
 
@@ -68,7 +69,7 @@ otwarta i spisana) + odczyt kodu `main` @ `1ded2147`.
 
 ### 2.1. Stos i zgodność z Finorą
 
-| | FaktFlow | Finora (strona produktu) |
+| | FaktWay | Finora (strona produktu) |
 |---|---|---|
 | Framework | Next.js 16.3, App Router, React 19.2 | Next.js 16 App Router |
 | UI | shadcn/ui, styl `radix-nova`, pakiet `radix-ui`, Tailwind v4 | shadcn/ui + Tailwind v4 |
@@ -264,13 +265,13 @@ wskazane karty; **ODPADA** = nie wchodzi, ewentualnie pojedynczy komponent.
 | Szkielet | pasek boczny z grupami, nagłówek: wyszukiwarka „Type to search…”, paleta poleceń, dzwonek, przełącznik motywu, ustawienia/personalizacja, avatar; stopka | **BIERZEMY** (bez panelu personalizacji i bez „Buy Now”) |
 | `/dashboard/finance` | Finance (3 serie w stosie: profit/income/expense, 7 miesięcy, bez legendy), Report (Monthly Avg; Total Profit / Income / Expense; View Report), kafel Total Orders (+22%, „Last 4 months”), kafel Total Profit (−16%, „Last One year”), Total Revenue (mini‑słupki), Impression (linia, +24%), Total visitors (Desktop/Tablet/Mobile), Top Products by Sales, Top Products by Volume, tabela użytkowników (filtry Role/Plan/Status, paginacja) | **BIERZEMY** → Pulpit (P1) |
 | `/dashboard/cash-flow` | Cash Flow (Weekly/Monthly/Yearly), Savings goal (pierścień), Income this month, Expense this month, Top Cash Flow Sources, Upcoming Bills, Recent Activity, tabela Counterparty/Category/Amount/Status/Actions z filtrami | **BIERZEMY** → Przepływy (P2) |
-| `/dashboard/net-worth` | Net Worth, Assets vs Liabilities, Liquidity Snapshot, Asset Allocation, Top Holdings, Liabilities, Net Worth Growth Rate, Debt Payoff Progress, tabela aktywów | **CZĘŚCIOWO** → 2 karty do Przepływów (P2) |
+| `/dashboard/net-worth` | Net Worth, Assets vs Liabilities, Liquidity Snapshot, Asset Allocation, Top Holdings, Liabilities, Net Worth Growth Rate, Debt Payoff Progress, tabela aktywów | **CZĘŚCIOWO** → 2 karty do Przepływów (P2) + wykres kołowy Asset Allocation do Analizy sprzedaży (P11) |
 | `/transactions` | 4 kafle (Money In, Money Out, Net, Upcoming), tabela Date/Merchant/Group/Category/Account/Method/Amount/Status/Actions, filtry grup/kategorii/statusów, „+ Add Transaction” | **BIERZEMY** → Wydatki (P8) i Skrzynka KSeF (P9) |
 | `/money-management/monthly-analytics` | kafle (Total spent, dzienna średnia, vs poprzedni miesiąc, top kategoria), Spend Trend, Spend by Category, Top Categories, Recent Expenses, Spending Streaks, Income vs Expense, Subscriptions, Daily Spend (mapa ciepła, 180 dni), wybór miesiąca | **BIERZEMY dwa razy** → Analiza kosztów (P10) i Analiza sprzedaży (P11) |
 | `/money-management/budget` | Budget by Category, Budgeted vs Actual, Needs Attention, Upcoming Bills, Total Budget Used, Ideal/Actual Pace, Budget Adherence History | **ODPADA** (mikrofirmy nie budżetują; „Upcoming Bills” mamy z Cash Flow) |
 | `/accounts` | kafle (saldo, liczba kont, portfele, zmiana), karty rachunków | **CZĘŚCIOWO, później** → Rachunki bankowe (P12, po imporcie wyciągów) |
 | `/cards` | karty płatnicze | **ODPADA** |
-| `/investments/*` (equities, F&O, crypto, mutual funds, bonds) | portfele, alokacje, Top Gainers/Losers, holdingi | **ODPADA**; bierzemy 2 komponenty: wykres kołowy alokacji i listy Gainers/Losers → Analiza sprzedaży (P11) |
+| `/investments/*` (equities, F&O, crypto, mutual funds, bonds) | portfele, alokacje, Top Gainers/Losers, holdingi | **ODPADA**; bierzemy listy Top Gainers/Losers → Analiza sprzedaży (P11) |
 | `/insurance-premiums`, `/emis` | ubezpieczenia, raty kredytów | **ODPADA** |
 | `/invoices/list` | kafle (Clients, Invoices, Paid, Unpaid), tabela #/Status/Client/Total/Issued Date/Due/Balance/Actions, „Show 10”, „Create Invoice”, wyszukiwarka, filtr statusu | **BIERZEMY** → Faktury (P3) |
 | `/invoices/view/[id]` | dokument (logo, sprzedawca, Invoice To, Bill To, pozycje Item/Description/Hours/Qty/Total, Salesperson, Subtotal/Discount/Tax/Total, Note) + prawa kolumna: Send Invoice / Download / Print | **BIERZEMY** → Podgląd faktury (P4) |
@@ -360,7 +361,7 @@ każdej karty: komunikat z §7.3, nigdy pusty wykres z osiami.
 
 ### P0. Szkielet (każdy ekran)
 
-- Pasek boczny Finory z grupami z §4; logo FaktFlow (`components/brand/brand-wordmark`).
+- Pasek boczny Finory z grupami z §4; logo FaktWay (`components/brand/brand-wordmark`).
 - Nagłówek: przycisk zwijania menu · **paleta poleceń** w miejscu „Type to
   search…” („Szukaj lub przejdź… ⌘K”, §8 N4) · **dzwonek usuwamy** w E2, bo
   w aplikacji nie ma listy powiadomień (`DashboardOrgHeader` to wyłącznie
@@ -372,7 +373,7 @@ każdej karty: komunikat z §7.3, nigdy pusty wykres z osiami.
   (`signOut`). „Profil” wylatuje (P14). Telefon: ikona lupy w nagłówku
   otwiera paletę N4, bo Finora chowa tam przycisk „Type to search…”.
 - Wyrzucamy: panel personalizacji, „Buy Now”, linki stopki do shadcn/studio.
-  Stopka: „© FaktFlow · Regulamin · Polityka prywatności · Pomoc”.
+  Stopka: „© FaktWay · Regulamin · Polityka prywatności · Pomoc”.
 - Banery (`KsefHealthBanner`, weryfikacja, brak firmy) zostają nad treścią
   strony, w stylu `Alert` Finory.
 - Wszystko z `layout.tsx` (IdleWatcher, InstallPrompt, SupportWidget,
@@ -623,10 +624,10 @@ Ten sam układ co P10, dane sprzedaży (faktury `outgoing` wg §2.4):
 | Income vs Expense | **Przychody a koszty** |
 | Subscriptions | **Stali klienci** — fakturowani w ≥ 3 z ostatnich 4 miesięcy; przy każdym przycisk **„Zrób fakturę cykliczną”** → N1 (przycisk dodaje E9) |
 | Daily Spend | **Kalendarz sprzedaży**: ostatnie 180 dni, mapa ciepła jak w Finorze, niezależnie od wybranego miesiąca |
-| + Asset Allocation (z inwestycji) | **Udział klientów w przychodach** (wykres kołowy, top 5 + „Pozostali”); gdy jeden klient > 50% — podpis „Uwaga: jeden klient to ponad połowa przychodu” |
+| + Asset Allocation (z Net Worth) | **Udział klientów w przychodach** (wykres kołowy, top 5 + „Pozostali”); gdy jeden klient > 50% — podpis „Uwaga: jeden klient to ponad połowa przychodu” |
 | + Top Gainers / Top Losers (z inwestycji) | **Klienci: rośnie / spada** — zmiana sprzedaży 3 mies. vs poprzednie 3 |
 
-Karty z inwestycji idą osobnym rzędem 3 × 1/3 pod siatką, jak rząd
+Te trzy karty idą osobnym rzędem 3 × 1/3 pod siatką, jak rząd
 Watchlist | Top Gainers | Top Losers na `/investments/equities`: **Udział
 klientów w przychodach** | **Klienci: rośnie** | **Klienci: spada** (Top
 Gainers i Top Losers to dwie osobne karty). Klient we wszystkich kartach
@@ -1059,8 +1060,9 @@ Jeśli commity sesji idą jako `claude[bot]`, agent-guard wymaga etykiety
   tekstowym). Wartości presetu z D2 wpisz na sztywno do `:root` (jasny)
   i `.dark` w `app/globals.css`, 1:1 z obiektu `themePresets`
   w `../finora-src`. Komponenty Finory, które czytają ustawienia
-  z kontekstu, dostają stałe: układ `compact`, skala `md`, pasek `default`,
-  zwijanie `icon`. Motywem dalej rządzi `lib/theme/theme.ts` i nasz
+  z kontekstu, dostają stałe z D2: układ `compact`, skala `sm`, wariant paska
+  `inset`, pasek otwarty ze zwijaniem do ikon (`collapsible: 'icon'`). Gdzie
+  ustawić skalę: §10.1. Motywem dalej rządzi `lib/theme/theme.ts` i nasz
   `ThemeToggle`. Komponent Finory, który woła `useTheme()`, przepnij na
   `readStoredTheme`/`applyTheme` albo na odczyt klasy `dark` z `<html>`.
   **Font:** tylko rodzina z presetu (+ jej mono), przez `next/font/google`
@@ -1092,18 +1094,208 @@ Jeśli commity sesji idą jako `claude[bot]`, agent-guard wymaga etykiety
 
 ---
 
-## 10. Inwentarz Finory (wypełnia E0)
+## 10. Inwentarz Finory (E0, 17.10.2026, Finora 1.0.0)
 
-| Karta / element (§5) | Plik w `../finora-src` | Zależności | Uwagi |
+Źródło: `ezior8888-cpu/faktflow-finora-src` @ `56394ef` (oryginał bez zmian).
+Ścieżki niżej są względem katalogu klonu (`../finora-src` albo
+`../faktflow-finora-src`). Kod Finory czytasz tylko z plików wskazanych dla
+etapu (§9 „Oszczędzanie”).
+
+### 10.1. Fundament (E1)
+
+| Element | Wartość w Finorze | Co robi E1 |
+|---|---|---|
+| `components.json` | `style: 'base-lyra'`, `baseColor: 'mist'`, `iconLibrary: 'remixicon'`, `menuColor: 'default'`, `menuAccent: 'subtle'` | nasz `components.json` przestawić na te wartości (styl `base-lyra` daje ostre rogi: `rounded-none`, `text-xs`, przycisk `h-8`) |
+| Prymitywy | **Base UI** `@base-ui/react` 1.5.0. W `src/components/ui` nie ma ani jednego `asChild` ani importu Radix; wywołania używają `render={<Link />}` z `nativeButton={false}` | migracja `asChild` → `render` (§2.1) |
+| Ikony | **Remix Icon** `@remixicon/react` 4.9.0 (komponenty `Ri…`) | dodać |
+| Wykresy | **recharts** 3.8.0 + `src/components/ui/chart.tsx` (ChartContainer, ChartTooltip, ChartLegend) | dodać |
+| Paleta ⌘K | `cmdk` 1.1.1 przez `src/components/ui/command.tsx` | dodać (E2) |
+| Tabele | `@tanstack/react-table` 8.21.3 | dodać w E3 (pierwsza tabela Finory) |
+| Daty w formularzach | `date-fns` 4.4.0, `react-day-picker` 10.0.1 (`ui/calendar.tsx`, `src/views/pages/invoices/invoice-date-field.tsx`) | dodać dopiero w etapie, który ich użyje (P5, filtry dat) |
+| NIE dodajemy | `next-themes` (u nas jest w `package.json`, ale motywem rządzi `lib/theme/theme.ts`), `nuqs` (filtry przez adres i `invoiceListHref`), `zustand` i `src/store/*` (dane z serwera), `react-use` (tylko ciasteczko ustawień), `motion` (tylko listy z inwestycji; animację daje nasz `framer-motion`: `AnimatePresence` ma to samo API), `react-19-credit-card`, `geist` (Geist mamy z `next/font`) | — |
+| `globals.css` Finory (247 linii) | `@import 'shadcn/tailwind.css'` (nasz `shadcn` 4.3.0 ma ten eksport), `@custom-variant dark (&:is(.dark *))` (zgodne z klasą `dark` z `lib/theme/theme.ts`), `@theme inline` z `--font-heading: var(--font-sans)` i skalą promieni od `--radius: 0.625rem`, klasy `.input-default/-lg/-sm`, odstępy przycisków `[data-slot='button'].h-9/.h-10:not(.px-6)`, kursory `cursor: pointer` dla przycisków, opcji i pozycji menu, reguły druku | przenieść te bloki; reguły `.rccs` (karty płatnicze) i `[data-theme-scale='lg']` pominąć |
+| Nieużywane w Finorze | `ui/circular-progress.tsx`, `ui/bg-silk.tsx` (zero importów) | nie przenosić |
+
+**Preset Modern Minimal** (`src/utils/theme-presets.ts`, linie 456–526).
+Preset ma tylko kolory. **Nie ma kluczy `shadow-*`, `radius` ani fontów**, więc
+`--radius` zostaje `0.625rem` z `globals.css` Finory, a cienie są z Tailwinda.
+Wartości 1:1 (jasny → `:root`, ciemny → `.dark`):
+
+| Zmienna | Jasny | Ciemny |
+|---|---|---|
+| `background` | `oklch(1.00 0 0)` | `oklch(0.20 0 0)` |
+| `foreground` | `oklch(0.32 0 0)` | `oklch(0.92 0 0)` |
+| `card` / `popover` | `oklch(1.00 0 0)` | `oklch(0.27 0 0)` |
+| `card-foreground` / `popover-foreground` | `oklch(0.32 0 0)` | `oklch(0.92 0 0)` |
+| `primary` | `oklch(0.62 0.19 259.76)` | `oklch(0.62 0.19 259.76)` |
+| `primary-foreground` | `oklch(1.00 0 0)` | `oklch(1.00 0 0)` |
+| `secondary` | `oklch(0.97 0 0)` | `oklch(0.27 0 0)` |
+| `secondary-foreground` | `oklch(0.45 0.03 257.68)` | `oklch(0.92 0 0)` |
+| `muted` | `oklch(0.98 0 0)` | `oklch(0.27 0 0)` |
+| `muted-foreground` | `oklch(0.55 0.02 264.41)` | `oklch(0.72 0 0)` |
+| `accent` | `oklch(0.95 0.03 233.56)` | `oklch(0.38 0.14 265.59)` |
+| `accent-foreground` | `oklch(0.38 0.14 265.59)` | `oklch(0.88 0.06 254.63)` |
+| `destructive` | `oklch(0.64 0.21 25.39)` | `oklch(0.64 0.21 25.39)` |
+| `border` / `input` | `oklch(0.93 0.01 261.82)` | `oklch(0.37 0 0)` |
+| `ring` | `oklch(0.62 0.19 259.76)` | `oklch(0.62 0.19 259.76)` |
+| `chart-1` | `oklch(0.62 0.19 259.76)` | `oklch(0.71 0.14 254.69)` |
+| `chart-2` | `oklch(0.55 0.22 262.96)` | `oklch(0.62 0.19 259.76)` |
+| `chart-3` | `oklch(0.49 0.22 264.43)` | `oklch(0.55 0.22 262.96)` |
+| `chart-4` | `oklch(0.42 0.18 265.55)` | `oklch(0.49 0.22 264.43)` |
+| `chart-5` | `oklch(0.38 0.14 265.59)` | `oklch(0.42 0.18 265.55)` |
+| `sidebar` | `oklch(0.98 0 0)` | `oklch(0.21 0.01 285.93)` |
+| `sidebar-foreground` | `oklch(0.14 0 0)` | `oklch(0.99 0 0)` |
+| `sidebar-primary` | `oklch(0.20 0 0)` | `oklch(0.49 0.24 264.40)` |
+| `sidebar-primary-foreground` | `oklch(0.98 0 0)` | `oklch(0.99 0 0)` |
+| `sidebar-accent` | `oklch(0.97 0 0)` | `oklch(0.27 0.01 286.10)` |
+| `sidebar-accent-foreground` | `oklch(0.20 0 0)` | `oklch(0.99 0 0)` |
+| `sidebar-border` | `oklch(0.92 0 0)` | `oklch(1.00 0 0 / 10%)` |
+| `sidebar-ring` | `oklch(0.71 0 0)` | `oklch(0.55 0.02 285.93)` |
+
+Preset nie ma `destructive-foreground`; Finora go nie używa (wariant
+`destructive` to `bg-destructive/10 text-destructive`).
+
+**Font:** Outfit (`next/font/google`, zmienna `--font-outfit`; `font-data`
+Next.js potwierdza podzbiory `latin` i `latin-ext`, więc polskie znaki są,
+wagi 100–900 i `variable`). Finora ustawia go przez `--font-sans`
+i `font-family` na `<html>` (`src/contexts/settingsContext.tsx` 300–316);
+u nas na stałe w `@theme inline`: `--font-sans: var(--font-outfit)`.
+**Mono:** preset go nie ma, domyślne Finory to Geist Mono. Zostaje nasz IBM
+Plex Mono (§9 „Dodatki”), czyli `--font-mono: var(--font-ibm-plex-mono)`.
+
+**Ustawienia z D2 w kodzie** (domyślne z `src/configs/themeConfig.ts`,
+odczyt w `src/contexts/settingsContext.tsx`):
+
+| Panel | Klucz | Wartość D2 | Gdzie działa |
 |---|---|---|---|
-| _do uzupełnienia_ | | | |
+| Content Layout: Compact | `layout: 'compact'` | jak domyślne | `<main>` w `src/app/(pages)/layout.tsx`: `mx-auto size-full flex-1 px-4 py-6 sm:px-6` + `max-w-360`; nagłówek `max-w-348` (`Header.tsx`); stopka (`Footer.tsx`) |
+| Scale: SM | `scale: 'sm'` | **inna niż domyślna `md`** | atrybut `data-theme-scale='sm'` na `<html>`; `globals.css`: `--text-sm: 0.75rem`, `--text-base: 0.85rem`, `--text-lg: 1.05rem`, `--spacing: 0.222222rem` (domyślnie 0.25rem). To zmienia WSZYSTKIE odstępy Tailwinda i `text-sm` = `text-xs` = 12 px |
+| Sidebar Variant: Inset | `variant: 'inset'` | **inna niż domyślna `default`** | prop `variant` komponentu `Sidebar` (`src/components/layout/Sidebar.tsx`) |
+| Sidebar Mode: Default | `sidebarOpen: true`, `collapsible: 'icon'` | jak domyślne | „Default” w panelu = pasek rozwinięty, przycisk zwija go do ikon (`ThemeCustomizer.tsx` 59–63, 324–340) |
+| Color Mode: Light | `mode` | `light` (domyślne Finory to `system`) | u nas `lib/theme/theme.ts`, domyślnie jasny (§9) |
 
-Preset: `<nazwa z D2>`. Komplet zmiennych light i dark (z `shadow-*`)
-z obiektu `themePresets` w `../finora-src`, przepisany 1:1 do `:root`
-i `.dark` · Font: _do uzupełnienia_ · Mono dla liczb: _do uzupełnienia_ ·
-Biblioteka wykresów: _do uzupełnienia_ · Ikony: _do uzupełnienia_ (oczekiwane:
-Remix Icon) · Prymitywy (Base UI / Radix): _do uzupełnienia_ ·
-`components.json` style: _do uzupełnienia_.
+**Gdzie ustawić skalę SM (decyzja E1).** Atrybut na `<html>` zmniejszyłby też
+landing, logowanie (`styles/zova.css`) i `/admin`. Zmienne skali definiuj więc
+pod `.ff-dashboard[data-theme-scale='sm']` (korzeń szkieletu), a nie pod
+samym atrybutem. Portale Base UI (Dialog, Sheet, Popover, Menu, Select,
+Tooltip) renderują się w `body`, poza korzeniem: ich zawartość dostaje klasę
+`ff-dashboard` i atrybut skali tak jak `flo-queue-sheet.tsx`, albo E1 ustawia
+`container` portalu na element wewnątrz korzenia. Sprawdź w E1: FLO w slocie
+też dostaje mniejsze odstępy (D4: kolory wątku bez zmian, odstępy ocenia
+Masło na punkcie kontrolnym).
+
+### 10.2. Konflikty z planem, które E0 znalazło w kodzie
+
+1. **Kontrast przycisku głównego (blokuje E1).** Biały tekst na
+   `primary` presetu (`oklch(0.62 0.19 259.76)`, ok. `#3981f6`) ma
+   **3,73:1**, a §9 pkt 4 i `e2e/tests/06-accessibility.spec.ts` (axe,
+   WCAG 2.1 AA) wymagają 4,5:1. To samo `primary` jako tekst (wariant
+   `link`, aktywne pozycje) na białym: 3,73:1. `destructive` jako tekst na
+   białym: 3,72:1. Wyliczone z oklch → sRGB, wzór WCAG. **Propozycja (do
+   potwierdzenia Bartosza przed E1):** jasny motyw `--primary:
+   oklch(0.55 0.22 262.96)` (to `chart-2` tego samego presetu, ok.
+   `#2463ef`: 5,10:1 z białym, 4,81:1 na `muted`) i `--destructive:
+   oklch(0.577 0.245 27.325)` (domyślny shadcn, 4,76:1). Ciemny motyw:
+   `--primary: oklch(0.71 0.14 254.69)` (`chart-1` presetu) z
+   `--primary-foreground: oklch(0.20 0 0)` (ciemny tekst na jasnoniebieskim
+   przycisku, 5,85:1 jako tekst na karcie). `--ring` i `chart-*` bez zmian.
+   Bez decyzji E1 bierze tę propozycję, bo inaczej CI dostępności padnie.
+2. **§9 „Dodatki”, motyw i font** pisał „skala `md`, pasek `default`”.
+   D2 to skala **`sm`** i wariant **`inset`**. Poprawione niżej w §9.
+3. **„Komplet zmiennych … (z `shadow-*`)”** — preset Modern Minimal nie ma
+   cieni, promienia ani fontów (10.1).
+4. **Asset Allocation** nie jest na `/investments/*`, tylko na
+   `/dashboard/net-worth` (`src/views/dashboards/charts/chart-asset-allocation.tsx`).
+   Top Gainers / Top Losers są na `/investments/equities`
+   (`mover-list-card.tsx`, z `motion/react`). Poprawione w §3 i P11.
+5. **⌘K Finory otwiera się też klawiszem `/`** (`CommandMenu.tsx` 49–63,
+   z pominięciem pól tekstowych). Zostawiamy oba skróty: pole FLO to
+   `textarea`, więc `/` w nim nie otwiera palety.
+6. **Pasek boczny Finory zapisuje ciasteczko `sidebar_state`, ale nikt go nie
+   czyta** (`ui/sidebar.tsx`). E2 czyta je w `app/(dashboard)/layout.tsx`
+   (serwer) jako `defaultOpen`, żeby po przeładowaniu nie mignął pasek
+   rozwinięty.
+7. **Nagłówek Finory nie ma stałej wysokości**: przyciski `h-8` + `py-2` +
+   obramowanie ≈ 49 px (przy skali SM mniej, bo `py-2` liczy się z
+   `--spacing`). `--ff-header-h` (§9 „Dodatki” E2) bierz z wyrenderowanej
+   wysokości, nie z tej liczby.
+8. **`NotificationDropdown.tsx` i `src/app/server/actions.ts` importują
+   strony, które odpadają** (raty, ubezpieczenia, karty). Dzwonek i tak
+   usuwamy (P0), a dane z `actions.ts` zastępują nasze loadery: nie przenosić
+   żadnego z nich. `ProfileDropdown.tsx` linkuje do `/cards`, `/accounts`,
+   `/money-management/budget` — E2 zostawia w menu avatara tylko pozycje
+   z P0.
+9. **Finora: „Print” to `window.print()`, „Download” nie ma obsługi**
+   (`invoice-actions.tsx`). P4 i tak każe drukować PDF — bez zmian w planie.
+10. **„Add Transaction” to Sheet, nie Dialog**
+    (`create-transaction-sheet.tsx`). P8 używa naszego `capture-button` —
+    bez zmian w planie.
+11. **Zakładki ustawień Finory to stan komponentu** (`useState` w
+    `src/views/settings/index.tsx`). P14 i tak robi z nich `<Link>` — bez
+    zmian w planie.
+
+### 10.3. Szkielet (E2)
+
+| Element | Plik | Uwagi |
+|---|---|---|
+| Układ panelu | `src/app/(pages)/layout.tsx` | `Sidebar` w `Suspense` → `SidebarInset` → `Header` → `<main>` → `Toaster` → `Footer` |
+| Providery | `src/components/Providers.tsx`, `src/components/ThemeProvider.tsx` | NIE przenosimy (`next-themes`, `SettingsProvider`); bierzemy tylko `SidebarProvider defaultOpen` i `TooltipProvider` |
+| Prymityw paska | `src/components/ui/sidebar.tsx` (683 linie) | `SIDEBAR_WIDTH = '16rem'`, `SIDEBAR_WIDTH_MOBILE = '18rem'`, `SIDEBAR_WIDTH_ICON = '3rem'` (→ `--sidebar-width`, `--sidebar-width-icon`); skrót ⌘/Ctrl+B; poniżej progu mobilnego Sheet; kontener `md:flex` → u nas `lg:flex` (§4) |
+| Próg mobilny | `src/hooks/use-mobile.ts` | `MOBILE_BREAKPOINT = 1280` → u nas 1024 (§4) |
+| Pasek z menu | `src/components/layout/Sidebar.tsx` + `src/configs/navConfig.tsx` | menu z grupami i `Collapsible`; u nas pozycje z `lib/dashboard-nav-config.ts` |
+| Nagłówek | `src/components/layout/Header.tsx` | `sticky top-0 z-50 border-b px-4 sm:px-6`, wiersz `py-2`; kolejność: SidebarTrigger, Separator, CommandMenu, Notification (usuwamy), ModeToggle (nasz `ThemeToggle`), link Ustawienia, ThemeCustomizer (usuwamy), ProfileDropdown |
+| ⌘K | `src/components/layout/CommandMenu.tsx`, dane `src/assets/data/search.ts` | u nas pozycje z `dashboardNavSections` (N4) |
+| Przełącznik motywu | `src/components/layout/ModeToggle.tsx` | woła `useTheme()`; przepiąć na `lib/theme/theme.ts` (§9) |
+| Menu avatara | `src/components/shared/ProfileDropdown.tsx` | tylko pozycje z P0 |
+| Stopka | `src/components/layout/Footer.tsx` | linki shadcnstudio.com wylatują (P0) |
+| Logo | `src/components/shared/Logo.tsx` → `src/assets/svg/logo.tsx`; na auth `src/assets/svg/logo-vector.tsx` | u nas `components/brand/brand-wordmark` |
+| Skrót „d” | `src/contexts/settingsContext.tsx` 250–268 | NIE przenosimy (§9) |
+| Do góry | `src/components/layout/ScrollToTop.tsx` | opcjonalnie; bez zależności |
+
+### 10.4. Ekrany (karta → plik)
+
+Wspólne: nagłówek karty z menu `src/views/dashboards/card-header-with-menu.tsx`;
+kafle z liczbą `src/views/stats-cards.tsx` (Card + Separator) — używają ich
+Transactions, Monthly Analytics, Accounts i Invoice List.
+
+| Nasza karta / ekran (§5) | Plik Finory | Prymitywy | Uwagi |
+|---|---|---|---|
+| P1 siatka | `src/app/(pages)/dashboard/finance/page.tsx` | `grid grid-cols-6 gap-6` | dane przykładowe w pliku strony |
+| P1 Przychody i koszty + Ten miesiąc | `src/views/dashboards/charts/chart-finance.tsx` (jedna karta) | `BarChart`, `barSize={12}`, trzy `Bar stackId='a'` (chart-2/3/4), Avatar, `Button size='lg'` | `col-span-full xl:col-span-4`; usuń `stackId`, dwie serie (P1) |
+| P1 Faktury / Należności (kafle) | `src/views/dashboards/statistics/statistics-card-03.tsx` | Avatar, Badge | opakowanie `col-span-full grid grid-cols-2 gap-6 lg:col-span-3 xl:col-span-2` |
+| P1 Przychód netto | `src/views/dashboards/statistics/statistics-total-revenue-card.tsx` | `BarChart` `barSize={12}`, dwie serie obok siebie | u nas jedna seria (6 mies.) |
+| P1 VAT należny / Limit zwolnienia | `src/views/dashboards/statistics/statistics-impression-card.tsx` | `LineChart`, `Line type='linear'` | — |
+| P1 Należności według terminu | `src/views/dashboards/charts/chart-total-visitors.tsx` | bez recharts: słupki CSS (`h-[17%]`), Avatar, Badge, Separator | — |
+| P1 Najlepiej sprzedające się / Najwięksi klienci | `src/views/dashboards/widgets/widget-top-products.tsx` | jedna karta, dwie listy rozdzielone `Separator` | — |
+| P1 Ostatnie faktury | `src/views/dashboards/datatables/datatable-user.tsx` | `@tanstack/react-table`, `ui/table`, `ui/pagination`, `src/hooks/use-pagination.ts`, `pageSize = 5` | bez filtrów (P1) |
+| P2 siatka | `src/app/(pages)/dashboard/cash-flow/page.tsx` | — | — |
+| P2 Wpływy i wydatki | `src/views/dashboards/charts/chart-cash-flow.tsx` | `ui/tabs` + `BarChart` (dwie serie, `barGap={4}`) | `xl:col-span-4` |
+| P2 Limit zwolnienia z VAT / Odłóż na podatek | `src/views/dashboards/statistics/statistics-savings-goal-card.tsx` | `RadialBarChart` (PolarGrid, PolarRadiusAxis, Label) | `xl:col-span-2` |
+| P2 Wpłynęło / Wydano w tym miesiącu | `src/views/dashboards/statistics/statistics-area-stat-card.tsx` | `AreaChart`, Badge | `sm:col-span-3` każda |
+| P2 Skąd i dokąd płyną pieniądze | `src/views/dashboards/widgets/widget-top-cash-flow-sources.tsx` | Avatar, `ui/progress` | `lg:col-span-2` |
+| P2 Spodziewane wpływy | `src/views/dashboards/widgets/widget-upcoming-bills.tsx` | lista z Avatar | — |
+| P2 Ostatnie operacje | `src/views/dashboards/widgets/widget-recent-activity.tsx` | lista z Avatar | — |
+| P2 Wszystkie operacje | `src/views/dashboards/datatables/datatable-transaction.tsx` | tanstack, filtry kategorii i statusu, `pageSize = 5` | — |
+| P2 rząd z Net Worth | `src/app/(pages)/dashboard/net-worth/page.tsx` (pierwszy rząd) | lewa karta `col-span-full lg:col-span-4`; prawa kolumna `col-span-full flex flex-col gap-6 sm:max-md:flex-row md:col-span-3 lg:col-span-2` | lewa: Podsumowanie VAT w miejscu `chart-net-worth.tsx` |
+| P2 Należności / Zaległości | `src/views/dashboards/statistics/statistics-assets-liabilities.tsx`, `statistics-liquidity-snapshot.tsx` | zwykły Card, `flex-1` | — |
+| P3 Faktury | `src/views/pages/invoices/invoices-list/{index,stats-cards}.tsx`, `invoice-table/{index,data-table}.tsx` (607 linii) | tanstack; kolumny select/ID/Status/Client/Total/Issued/Due/Balance/Actions; „Show” 5/10/25/50, domyślnie 10 | nasze `na_stronie` 10/25/50 (P3) |
+| P4 Podgląd faktury | `src/views/pages/invoices/invoices-view/{index,invoice-document,invoice-actions}.tsx`; wysyłka `src/views/pages/invoices/send-invoice-sheet.tsx` | siatka `grid grid-cols-1 gap-6 lg:grid-cols-[1fr_18rem] print:block`; nieznany numer → `ui/empty` | 10.2 pkt 9 |
+| P5 Wystaw fakturę | `src/views/pages/invoices/invoices-create/{index,invoice-form,invoice-line-items,invoice-create-actions,add-customer-dialog,create-invoice-schema}.tsx` | RHF + zod, `useFieldArray`, `lg:grid-cols-[1fr_18rem]`, `invoice-date-field.tsx` (react-day-picker) | sesja lokalna (§9) |
+| P6 Faktury cykliczne | `src/views/pages/invoices/invoices-recurring/recurring-invoice-table/{index,data-table}.tsx`, `create-recurring-invoice-sheet.tsx` (601 linii) | tanstack, filtr statusu | arkusz tworzenia zastępuje wybór faktury‑wzoru (N1) |
+| P7 Przypomnienia | `src/views/pages/invoices/invoices-reminders/reminder-table/{index,data-table}.tsx`, `create-reminder-sheet.tsx` | tanstack, filtr statusu | arkusz tworzenia odpada (P7: link do ustawień) |
+| P8 Wydatki / P9 Skrzynka KSeF | `src/views/pages/transactions/{index,transaction-stats-cards}.tsx`, `transaction-table/{index,data-table,transaction-detail-sheet}.tsx` (669 linii) | tanstack, wyszukiwarka `InputGroup`, filtry grup/kategorii/statusów, `pageSize = 10` | 10.2 pkt 10 |
+| P10 / P11 Analizy | `src/views/pages/money-management/monthly-analytics/`: `index.tsx` (`grid gap-6 md:grid-cols-4`), `monthly-stats-cards.tsx`, `spend-trend-chart.tsx` (`BarChart`), `category-breakdown-chart.tsx` (`PieChart`, `innerRadius=60`), `category-ranked-list.tsx` (`ui/progress`), `recent-expenses-feed.tsx`, `spending-streaks-card.tsx`, `income-expense-summary.tsx`, `subscriptions-card.tsx`, `spend-heatmap.tsx` (siatka CSS + Tooltip), `month-selector.tsx` | wybór miesiąca w Finorze przez `nuqs` (`useQueryState('month')`) | u nas `searchParams` strony + linki, bez `nuqs` |
+| P11 Udział klientów w przychodach | `src/views/dashboards/charts/chart-asset-allocation.tsx` (z `/dashboard/net-worth`) | `PieChart`, `innerRadius=60`, `ChartLegend` | 10.2 pkt 4 |
+| P11 Klienci: rośnie / spada | `src/views/pages/investments/mover-list-card.tsx` (przez `equities/equities-movers.tsx`) | Card, Avatar, `AnimatePresence` z `motion/react` | import z `framer-motion`; rząd `col-span-full md:col-span-3 lg:col-span-2` ×3 w siatce 6 kolumn |
+| P12 Bank | `src/views/pages/accounts/{index,account-stats-cards,account-grid,account-card,account-detail-sheet,add-account-dialog}.tsx` | — | etap lokalny |
+| P14 Ustawienia | `src/views/settings/{index,settings-nav}.tsx` + `general/`, `security/`, `notifications/`, `connected-accounts/`, `privacy/` | na telefonie menu w Sheet | `profile/` odpada (P14) |
+| P15 Logowanie | `src/app/(blank)/(auth)/{login,register,forgot-password}/page.tsx` → `src/views/pages/auth/{login,register,forgot-password}/{index,*-form,*-schema}` | RHF + zod, `ui/field`, `ui/input-group`, `ui/checkbox`; prawa kolumna `max-lg:hidden` | formularze pchają do `/dashboard/finance` — u nas nasze akcje |
+| P15 tło | `src/components/ui/letter-glitch.tsx` (canvas, bez zależności) | kolory w linii 93 (`['#5ee9b5', '#00bc7d', '#009966']`), znaki w linii 99 (`'र€£¥₽₩₺₴₦₱₲₵₡₢₭'`), tło kontenera `#000000` w linii 62 | podać kolory presetu i znaki od „zł” (P15) |
+
+**Pliki publiczne Finory:** 96 × `.webp`, 5 × `.svg` (szablon Next.js),
+2 × `.png`: awatary (`images/avatars/`), logo marek (`images/brand-logos/`),
+`images/og-image.png`, `images/qr-code.webp`. Wszystko to dane przykładowe —
+**nie przenosimy nic z `public/`**, więc `proxy.ts` (§11) się nie zmienia.
 
 ---
 
