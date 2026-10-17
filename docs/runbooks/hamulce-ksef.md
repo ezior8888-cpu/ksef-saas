@@ -116,3 +116,44 @@ pg-boss. Nieobsługiwana wartość (literówka, dawne `inngest`):
 - worker nie startuje.
 
 Lokalnie: `DATABASE_URL` do bazy z kolejką i `pnpm worker:dev`.
+
+## Faktura utknęła w wysyłce (I1/I2)
+
+Objaw: faktura od dawna „Wysyłanie” (`sending`) albo „W kolejce” (`queued`);
+alarm strażnika I2 (`stale_ksef_sending_invoices`) albo I1; w `/admin/ksef`
+przyciski wyłączone („tylko failed”).
+
+| Inwariant | Stan | Kiedy | Kto sprząta |
+|---|---|---|---|
+| I2 | `sending` | przejęta ponad 30 min temu (dzierżawa 15 min + 15 min) albo bez znacznika przejęcia | **nikt automatycznie** — strażnik tylko alarmuje; RPC operatora przyjmują wyłącznie `failed`/`rejected` |
+| I1 | `queued` | ponad 15 min bez zlecenia w pg-boss | cron cyklu życia co 15 min (szkic albo `ENQUEUE_LOST`); skrypt — gdy cron nie działa |
+
+Przyczyny I2: worker przerwany w trakcie wysyłki (wdrożenie, OOM), a zlecenie
+w pg-boss nie wróciło; nieudany zapis wyniku. Dopóki w pg-boss żyje zlecenie
+tej faktury (`created`, `retry`, `active`), **nic nie rób** — po wygaśnięciu
+dzierżawy worker sam ją przejmie (00124) i najpierw uzgodni poprzednią próbę.
+
+**Procedura** — jedna linia, sama ładuje `.agents/infra.env`:
+
+```bash
+./scripts/ops/zwolnij-utknieta-wysylke.sh <id-faktury>
+```
+
+Bez opcji tylko sprawdza i pisze werdykt: stan, właściciel i czas przejęcia,
+żywe zlecenia w pg-boss, dowód kontaktu z KSeF, otwarty wpis wysyłki. Zapis
+dopiero z `--wykonaj` (jedna transakcja, wiersz faktury zablokowany na czas
+decyzji; gdy zapis nie trafi dokładnie w jeden wiersz — wycofanie):
+
+- **I2** → `failed RESULT_UNCERTAIN` („Czekamy na potwierdzenie z KSeF. Nie
+  wystawiaj tej faktury ponownie.”), przejęcie zdjęte, `submitted_to_ksef_at`
+  zostaje jako ślad, audyt `invoice.send_lease_released` (poprzedni właściciel,
+  dowód kontaktu). Dalej `/admin/ksef/<id>`: przy otwartym wpisie **„Tylko
+  uzgodnij”** (po 48 h cron I5 zrobi to sam), bez niego **„Wyślij ponownie”**
+  — runner zaczyna od uzgodnienia, więc nie powstanie duplikat; klient może też
+  wrócić do szkicu, jeśli faktura nie ma dowodu kontaktu z KSeF.
+- **I1** → to samo co cron: szkic przez `release_ksef_enqueue` (bez dowodu
+  kontaktu), inaczej `failed ENQUEUE_LOST` z audytem `invoice.enqueue_lost`.
+
+Skrypt odmawia (i nic nie zmienia), gdy faktura nie jest w I1/I2 albo w pg-boss
+żyje jej zlecenie. Warunki i zapis: `scripts/ops/zwolnij-utknieta-wysylke.sql`
+(test na bazie: `tests/rls-zwolnij-utknieta-wysylke.test.ts`).

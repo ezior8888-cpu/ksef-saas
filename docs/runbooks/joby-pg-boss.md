@@ -54,7 +54,7 @@ Błędy jobów idą do Sentry (worker od 01.10.2026).
 |---|---|---|
 | Alarm Healthchecks (brak pinga) | czy kontener workera działa; logi; czy baza odpowiada | restart workera w Coolify albo wdrożenie; po starcie zaległe zadania wykonają się same |
 | Zadania czekają w `created` | logi workera (czy kolejka „aktywna”), limity `groupConcurrency` | jeśli worker żyje, a kolejka stoi — restart workera |
-| Faktury wiszą w „Wysyłanie” | `docs/runbooks/hamulce-ksef.md`, `ksef_submissions` | uzgodnienie po numerach referencyjnych dzieje się przy ponowieniu (#126) |
+| Faktury wiszą w „Wysyłanie” | `docs/runbooks/hamulce-ksef.md`, „Faktura utknęła w wysyłce (I1/I2)”; `ksef_submissions` | żywe zlecenie w pg-boss — czekać (worker przejmie po dzierżawie i uzgodni po numerach referencyjnych, #126); bez zlecenia ponad 30 min — `./scripts/ops/zwolnij-utknieta-wysylke.sh <id>` |
 | Wyłączyć crony (test, przełączanie) | — | `WORKER_DISABLE_SCHEDULES=true` na workerze — worker czyści też zapisany harmonogram |
 
 **Nie kasuj** wierszy w `pgboss.*` ręcznie bez uzgodnienia — to także historia
