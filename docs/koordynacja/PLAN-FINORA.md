@@ -19,7 +19,7 @@ otwarta i spisana) + odczyt kodu `main` @ `1ded2147`.
    pozwala na płatny SaaS i open source jako część produktu, NIE pozwala
    udostępniać samego szablonu osobno). Bartosz trzyma go w PRYWATNYM repo
    (krok 0.1). Sesja klonuje je obok, NIGDY do katalogu repo aplikacji:
-   `gh repo clone <właściciel>/faktflow-finora-src ../finora-src`.
+   `gh repo clone ezior8888-cpu/faktflow-finora-src ../finora-src`.
    Brak dostępu = STOP i prośba do Bartosza. Bez kodu nie zgadujemy wyglądu
    ze zrzutów.
 3. Demo do porównań (zawsze dostępne):
@@ -42,10 +42,10 @@ otwarta i spisana) + odczyt kodu `main` @ `1ded2147`.
 
 ### 0.1. Krok 0 dla Bartosza (jednorazowo, przed pierwszą sesją)
 
-1. Kup Finorę (79 $): `https://shadcnstudio.com/templates/admin-dashboard/finora`.
-2. Utwórz prywatne repo `faktflow-finora-src`, wrzuć rozpakowany szablon
+1. ~~Kup Finorę (79 $)~~ — zrobione 17.10 (wersja 1.0.0): `https://shadcnstudio.com/templates/admin-dashboard/finora`.
+2. ~~Utwórz prywatne repo~~ — zrobione 17.10: `ezior8888-cpu/faktflow-finora-src` (prywatne, oryginał bez zmian). Było: utwórz prywatne repo `faktflow-finora-src`, wrzuć rozpakowany szablon
    bez zmian, nadaj dostęp kontu, na którym działa sesja w chmurze.
-3. Wpisz właściciela repo w punkt 2 checklisty wyżej.
+3. ~~Wpisz właściciela repo~~ — zrobione (punkt 2 checklisty).
 4. ~~Wybierz preset~~ — zrobione 17.10: Modern Minimal, Outfit, Light, Compact, SM, Inset, Default (D2).
 
 ---
