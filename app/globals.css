@@ -1642,36 +1642,42 @@ html:not(.dark) .ff-dashboard tbody tr:not([data-slot])[class*='hover:bg-']:hove
   }
 }
 
-/* ─── Dashboard: ekran agenta mieści się w oknie ────────────────────────────
+/* ─── Dashboard: ekran agenta mieści się w oknie (poniżej `lg`) ────────────
  * Wątek ma własne przewijanie w środku, więc przewijanie CAŁEJ strony dawało
  * drugi pasek i pozwalało „zgubić” pas rozmowy pod krawędzią okna.
  * Klasę na `<html>` ustawia `DashboardRouteFlags`.
+ *
+ * Od E4 planu Finora blokada działa TYLKO poniżej `lg`. Od `lg` Pulpit to
+ * slot FLO o stałej wysokości nad siatką kart, a strona przewija się
+ * normalnie (ze stopką). Na telefonie Pulpit zostaje pełnoekranowym FLO.
  * ────────────────────────────────────────────────────────────────────────── */
-html.ff-route-dashboard .ff-shell-scroll {
-  overflow: hidden;
-}
+@media (max-width: 1023.98px) {
+  html.ff-route-dashboard .ff-shell-scroll {
+    overflow: hidden;
+  }
 
-/* Wysokość musi przejść przez kontener treści z layoutu, inaczej `h-full`
- * na stronie nie ma się od czego odbić i `overflow:hidden` zamiast blokować
- * przewijanie po prostu OBCINA pas rozmowy pod krawędzią okna. */
-html.ff-route-dashboard .ff-shell-scroll > div {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  padding-bottom: 0;
-}
+  /* Wysokość musi przejść przez kontener treści z layoutu, inaczej `h-full`
+   * na stronie nie ma się od czego odbić i `overflow:hidden` zamiast blokować
+   * przewijanie po prostu OBCINA pas rozmowy pod krawędzią okna. */
+  html.ff-route-dashboard .ff-shell-scroll > div {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    padding-bottom: 0;
+  }
 
-/* Stopka nie ma miejsca na ekranie agenta zablokowanym na wysokość okna. */
-html.ff-route-dashboard .ff-shell-footer {
-  display: none;
-}
+  /* Stopka nie ma miejsca na ekranie agenta zablokowanym na wysokość okna. */
+  html.ff-route-dashboard .ff-shell-footer {
+    display: none;
+  }
 
-/* Ostatnie dziecko to strona; banery nad nią zajmują tyle, ile potrzebują,
- * a resztę wysokości dostaje ekran agenta. */
-html.ff-route-dashboard .ff-shell-scroll > div > :last-child {
-  flex: 1 1 0%;
-  min-height: 0;
+  /* Ostatnie dziecko to strona; banery nad nią zajmują tyle, ile potrzebują,
+   * a resztę wysokości dostaje ekran agenta. */
+  html.ff-route-dashboard .ff-shell-scroll > div > :last-child {
+    flex: 1 1 0%;
+    min-height: 0;
+  }
 }
 
 /* Baner certyfikatu na dashboardzie stoi w prawej szynie (jak na makiecie),

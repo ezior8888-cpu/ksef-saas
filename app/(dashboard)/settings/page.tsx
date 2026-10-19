@@ -16,6 +16,9 @@ import {
   Receipt,
 } from 'lucide-react';
 import { DeleteAccountSection } from '@/components/settings/delete-account';
+import { BusinessStartForm } from '@/components/settings/business-start-form';
+import { readTenantBusinessStart } from '@/lib/invoices/business-start';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { VatExemptionForm } from '@/components/settings/vat-exemption-form';
 import { readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import { CashMethodForm } from '@/components/settings/cash-method-form';
@@ -28,7 +31,7 @@ export const dynamic = 'force-dynamic';
 export default async function SettingsPage() {
   const { supabase, user, tenantId, role } = await getPageContext();
 
-  const [{ data: tenant }, { data: authUser }, vatExemptionBasis, vatCashMethod] = await Promise.all([
+  const [{ data: tenant }, { data: authUser }, vatExemptionBasis, vatCashMethod, businessStartedOn] = await Promise.all([
     supabase
       .from('tenants')
       .select('name, nip, address_json')
@@ -39,6 +42,8 @@ export default async function SettingsPage() {
     readTenantVatExemption(supabase, tenantId),
     // Odpornie — przed migracją 00094 kolumny nie ma.
     readTenantCashMethod(supabase, tenantId),
+    // Odpornie — przed migracją 00153 kolumny nie ma.
+    readTenantBusinessStart(supabase, tenantId),
   ]);
 
   // `user` z `getPageContext` ma email + id; created_at potrzebne tylko tutaj.
@@ -304,6 +309,13 @@ export default async function SettingsPage() {
               initialEnabled={vatCashMethod}
               canEdit={role === 'owner' || role === 'admin'}
             />
+            <div id="data-rozpoczecia" className="scroll-mt-24">
+              <BusinessStartForm
+                initialStartedOn={businessStartedOn}
+                canEdit={canEditCompany}
+                today={todayInWarsaw()}
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -7,6 +7,7 @@ import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
 import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,12 +32,18 @@ export default async function KpirPage({
   const { supabase, tenantId } = await getPageContext();
   const environment = requireConfiguredKsefEnvironment();
 
-  const now = new Date();
-  const month = clampMonth(Number(sp.month ?? now.getMonth() + 1));
-  const year = clampYear(Number(sp.year ?? now.getFullYear()), now.getFullYear());
+  // Domyślny okres to miesiąc „dziś” w Polsce (plan Finora §2.4 pkt 10):
+  // serwer chodzi w UTC, więc 1. dnia miesiąca tuż po północy pola daty
+  // w strefie procesu dawały jeszcze poprzedni miesiąc.
+  const today = todayInWarsaw();
+  const nowYear = Number(today.slice(0, 4));
+  const month = clampMonth(Number(sp.month ?? Number(today.slice(5, 7))));
+  const year = clampYear(Number(sp.year ?? nowYear), nowYear);
 
-  const periodStart = new Date(year, month - 1, 1).toISOString().slice(0, 10);
-  const periodEnd = new Date(year, month, 0).toISOString().slice(0, 10);
+  // Granice z arytmetyki UTC: lokalna północ przez `toISOString()` cofała
+  // je o dzień w każdej strefie na wschód od Greenwich.
+  const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
+  const periodEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 
   await assertAcceptedInvoiceEnvironmentComplete(supabase, {
     tenantId, periodStart, periodEnd, direction: 'outgoing', environment,

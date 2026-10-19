@@ -7,8 +7,7 @@ import { FloScreen } from '@/components/flo/flo-screen';
 import { FloScheduledPanel } from '@/components/flo/scheduled-panel';
 import { FloWelcome } from '@/components/dashboard/flo-welcome';
 import DashboardVerificationBanner from '@/app/(dashboard)/_components/dashboard-verification-banner';
-import { MonthlyFiguresCard } from '@/components/dashboard/monthly-figures-card';
-import { getMonthlyFigures } from '@/lib/dashboard/monthly-figures';
+import { PulpitGrid } from '@/components/dashboard/pulpit/pulpit-grid';
 import { FLO_FIXTURES, FLO_SCHEDULED_FIXTURES } from '@/lib/flo/fixtures';
 import { isLocalDevEnv } from '@/lib/security/environment';
 import { getPageContext } from '@/lib/supabase/page-context';
@@ -24,18 +23,29 @@ import type { FloProposalView, FloScheduledView } from '@/types/flo';
  * żeby nie zerwać linków z powiadomień push, ze ścieżki paragonu i z wątku.
  *
  * WNĘTRZE NALEŻY DO MASŁA: `FloScreen` i wszystko, co ono składa
- * (`components/flo/*`). Ta strona pobiera dane, dokłada kartę z liczbami
- * miesiąca przez gniazdo `aside` i nie zna środka wątku.
+ * (`components/flo/*`). Ta strona pobiera dane agenta, dokłada baner
+ * certyfikatu przez gniazdo `aside` i nie zna środka wątku.
  *
  * Nagłówek agenta jest wyłączony (`showHeader={false}`) — panel ma własny
  * pasek tytułu z „Dashboard” i miesiącem, a dwa nagłówki jeden nad drugim
  * to szum. Licznik spraw wraca do wątku razem z krokiem 39 Masła.
  *
- * WYSOKOŚĆ: `h-full`, nie `calc(100vh - 5rem)`. Blokada trasy z `globals.css`
- * (`html.ff-route-dashboard`) daje temu drzewu pełną wysokość okna pomniejszoną
+ * WYSOKOŚĆ (poniżej `lg`): `h-full`, nie `calc(100vh - 5rem)`. Blokada trasy
+ * z `globals.css` (`html.ff-route-dashboard`) daje temu drzewu pełną wysokość okna pomniejszoną
  * o nagłówek i dolną nawigację, licząc z tokenów `--ff-header-h`
  * i `--ff-bottom-nav-h`. Ręcznie wpisane 5rem rozjeżdżało się przy każdej
  * zmianie nagłówka i nie wiedziało nic o pasku domowym telefonu.
+ *
+ * PULPIT FINORY (plan Finora E4, P1). Od `lg` slot FLO stoi na pełnej
+ * szerokości nad siatką kart Finance, w kontenerze o stałej wysokości
+ * `min(640px, 70dvh)` — wątek przewija się w sobie, strona pod nim normalnie.
+ * Poniżej `lg` Pulpit zostaje pełnoekranowym FLO jak dotąd (blokada
+ * przewijania w `globals.css` działa tylko do 1023.98 px), a siatka jest
+ * ukryta — liczby miesiąca na telefonie są na `/przeplywy`.
+ *
+ * Strona NIE woła na swoim poziomie żadnej funkcji z liczbami (§2.4 pkt 15):
+ * każda karta sama pobiera dane w swojej granicy błędu, więc slot FLO
+ * renderuje się także wtedy, gdy padną wszystkie karty.
  *
  * Pełna mapa: `docs/flo/UKLAD-DASHBOARDU.md`.
  */
@@ -43,38 +53,39 @@ export const dynamic = 'force-dynamic';
 
 export default async function DashboardHomePage() {
   const { supabase, tenantId } = await getPageContext();
+  const nowIso = new Date().toISOString();
+  const agent = await loadAgent();
 
-  // Liczby miesiąca są niezależne od agenta — pobierane równolegle, żeby
-  // wolniejsza strona nie czekała na drugą.
-  const [figures, agent] = await Promise.all([
-    getMonthlyFigures(supabase, tenantId),
-    loadAgent(),
-  ]);
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-6 lg:h-auto lg:pb-6">
+      <FloSlot agent={agent} />
+      <PulpitGrid supabase={supabase} tenantId={tenantId} nowIso={nowIso} className="hidden lg:grid" />
+    </div>
+  );
+}
 
-  // `ff-flo-legacy` na korzeniu każdej gałęzi: wątek FLO zostaje w dawnych
-  // kolorach, choć reszta panelu przeszła na preset Finory (plan Finora, E1;
-  // reguła w `app/globals.css`). E4 przenosi klasę na sam slot FLO.
+/**
+ * Slot FLO — te same trzy gałęzie i te same propsy co przed E4. Od `lg`
+ * stała wysokość z `overflow-hidden`; poniżej `lg` cała wysokość ekranu.
+ *
+ * `ff-flo-legacy` na korzeniu każdej gałęzi: wątek FLO zostaje w dawnych
+ * kolorach, choć reszta panelu przeszła na preset Finory (plan Finora, E1;
+ * reguła w `app/globals.css`). Od E4 klasa obejmuje sam slot, nie siatkę.
+ *
+ * W szynie (`aside`) został tylko baner certyfikatu — liczby miesiąca są
+ * w kartach pod slotem.
+ */
+function FloSlot({ agent }: { agent: AgentData }) {
   const szyna = (
-    <>
-      <Suspense fallback={null}>
-        <DashboardVerificationBanner variant="rail" />
-      </Suspense>
-      <MonthlyFiguresCard figures={figures} />
-    </>
+    <Suspense fallback={null}>
+      <DashboardVerificationBanner variant="rail" />
+    </Suspense>
   );
 
   if (!agent.ok) {
     return (
-      <div className="ff-flo-legacy grid h-full grid-cols-1 items-start gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section
-          role="status"
-          className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-[22px] py-5"
-        >
-          <p className="text-[13px] text-[var(--ff-text-muted)]">
-            Nie mogę teraz sięgnąć po Twoje sprawy. Liczby miesiąca obok są
-            aktualne — spróbuj odświeżyć za chwilę.
-          </p>
-        </section>
+      <div className="ff-flo-legacy grid min-h-0 flex-1 grid-cols-1 items-start gap-4 py-4 lg:h-[min(640px,70dvh)] lg:flex-none lg:grid-cols-[minmax(0,1fr)_320px] lg:overflow-hidden">
+        <FloNiedostepny powod="Nie mogę teraz sięgnąć po Twoje sprawy." />
         {szyna}
       </div>
     );
@@ -82,7 +93,7 @@ export default async function DashboardHomePage() {
 
   if (agent.proposals.length === 0) {
     return (
-      <div className="ff-flo-legacy flex h-full min-h-0 flex-col gap-3 py-4">
+      <div className="ff-flo-legacy flex min-h-0 flex-1 flex-col gap-3 py-4 lg:h-[min(640px,70dvh)] lg:flex-none lg:overflow-hidden">
         {agent.fixtures ? <PasekAtrap /> : null}
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex min-h-0 flex-col gap-3">
@@ -104,10 +115,20 @@ export default async function DashboardHomePage() {
   }
 
   return (
-    <div className="ff-flo-legacy flex h-full min-h-0 flex-col gap-3 py-4">
+    <div className="ff-flo-legacy flex min-h-0 flex-1 flex-col gap-3 py-4 lg:h-[min(640px,70dvh)] lg:flex-none lg:overflow-hidden">
       {agent.fixtures ? <PasekAtrap /> : null}
 
-      <SectionErrorBoundary label="Flo" fallback={szyna}>
+      {/* Wywrotka wątku przy renderze: komunikat + szyna (baner certyfikatu).
+          Sama szyna u zweryfikowanej firmy byłaby pustym slotem 640 px. */}
+      <SectionErrorBoundary
+        label="Flo"
+        fallback={
+          <div className="flex flex-col gap-4">
+            <FloNiedostepny powod="Flo chwilowo się nie wyświetla." />
+            {szyna}
+          </div>
+        }
+      >
         <FloScreen
           proposals={agent.proposals}
           scheduled={agent.scheduled}
@@ -116,6 +137,23 @@ export default async function DashboardHomePage() {
         />
       </SectionErrorBoundary>
     </div>
+  );
+}
+
+/** Komunikat zamiast wątku — z odesłaniem do liczb miesiąca (karty albo „Miesiąc”). */
+function FloNiedostepny({ powod }: { powod: string }) {
+  return (
+    <section
+      role="status"
+      className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-[22px] py-5"
+    >
+      <p className="text-[13px] text-[var(--ff-text-muted)]">
+        {powod}{' '}
+        <span className="lg:hidden">Liczby miesiąca są w zakładce „Miesiąc”</span>
+        <span className="hidden lg:inline">Liczby miesiąca są w kartach poniżej</span>
+        {' '}— spróbuj odświeżyć za chwilę.
+      </p>
+    </section>
   );
 }
 

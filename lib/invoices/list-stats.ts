@@ -14,9 +14,8 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
  * w <Suspense> + `SectionErrorBoundary` (§2.4 pkt 15) — wyjątek strażnika
  * zabiera jedną kartę, nie tabelę.
  *
- * Miesiąc liczony w Europe/Warsaw z `todayInWarsaw` (§2.4 pkt 10), NIE
- * z `getMonthlyFigures`, który do poprawki przed E4 liczy miesiąc w strefie
- * serwera (UTC).
+ * Miesiąc liczony w Europe/Warsaw z `todayInWarsaw` (§2.4 pkt 10), tak
+ * samo jak w `getMonthlyFigures`.
  */
 
 const ENVIRONMENT_ERROR = 'Przyjęte faktury wymagają uzgodnienia środowiska KSeF';
