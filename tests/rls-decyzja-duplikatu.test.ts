@@ -1082,7 +1082,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
       },
       {
         name: 'paid_amount bez wiersza wpłaty → payments', setup: () => pendingDuplicate({ patch: { paid_amount: 100 } }),
-        code: 'P0001', text: (p) => ['payments', p.number], contains: (p) => [p.number, 'pomoc@faktflow.pl'],
+        code: 'P0001', text: (p) => ['payments', p.number], contains: (p) => [p.number, 'pomoc@faktway.pl'],
       },
       {
         name: 'inny numer KSeF oryginału niż pokazany → STALE', setup: () => pendingDuplicate(),
@@ -1120,7 +1120,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
       }
     });
 
-    it('R3: wpis wpłaty (niepotwierdzone dopasowanie, paid_amount 0) → payments z numerem dokumentu i pomoc@faktflow.pl (C13); wpłata nietknięta', async () => {
+    it('R3: wpis wpłaty (niepotwierdzone dopasowanie, paid_amount 0) → payments z numerem dokumentu i pomoc@faktway.pl (C13, marka od 00151); wpłata nietknięta', async () => {
       const p = await pendingDuplicate();
       const paymentId = await insertPayment(p.id, { is_auto_matched: true, is_confirmed: false });
       const paymentBefore = await admin.from('payments').select('id, invoice_id, amount, is_confirmed').eq('id', paymentId).single();
@@ -1131,7 +1131,8 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
 
       expect(error?.code).toBe('P0001');
       expect(error?.message).toContain(p.number);
-      expect(error?.message).toContain('pomoc@faktflow.pl');
+      expect(error?.message).toContain('pomoc@faktway.pl');
+      expect(error?.message).not.toMatch(/faktflow/i);
       expect(await state(p.id)).toEqual(before);
       const paymentAfter = await admin.from('payments').select('id, invoice_id, amount, is_confirmed').eq('id', paymentId).single();
       expect(paymentAfter.data).toEqual(paymentBefore.data);

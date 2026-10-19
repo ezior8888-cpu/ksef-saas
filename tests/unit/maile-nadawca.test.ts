@@ -24,7 +24,7 @@ describe('nadawca maili', () => {
     const { sendEmail } = await import('@/lib/email/send');
     await sendEmail({ to: 'klient@example.test', subject: 'x', html: '<p>x</p>' });
     const from = String(s.send.mock.calls[0]![0].from);
-    expect(from).toContain('<no-reply@app.faktflow.pl>');
+    expect(from).toContain('<powiadomienia@faktway.pl>');
     expect(from).not.toContain('resend.dev');
   });
 
