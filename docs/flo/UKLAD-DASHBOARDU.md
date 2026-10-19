@@ -1,5 +1,11 @@
 # Układ dashboardu po przebudowie — mapa dla obu torów
 
+> **19.10.2026 (wieczór, decyzja Bartosza): FLO nie ma już na Pulpicie.**
+> `/dashboard` to strona Finance szablonu Finora 1:1 na danych przykładowych
+> (`components/dashboard/finora/*`). Blokada przewijania `html.ff-route-dashboard`
+> i ukrywanie banera certyfikatu usunięte z `globals.css`. Miejsce FLO przyjdzie
+> z projektu Claude Design. Opis niżej (slot FLO z E4, szyna) jest historyczny.
+
 **Data:** 30 sierpnia 2026
 **Napisał:** tor silnika (Bartosz)
 **Dla kogo:** Masło i każdy model AI, który siada do `components/flo/*`,
