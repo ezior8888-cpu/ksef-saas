@@ -287,4 +287,22 @@ describe('przepływy: dane od 1 stycznia dla szacunku podatku', () => {
     const props = await dashboardProps('2026-12-31T23:30:00Z', []);
     expect(props.dataFrom).toBe('2026-08-01');
   });
+
+  it('noc sylwestrowa: legenda wykresu sprzedaży mówi o nowym roku, jak jego serie (§2.4 pkt 10)', async () => {
+    const originalTz = process.env.TZ;
+    // Node przelicza strefę przy przypisaniu; produkcja chodzi w UTC.
+    process.env.TZ = 'UTC';
+    try {
+      vi.setSystemTime(new Date('2026-12-31T23:30:00Z'));
+      mocks.context.mockResolvedValue({ supabase: client(), tenantId: TENANT });
+      const page = await PrzeplywyPage();
+      const chart = Children.toArray(page.props.children).find(
+        (child) => (child as ReactElement<{ year?: number }>).props?.year !== undefined,
+      ) as ReactElement<{ year: number }>;
+      expect(chart.props.year).toBe(2027);
+    } finally {
+      if (originalTz === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTz;
+    }
+  });
 });

@@ -7,6 +7,7 @@ import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
 import { formatPlMoney } from '@/lib/format/pl';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { kpirCostAmount } from '@/lib/categorization/kpir-cost';
 import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
 import { estimateIncomeTaxThisYear } from '@/lib/dashboard/tax-estimate';
@@ -56,16 +57,22 @@ export function CashFlowDashboard({
   const [hoveredMonthKey, setHoveredMonthKey] = useState<string | null>(null);
 
   const now = new Date();
+  // Miesiąc w Polsce, nie w strefie procesu: ten komponent renderuje się
+  // najpierw na serwerze (UTC), a 1. dnia miesiąca tuż po północy to tam
+  // jeszcze poprzedni miesiąc (plan Finora §2.4 pkt 10).
+  const today = todayInWarsaw(now);
+  const nowYear = Number(today.slice(0, 4));
+  const nowMonthIndex = Number(today.slice(5, 7)) - 1;
   const monthsRange = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+    const d = new Date(Date.UTC(nowYear, nowMonthIndex - 5 + i, 1));
     return {
-      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+      key: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`,
       label: d
-        .toLocaleDateString('pl-PL', { month: 'short' })
+        .toLocaleDateString('pl-PL', { month: 'short', timeZone: 'UTC' })
         .replace(/\./g, '')
         .trim(),
-      year: d.getFullYear(),
-      month: d.getMonth() + 1,
+      year: d.getUTCFullYear(),
+      month: d.getUTCMonth() + 1,
     };
   });
 

@@ -1,5 +1,6 @@
 import { kpirCostAmount, type KpirCostInput } from '@/lib/categorization/kpir-cost';
 import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
@@ -46,7 +47,9 @@ export function estimateIncomeTaxThisYear(
   now: Date,
   dataFrom: string,
 ): TaxEstimate {
-  const year = now.getFullYear();
+  // Rok w Polsce, nie w strefie procesu: komponent wywołujący renderuje się
+  // też na serwerze (UTC), a w Nowy Rok tuż po północy to jeszcze stary rok.
+  const year = Number(todayInWarsaw(now).slice(0, 4));
   const yearStart = `${year}-01-01`;
   const fullYear = dataFrom <= yearStart;
   const inRange = (date: string) => date >= dataFrom && date.startsWith(`${year}-`);

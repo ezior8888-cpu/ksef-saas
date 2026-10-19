@@ -6,6 +6,7 @@ import type { PageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import type { KsefEnvironment } from '@/types/ksef';
 
 /**
@@ -76,10 +77,41 @@ type InvoiceSummary = {
   currency: string | null;
 };
 
-/** Local calendar dates must not shift to the previous day in European time zones. */
+/**
+ * Pierwszy dzień miesiąca jako RRRR-MM-DD. Arytmetyka w UTC na polach
+ * kalendarza (`monthIndex` może wyjść poza 0–11), więc wynik nie zależy od
+ * strefy procesu.
+ */
 function monthStartIso(year: number, monthIndex: number): string {
-  const date = new Date(year, monthIndex, 1);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+  const date = new Date(Date.UTC(year, monthIndex, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-01`;
+}
+
+/**
+ * Rok i miesiąc (0–11) „dziś” w Polsce. Plan Finora §2.4 pkt 10: serwer
+ * i worker chodzą w UTC, więc `now.getMonth()` 1. dnia miesiąca między
+ * 00:00 a 02:00 czasu polskiego dawał jeszcze poprzedni miesiąc — faktura
+ * z dziś wypadała z liczb miesiąca, a termin VAT był o miesiąc za wcześnie.
+ */
+function warsawCalendar(now: Date): { today: string; year: number; monthIndex: number } {
+  const today = todayInWarsaw(now);
+  return {
+    today,
+    year: Number(today.slice(0, 4)),
+    monthIndex: Number(today.slice(5, 7)) - 1,
+  };
+}
+
+/** Dni kalendarzowe między dwiema datami RRRR-MM-DD (bez stref i zmian czasu). */
+function daysBetweenIsoDates(fromIso: string, toIso: string): number {
+  const utc = (iso: string) =>
+    Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
+  return Math.round((utc(toIso) - utc(fromIso)) / 86_400_000);
+}
+
+/** Pierwszy dzień miesiąca jako `Date` w UTC — tylko do podpisów z `timeZone: 'UTC'`. */
+function monthStartUtc(year: number, monthIndex: number): Date {
+  return new Date(Date.UTC(year, monthIndex, 1));
 }
 
 /**
@@ -171,11 +203,11 @@ export async function getMonthlyFigures(
   tenantId: string,
   now: Date = new Date(),
 ): Promise<MonthlyFigures> {
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfMonthIso = monthStartIso(now.getFullYear(), now.getMonth());
-  const prevMonthStartIso = monthStartIso(now.getFullYear(), now.getMonth() - 1);
-  const nextMonthStartIso = monthStartIso(now.getFullYear(), now.getMonth() + 1);
-  const yearStartIso = monthStartIso(now.getFullYear(), 0);
+  const { today, year, monthIndex } = warsawCalendar(now);
+  const startOfMonthIso = monthStartIso(year, monthIndex);
+  const prevMonthStartIso = monthStartIso(year, monthIndex - 1);
+  const nextMonthStartIso = monthStartIso(year, monthIndex + 1);
+  const yearStartIso = monthStartIso(year, 0);
   const readStartIso = prevMonthStartIso < yearStartIso ? prevMonthStartIso : yearStartIso;
   const environment = requireConfiguredKsefEnvironment();
 
@@ -234,25 +266,16 @@ export async function getMonthlyFigures(
   const zmiana = (teraz: number, przedtem: number): number | null =>
     przedtem > 0 ? Math.round(((teraz - przedtem) / przedtem) * 100) : null;
 
-  const vatDueDate = new Date(now.getFullYear(), now.getMonth() + 1, 25);
-  /** Dni do terminu VAT liczone po dobach kalendarzowych, nie po milisekundach. */
-  const daysToVatDue = Math.max(
-    0,
-    Math.round(
-      (new Date(
-        vatDueDate.getFullYear(),
-        vatDueDate.getMonth(),
-        vatDueDate.getDate(),
-      ).getTime() -
-        new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) /
-        86_400_000,
-    ),
-  );
+  // Termin VAT: 25. dzień miesiąca po polskim „dziś”. Dni po dobach
+  // kalendarzowych od polskiej daty, nie po milisekundach od `now`.
+  const vatDueIso = `${nextMonthStartIso.slice(0, 8)}25`;
+  const daysToVatDue = Math.max(0, daysBetweenIsoDates(today, vatDueIso));
 
   return {
-    monthName: startOfMonth.toLocaleDateString('pl-PL', {
+    monthName: monthStartUtc(year, monthIndex).toLocaleDateString('pl-PL', {
       month: 'long',
       year: 'numeric',
+      timeZone: 'UTC',
     }),
     prevAcceptedCount,
     acceptedCount,
@@ -263,11 +286,7 @@ export async function getMonthlyFigures(
     momCountPct: zmiana(acceptedCount, prevAcceptedCount) ?? 0,
     momGrossPct: zmiana(totalGross, prevGross) ?? 0,
     hasPrevMonth: prevAcceptedCount > 0,
-    vatDueLabel: vatDueDate.toLocaleDateString('pl-PL', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }),
+    vatDueLabel: `${vatDueIso.slice(8, 10)}.${vatDueIso.slice(5, 7)}.${vatDueIso.slice(0, 4)}`,
     daysToVatDue,
     isBestMonthOfYear:
       totalGross > 0 &&
@@ -289,13 +308,14 @@ export async function getSalesSeries(
   tenantId: string,
   now: Date = new Date(),
 ): Promise<SalesSeries> {
+  const { today, year, monthIndex } = warsawCalendar(now);
   const months: { key: string; prevKey: string; label: string }[] = [];
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const prevKey = `${d.getFullYear() - 1}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const d = monthStartUtc(year, monthIndex - i);
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    const prevKey = `${d.getUTCFullYear() - 1}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
     const raw = d
-      .toLocaleDateString('pl-PL', { month: 'short' })
+      .toLocaleDateString('pl-PL', { month: 'short', timeZone: 'UTC' })
       .replace(/\./g, '')
       .trim();
     months.push({
@@ -307,8 +327,8 @@ export async function getSalesSeries(
 
   const windowStartIso = `${months[0]!.key}-01`;
   const prevYearStartIso = `${months[0]!.prevKey}-01`;
-  const nextMonthStartIso = monthStartIso(now.getFullYear(), now.getMonth() + 1);
-  const prevYearEndIso = monthStartIso(now.getFullYear() - 1, now.getMonth() + 1);
+  const nextMonthStartIso = monthStartIso(year, monthIndex + 1);
+  const prevYearEndIso = monthStartIso(year - 1, monthIndex + 1);
   const environment = requireConfiguredKsefEnvironment();
   await Promise.all([
     assertAcceptedEnvironmentKnown(
@@ -352,6 +372,6 @@ export async function getSalesSeries(
     months: months.map(({ key, label }) => ({ key, label })),
     currentSeries: months.map((m) => currentByMonth.get(m.key) ?? 0),
     prevSeries: months.map((m) => prevByMonth.get(m.prevKey) ?? 0),
-    currentMonthKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+    currentMonthKey: today.slice(0, 7),
   };
 }
