@@ -127,7 +127,7 @@ describe('struktura menu (plan Finora §4)', () => {
 
   it('dolny pasek: etykiety i kolejność bez zmian', () => {
     expect(dashboardMobileTabs.map((t) => [t.label, t.href])).toEqual([
-      ['Flo', '/dashboard'],
+      ['Pulpit', '/dashboard'],
       ['Faktury', '/invoices'],
       ['Nowa', '/invoices/new'],
       ['Miesiąc', '/przeplywy'],

@@ -1,237 +1,208 @@
-import { Suspense } from 'react';
+import {
+  RiComputerLine,
+  RiGamepadLine,
+  RiHeadphoneLine,
+  RiMacbookLine,
+  RiMoneyDollarCircleLine,
+  RiShoppingCartLine,
+  RiSmartphoneLine,
+  RiTabletLine,
+  RiTimer2Line,
+} from '@remixicon/react';
 
-import { listProposals, listScheduled } from '@/app/actions/flo';
-import { SectionErrorBoundary } from '@/components/dashboard/section-error-boundary';
-import { FloComposer } from '@/components/flo/flo-composer';
-import { FloScreen } from '@/components/flo/flo-screen';
-import { FloScheduledPanel } from '@/components/flo/scheduled-panel';
-import { FloWelcome } from '@/components/dashboard/flo-welcome';
-import DashboardVerificationBanner from '@/app/(dashboard)/_components/dashboard-verification-banner';
-import { PulpitGrid } from '@/components/dashboard/pulpit/pulpit-grid';
-import { FLO_FIXTURES, FLO_SCHEDULED_FIXTURES } from '@/lib/flo/fixtures';
-import { isLocalDevEnv } from '@/lib/security/environment';
-import { getPageContext } from '@/lib/supabase/page-context';
-import type { FloProposalView, FloScheduledView } from '@/types/flo';
+import { Card } from '@/components/ui/card';
+import FinanceCard from '@/components/dashboard/finora/chart-finance';
+import StatisticsCard, { type StatisticsCardProps } from '@/components/dashboard/finora/statistics-card-03';
+import StatisticsImpressionCard from '@/components/dashboard/finora/statistics-impression-card';
+import StatisticsTotalRevenueCard from '@/components/dashboard/finora/statistics-total-revenue-card';
+import TotalVisitorsCard from '@/components/dashboard/finora/chart-total-visitors';
+import TopProductsCard from '@/components/dashboard/finora/widget-top-products';
+import UserDatatable, { type Item } from '@/components/dashboard/finora/datatable-user';
 
 /**
- * WŁAŚCICIEL: Bartosz (tor silnika) — kompozycja ekranu, nie jego wnętrze.
+ * WŁAŚCICIEL: Bartosz (tor silnika) — kompozycja ekranu.
  *
- * DASHBOARD JEST EKRANEM AGENTA (decyzja właściciela produktu, 30.08.2026).
- * Wcześniej agent mieszkał na osobnej trasie `/flo`, a dashboard pokazywał
- * skrót. Teraz jest odwrotnie i tak, jak na sierpniowej makiecie: wątek zajmuje
- * główną kolumnę, a listy pomocnicze stoją z boku. `/flo` przekierowuje tutaj,
- * żeby nie zerwać linków z powiadomień push, ze ścieżki paragonu i z wątku.
- *
- * WNĘTRZE NALEŻY DO MASŁA: `FloScreen` i wszystko, co ono składa
- * (`components/flo/*`). Ta strona pobiera dane agenta, dokłada baner
- * certyfikatu przez gniazdo `aside` i nie zna środka wątku.
- *
- * Nagłówek agenta jest wyłączony (`showHeader={false}`) — panel ma własny
- * pasek tytułu z „Dashboard” i miesiącem, a dwa nagłówki jeden nad drugim
- * to szum. Licznik spraw wraca do wątku razem z krokiem 39 Masła.
- *
- * WYSOKOŚĆ (poniżej `lg`): `h-full`, nie `calc(100vh - 5rem)`. Blokada trasy
- * z `globals.css` (`html.ff-route-dashboard`) daje temu drzewu pełną wysokość okna pomniejszoną
- * o nagłówek i dolną nawigację, licząc z tokenów `--ff-header-h`
- * i `--ff-bottom-nav-h`. Ręcznie wpisane 5rem rozjeżdżało się przy każdej
- * zmianie nagłówka i nie wiedziało nic o pasku domowym telefonu.
- *
- * PULPIT FINORY (plan Finora E4, P1). Od `lg` slot FLO stoi na pełnej
- * szerokości nad siatką kart Finance, w kontenerze o stałej wysokości
- * `min(640px, 70dvh)` — wątek przewija się w sobie, strona pod nim normalnie.
- * Poniżej `lg` Pulpit zostaje pełnoekranowym FLO jak dotąd (blokada
- * przewijania w `globals.css` działa tylko do 1023.98 px), a siatka jest
- * ukryta — liczby miesiąca na telefonie są na `/przeplywy`.
- *
- * Strona NIE woła na swoim poziomie żadnej funkcji z liczbami (§2.4 pkt 15):
- * każda karta sama pobiera dane w swojej granicy błędu, więc slot FLO
- * renderuje się także wtedy, gdy padną wszystkie karty.
+ * Pulpit = strona Finance szablonu Finora 1:1 (decyzja Bartosza 19.10.2026,
+ * wieczorem): ta sama siatka, karty, wykresy i animacje, teksty po polsku,
+ * DANE PRZYKŁADOWE. FLO zniknął z Pulpitu całkowicie — jego miejsce przyjdzie
+ * z projektu Claude Design (D4). Karty na prawdziwych danych z E4
+ * (`components/dashboard/pulpit/*`, `lib/dashboard/*`) zostają w kodzie
+ * do podpięcia w miejsce danych przykładowych.
  *
  * Pełna mapa: `docs/flo/UKLAD-DASHBOARDU.md`.
  */
-export const dynamic = 'force-dynamic';
 
-export default async function DashboardHomePage() {
-  const { supabase, tenantId } = await getPageContext();
-  const nowIso = new Date().toISOString();
-  const agent = await loadAgent();
+// Kafle statystyk
+const StatisticsCardData: StatisticsCardProps[] = [
+  {
+    icon: <RiShoppingCartLine />,
+    title: 'Zamówienia',
+    value: '155 tys.',
+    trend: 'up',
+    changePercentage: '+22%',
+    badgeContent: 'Ostatnie 4 miesiące',
+    iconClassName: 'bg-chart-3/20 text-chart-3',
+  },
+  {
+    icon: <RiMoneyDollarCircleLine />,
+    title: 'Zysk łącznie',
+    value: '89,34 tys. zł',
+    trend: 'down',
+    changePercentage: '−16%',
+    badgeContent: 'Ostatni rok',
+    iconClassName: 'bg-chart-3/20 text-chart-3',
+  },
+];
 
+// Odwiedzający
+const visitorData = [
+  { product: 'Komputer', percentage: 17, amount: 23.8, trend: 'up', heightClass: 'h-[17%]', color: 'bg-chart-1' },
+  { product: 'Tablet', percentage: 65, amount: 13.604, trend: 'down', heightClass: 'h-[65%]', color: 'bg-chart-1/20' },
+  { product: 'Telefon', percentage: 18, amount: 47.146, trend: 'up', heightClass: 'h-[18%]', color: 'bg-chart-1/50' },
+];
+
+// Najlepiej sprzedające się
+const productsBySalesData = [
+  {
+    icon: <RiSmartphoneLine />,
+    productName: 'Samsung Galaxy S25',
+    productBrand: 'Samsung',
+    sales: '32 203 zł',
+    iconClassName: 'bg-primary/10 text-primary dark:bg-primary/25',
+  },
+  {
+    icon: <RiMacbookLine />,
+    productName: 'Apple MacBook Pro',
+    productBrand: 'Apple',
+    sales: '1299 zł',
+    iconClassName: 'bg-chart-2/10 text-chart-2',
+  },
+  {
+    icon: <RiHeadphoneLine />,
+    productName: 'Sony WH-1000XM4',
+    productBrand: 'Sony',
+    sales: '348 zł',
+    iconClassName: 'bg-chart-5/10 text-chart-5',
+  },
+  { icon: <RiMacbookLine />, productName: 'Dell XPS 13', productBrand: 'Dell', sales: '999 zł' },
+  {
+    icon: <RiTimer2Line />,
+    productName: 'Smart Band 4',
+    productBrand: 'Xiaomi',
+    sales: '749 zł',
+    iconClassName: 'bg-chart-3/10 text-chart-3',
+  },
+];
+
+// Najczęściej kupowane
+const productsByVolumeData = [
+  {
+    icon: <RiMacbookLine />,
+    productName: 'Dell XPS 13',
+    productBrand: 'Dell',
+    volume: '200 tys.',
+    changePercentage: 5,
+    iconClassName: 'bg-primary/10 text-primary dark:bg-primary/25',
+  },
+  {
+    icon: <RiTabletLine />,
+    productName: 'Apple iPad',
+    productBrand: 'Apple',
+    volume: '80 tys.',
+    changePercentage: 10,
+    iconClassName: 'bg-chart-2/10 text-chart-2',
+  },
+  {
+    icon: <RiGamepadLine />,
+    productName: 'Sony PlayStation 5',
+    productBrand: 'Sony',
+    volume: '30 tys.',
+    changePercentage: -20,
+    iconClassName: 'bg-chart-5/10 text-chart-5',
+  },
+  { icon: <RiComputerLine />, productName: 'iMac Pro', productBrand: 'Apple', volume: '15 tys.', changePercentage: 12 },
+  {
+    icon: <RiSmartphoneLine />,
+    productName: 'Samsung Galaxy S25',
+    productBrand: 'Samsung',
+    volume: '12,4 tys.',
+    changePercentage: -15,
+    iconClassName: 'bg-chart-3/10 text-chart-3',
+  },
+];
+
+// Tabela użytkowników (fikcyjne osoby, adresy w domenie example.pl)
+const userData: Item[] = [
+  { id: '1', avatar: '', fallback: 'JK', user: 'Jan Kowalski', email: 'jan.kowalski@example.pl', role: 'maintainer', plan: 'enterprise', billing: 'auto-debit', status: 'active' },
+  { id: '2', avatar: '', fallback: 'AN', user: 'Anna Nowak', email: 'anna.nowak@example.pl', role: 'admin', plan: 'enterprise', billing: 'auto-debit', status: 'active' },
+  { id: '3', avatar: '', fallback: 'PW', user: 'Piotr Wiśniewski', email: 'piotr.wisniewski@example.pl', role: 'editor', plan: 'team', billing: 'manual-paypal', status: 'pending' },
+  { id: '4', avatar: '', fallback: 'KW', user: 'Katarzyna Wójcik', email: 'katarzyna.wojcik@example.pl', role: 'author', plan: 'basic', billing: 'manual-cash', status: 'inactive' },
+  { id: '5', avatar: '', fallback: 'TK', user: 'Tomasz Kamiński', email: 'tomasz.kaminski@example.pl', role: 'subscriber', plan: 'company', billing: 'auto-debit', status: 'active' },
+  { id: '6', avatar: '', fallback: 'ML', user: 'Magdalena Lewandowska', email: 'magdalena.lewandowska@example.pl', role: 'editor', plan: 'team', billing: 'manual-paypal', status: 'active' },
+  { id: '7', avatar: '', fallback: 'MZ', user: 'Michał Zieliński', email: 'michal.zielinski@example.pl', role: 'maintainer', plan: 'enterprise', billing: 'auto-debit', status: 'pending' },
+  { id: '8', avatar: '', fallback: 'AS', user: 'Agnieszka Szymańska', email: 'agnieszka.szymanska@example.pl', role: 'author', plan: 'basic', billing: 'manual-cash', status: 'active' },
+  { id: '9', avatar: '', fallback: 'PW', user: 'Paweł Woźniak', email: 'pawel.wozniak@example.pl', role: 'admin', plan: 'company', billing: 'auto-debit', status: 'inactive' },
+  { id: '10', avatar: '', fallback: 'JD', user: 'Joanna Dąbrowska', email: 'joanna.dabrowska@example.pl', role: 'subscriber', plan: 'basic', billing: 'manual-paypal', status: 'active' },
+  { id: '11', avatar: '', fallback: 'KK', user: 'Krzysztof Kozłowski', email: 'krzysztof.kozlowski@example.pl', role: 'maintainer', plan: 'team', billing: 'auto-debit', status: 'pending' },
+  { id: '12', avatar: '', fallback: 'EJ', user: 'Ewa Jankowska', email: 'ewa.jankowska@example.pl', role: 'editor', plan: 'company', billing: 'manual-cash', status: 'active' },
+  { id: '13', avatar: '', fallback: 'MM', user: 'Marcin Mazur', email: 'marcin.mazur@example.pl', role: 'author', plan: 'enterprise', billing: 'auto-debit', status: 'inactive' },
+  { id: '14', avatar: '', fallback: 'MK', user: 'Monika Kwiatkowska', email: 'monika.kwiatkowska@example.pl', role: 'subscriber', plan: 'team', billing: 'manual-paypal', status: 'active' },
+  { id: '15', avatar: '', fallback: 'ŁK', user: 'Łukasz Krawczyk', email: 'lukasz.krawczyk@example.pl', role: 'admin', plan: 'enterprise', billing: 'auto-debit', status: 'pending' },
+  { id: '16', avatar: '', fallback: 'AP', user: 'Aleksandra Piotrowska', email: 'aleksandra.piotrowska@example.pl', role: 'editor', plan: 'basic', billing: 'manual-cash', status: 'active' },
+  { id: '17', avatar: '', fallback: 'GG', user: 'Grzegorz Grabowski', email: 'grzegorz.grabowski@example.pl', role: 'maintainer', plan: 'company', billing: 'auto-debit', status: 'inactive' },
+  { id: '18', avatar: '', fallback: 'NP', user: 'Natalia Pawłowska', email: 'natalia.pawlowska@example.pl', role: 'author', plan: 'team', billing: 'manual-paypal', status: 'active' },
+  { id: '19', avatar: '', fallback: 'RM', user: 'Rafał Michalski', email: 'rafal.michalski@example.pl', role: 'subscriber', plan: 'enterprise', billing: 'auto-debit', status: 'pending' },
+  { id: '20', avatar: '', fallback: 'KZ', user: 'Karolina Zając', email: 'karolina.zajac@example.pl', role: 'admin', plan: 'basic', billing: 'manual-cash', status: 'active' },
+  { id: '21', avatar: '', fallback: 'AK', user: 'Adam Król', email: 'adam.krol@example.pl', role: 'editor', plan: 'enterprise', billing: 'auto-debit', status: 'active' },
+  { id: '22', avatar: '', fallback: 'ZW', user: 'Zofia Wieczorek', email: 'zofia.wieczorek@example.pl', role: 'author', plan: 'team', billing: 'manual-paypal', status: 'inactive' },
+  { id: '23', avatar: '', fallback: 'JJ', user: 'Jakub Jabłoński', email: 'jakub.jablonski@example.pl', role: 'maintainer', plan: 'company', billing: 'manual-cash', status: 'pending' },
+  { id: '24', avatar: '', fallback: 'MW', user: 'Marta Wróbel', email: 'marta.wrobel@example.pl', role: 'subscriber', plan: 'basic', billing: 'auto-debit', status: 'active' },
+  { id: '25', avatar: '', fallback: 'WM', user: 'Wojciech Majewski', email: 'wojciech.majewski@example.pl', role: 'admin', plan: 'enterprise', billing: 'manual-paypal', status: 'pending' },
+];
+
+export default function DashboardHomePage() {
   return (
-    <div className="flex h-full min-h-0 flex-col gap-6 lg:h-auto lg:pb-6">
-      <FloSlot agent={agent} />
-      <PulpitGrid supabase={supabase} tenantId={tenantId} nowIso={nowIso} className="hidden lg:grid" />
-    </div>
-  );
-}
+    <div className="grid grid-cols-6 gap-6 py-6">
+      <FinanceCard className="col-span-full xl:col-span-4" />
 
-/**
- * Slot FLO — te same trzy gałęzie i te same propsy co przed E4. Od `lg`
- * stała wysokość z `overflow-hidden`; poniżej `lg` cała wysokość ekranu.
- *
- * `ff-flo-legacy` na korzeniu każdej gałęzi: wątek FLO zostaje w dawnych
- * kolorach, choć reszta panelu przeszła na preset Finory (plan Finora, E1;
- * reguła w `app/globals.css`). Od E4 klasa obejmuje sam slot, nie siatkę.
- *
- * W szynie (`aside`) został tylko baner certyfikatu — liczby miesiąca są
- * w kartach pod slotem.
- */
-function FloSlot({ agent }: { agent: AgentData }) {
-  const szyna = (
-    <Suspense fallback={null}>
-      <DashboardVerificationBanner variant="rail" />
-    </Suspense>
-  );
+      <div className="col-span-full grid grid-cols-2 gap-6 lg:col-span-3 xl:col-span-2">
+        {StatisticsCardData.map((card, index) => (
+          <StatisticsCard
+            key={index}
+            icon={card.icon}
+            title={card.title}
+            value={card.value}
+            trend={card.trend}
+            changePercentage={card.changePercentage}
+            badgeContent={card.badgeContent}
+            iconClassName={card.iconClassName}
+          />
+        ))}
 
-  if (!agent.ok) {
-    return (
-      <div className="ff-flo-legacy grid min-h-0 flex-1 grid-cols-1 items-start gap-4 py-4 lg:h-[min(640px,70dvh)] lg:flex-none lg:grid-cols-[minmax(0,1fr)_320px] lg:overflow-hidden">
-        <FloNiedostepny powod="Nie mogę teraz sięgnąć po Twoje sprawy." />
-        {szyna}
+        <StatisticsTotalRevenueCard />
+
+        <StatisticsImpressionCard />
       </div>
-    );
-  }
 
-  if (agent.proposals.length === 0) {
-    return (
-      <div className="ff-flo-legacy flex min-h-0 flex-1 flex-col gap-3 py-4 lg:h-[min(640px,70dvh)] lg:flex-none lg:overflow-hidden">
-        {agent.fixtures ? <PasekAtrap /> : null}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="flex min-h-0 flex-col gap-3">
-            <div className="flex min-h-0 flex-1 rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)]">
-              <FloWelcome />
-            </div>
-            <FloComposer />
-          </div>
-          <aside className="flex min-h-0 flex-col gap-4 lg:overflow-y-auto">
-            {szyna}
-            <FloScheduledPanel
-              scheduled={agent.scheduled}
-              className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] p-4"
-            />
-          </aside>
-        </div>
-      </div>
-    );
-  }
+      <TotalVisitorsCard
+        title="Odwiedzający"
+        totalVisitors="23,02 tys."
+        percentage={-6}
+        visitorData={visitorData}
+        className="col-span-full lg:col-span-3 xl:col-span-2"
+      />
 
-  return (
-    <div className="ff-flo-legacy flex min-h-0 flex-1 flex-col gap-3 py-4 lg:h-[min(640px,70dvh)] lg:flex-none lg:overflow-hidden">
-      {agent.fixtures ? <PasekAtrap /> : null}
+      <TopProductsCard
+        salesTitle="Najlepiej sprzedające się"
+        volumeTitle="Najczęściej kupowane"
+        productsBySalesData={productsBySalesData}
+        productsByVolumeData={productsByVolumeData}
+        className="col-span-full xl:col-span-4"
+      />
 
-      {/* Wywrotka wątku przy renderze: komunikat + szyna (baner certyfikatu).
-          Sama szyna u zweryfikowanej firmy byłaby pustym slotem 640 px. */}
-      <SectionErrorBoundary
-        label="Flo"
-        fallback={
-          <div className="flex flex-col gap-4">
-            <FloNiedostepny powod="Flo chwilowo się nie wyświetla." />
-            {szyna}
-          </div>
-        }
-      >
-        <FloScreen
-          proposals={agent.proposals}
-          scheduled={agent.scheduled}
-          showHeader={false}
-          aside={szyna}
-        />
-      </SectionErrorBoundary>
+      <Card className="col-span-full py-0 shadow-none">
+        <UserDatatable data={userData} />
+      </Card>
     </div>
-  );
-}
-
-/** Komunikat zamiast wątku — z odesłaniem do liczb miesiąca (karty albo „Miesiąc”). */
-function FloNiedostepny({ powod }: { powod: string }) {
-  return (
-    <section
-      role="status"
-      className="rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-[22px] py-5"
-    >
-      <p className="text-[13px] text-[var(--ff-text-muted)]">
-        {powod}{' '}
-        <span className="lg:hidden">Liczby miesiąca są w zakładce „Miesiąc”</span>
-        <span className="hidden lg:inline">Liczby miesiąca są w kartach poniżej</span>
-        {' '}— spróbuj odświeżyć za chwilę.
-      </p>
-    </section>
-  );
-}
-
-/**
- * Odczyt agenta odporny na awarię silnika.
- *
- * Wyjątek z `listProposals` jest tu ŁAPANY, a nie przepuszczany do granicy
- * błędu: pobranie dzieje się na poziomie strony, więc rzucony wyjątek przewraca
- * cały render, zanim granica zdąży się zamontować — sprawdzone na żywo
- * 30.08.2026, gdy brak tabel FLO w bazie deweloperskiej wygasił cały dashboard.
- *
- * Zwracamy `ok: false`, a NIE pustą listę. Pusta lista znaczy „nie masz nic do
- * zrobienia” i byłaby kłamstwem w chwili, gdy agent po prostu nie odpowiada —
- * cisza jest stanem zabronionym (własność W5 planu FLO).
- */
-type AgentData =
-  | {
-      ok: true;
-      proposals: FloProposalView[];
-      scheduled: FloScheduledView[];
-      /** true = na ekranie są atrapy, nie dane klienta. */
-      fixtures: boolean;
-    }
-  | { ok: false };
-
-async function loadAgent(): Promise<AgentData> {
-  try {
-    const [proposals, scheduled] = await Promise.all([
-      listProposals(),
-      listScheduled(),
-    ]);
-    return { ok: true, proposals, scheduled, fixtures: false };
-  } catch (blad) {
-    console.error('[dashboard] odczyt agenta nieudany:', blad);
-
-    /**
-     * AWARYJNE PRZEJŚCIE NA ATRAPY — TYLKO NA MASZYNIE DEWELOPERA.
-     *
-     * Baza deweloperska (Supabase Cloud, pozostałość po erze Vercela) nie ma
-     * tabel FLO i nikt nie ma już do niej hasła, więc bez tego ani tor B, ani
-     * tor A nie widzi interfejsu agenta na oczy. Atrapy pokrywają wszystkie
-     * sześć wariantów karty i cztery typy podglądu.
-     *
-     * BEZPIECZNIK JEST FAIL-CLOSED: `isLocalDevEnv()` wymaga
-     * `NODE_ENV === 'development'` ORAZ braku jakiegokolwiek markera produkcji.
-     * Build produkcyjny ustawia `NODE_ENV=production`, więc na Hetznerze ta
-     * gałąź nie ma jak się wykonać, nawet gdyby zmienne środowiskowe zniknęły.
-     *
-     * Na produkcji awaria zostaje awarią i klient dostaje uczciwy komunikat —
-     * pokazanie mu cudzych przykładowych faktur jako własnych spraw byłoby
-     * znacznie gorsze niż pusty ekran.
-     */
-    if (isLocalDevEnv()) {
-      return {
-        ok: true,
-        proposals: FLO_FIXTURES,
-        scheduled: FLO_SCHEDULED_FIXTURES,
-        fixtures: true,
-      };
-    }
-
-    return { ok: false };
-  }
-}
-
-/** Uczciwa adnotacja, że na ekranie są atrapy, a nie sprawy klienta. */
-function PasekAtrap() {
-  return (
-    <p
-      role="status"
-      className="shrink-0 rounded-xl border border-[var(--ff-warn-border)] bg-[var(--ff-warn-tint)] px-4 py-2.5 text-[12.5px] text-[var(--ff-warn-text)]"
-    >
-      <strong className="font-semibold text-[var(--ff-warn)]">
-        Dane przykładowe.
-      </strong>{' '}
-      Baza deweloperska nie ma tabel agenta, więc to są atrapy
-      z <code>lib/flo/fixtures.ts</code>, a nie Twoje sprawy. Ten pasek nie może
-      pojawić się na produkcji.
-    </p>
   );
 }

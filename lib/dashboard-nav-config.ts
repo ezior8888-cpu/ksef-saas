@@ -8,7 +8,6 @@ import {
   RiExchangeFundsLine,
   RiFileAddLine,
   RiFileList3Line,
-  RiFlashlightLine,
   RiInboxArchiveLine,
   RiMoreLine,
   RiReceiptLine,
@@ -91,7 +90,7 @@ export const dashboardNavItems: DashboardNavItem[] =
 
 /**
  * Dolna nawigacja telefonu — pięć slotów z sierpniowej makiety:
- * Flo · Faktury · Nowa · Miesiąc · Więcej.
+ * Pulpit · Faktury · Nowa · Miesiąc · Więcej.
  *
  * DLACZEGO OSOBNA LISTA, A NIE WYCINEK Z `dashboardNavSections`.
  * Sidebar jest spisem miejsc; dolny pasek to CZTERY najczęstsze czynności plus
@@ -114,7 +113,8 @@ export interface DashboardMobileTab {
 }
 
 export const dashboardMobileTabs: DashboardMobileTab[] = [
-  { href: "/dashboard", label: "Flo", icon: RiFlashlightLine },
+  // 19.10.2026: Pulpit bez FLO (miejsce FLO przyjdzie z projektu Claude Design).
+  { href: "/dashboard", label: "Pulpit", icon: RiDashboardLine },
   { href: "/invoices", label: "Faktury", icon: RiFileList3Line },
   { href: "/invoices/new", label: "Nowa", icon: RiAddLine, emphasis: true },
   { href: "/przeplywy", label: "Miesiąc", icon: RiWallet3Line },

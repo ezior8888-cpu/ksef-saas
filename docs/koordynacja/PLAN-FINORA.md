@@ -1377,6 +1377,7 @@ Transactions, Monthly Analytics, Accounts i Invoice List.
 | 19.10.2026 | §2.4 pkt 10 (strefa czasowa) | #284 | sesja lokalna (bez kredytów chmury); agenci: przegląd wszystkich `getMonth`/`getFullYear` 0,53 mln (szukanie Sonnet, weryfikacja mocny model) | scalone 19.10 (przez #290), wdrożone | `19bbe9cc` | `getMonthlyFigures`, `getSalesSeries` i 4 miejsca z tą samą przyczyną (rok legendy na `/przeplywy`, okno `CashFlowDashboard`, rok szacunku podatku, domyślny miesiąc i granice KPiR) liczą „dziś” z `todayInWarsaw`. Czerwone przed naprawą: 6 + 5 + 1. Obalone: eksporty (stan liczy się ponownie w przeglądarce), stopka, blog, klucze S3 |
 | 19.10.2026 | E4 | #287 (stos na #284) | sesja lokalna; agenci: mapowanie 0,28 mln (Sonnet), budowa 0,53 mln (dane mocny model, karty Sonnet), przegląd 2,77 mln (szukanie: dane i strona mocny model, karty i testy Sonnet; weryfikacja mocny model), poprawki 0,23 mln (dane mocny model, karty Sonnet) | scalone 19.10 (przez #290), wdrożone | `19bbe9cc` | P1 Pulpit: slot FLO `min(640px,70dvh)` od `lg` nad siatką Finance (poniżej `lg` FLO na pełny ekran, blokada przewijania tylko do 1023,98 px), 8 kart w `components/dashboard/pulpit/` (każda w `Suspense` + `SectionErrorBoundary`, treść wyjątku przez filtr `pulpitErrorMessage`), `lib/dashboard/costs.ts` (§2.4 pkt 12), `getSalesSeries({ months, withPrevYear })` z `netSeries`/`vatSeries` w groszach, rankingi (§2.4 pkt 13), należności według terminu, ostatnie faktury, `formatPlCompactMoney`, `shortCompanyName`. Przegląd: 25 znalezisk, 18 potwierdzonych (w tym duplikaty) — poprawione z czerwonymi testami, 7 obalonych. Konflikt planu z D4: wariant „Limit zwolnienia z VAT” (niżej) |
 | 19.10.2026 | E4: limit zwolnienia z VAT (decyzja „Opcja A”) | #290 (stos na #287) | sesja lokalna; agenci: budowa 0,33 mln (funkcja limitu mocny model, ustawienia i karta Sonnet), przegląd (szukanie: prawo/dane i migracja mocny model, karta i testy Sonnet; weryfikacja mocny model) | scalone 19.10, migracja 00153 wgrana na db-1, wdrożone (worker i aplikacja) | `19bbe9cc` | znacznik NIEAKTYWNE zdjęty z `vat-limit.ts`; migracja **00153** (`tenants.business_started_on`, przed wdrożeniem); pole w `/settings`; `getVatLimit` + `VatLimitCard`; test na bazie `rls-data-rozpoczecia` (grant z 00112, CHECK, izolacja) |
+| 19.10.2026 | Pulpit = Finance Finory 1:1 (decyzja Bartosza, wieczór) | (ten PR) | sesja lokalna | gotowe, czeka na odbiór | — | `/dashboard` to strona `dashboard/finance` Finory przeniesiona plikami (`components/dashboard/finora/*`: wykresy, kafle, odwiedzający, produkty, tabela z filtrami i paginacją, `@tanstack/react-table` 8.21.3), teksty po polsku, **dane przykładowe**, animacje recharts jak w szablonie. **FLO usunięty z Pulpitu w UI** (komponenty FLO zostają w kodzie). Usunięta blokada przewijania `/dashboard` i ukrywanie banera certyfikatu; dolny pasek: „Pulpit” zamiast „Flo”. Karty E4 na prawdziwych danych (`components/dashboard/pulpit/*`, `lib/dashboard/*`) zostają do podpięcia w miejsce danych przykładowych |
 
 **Decyzje po E3 (Bartosz 17.10: „odpowiedz sam, ma być jak najbardziej
 poprawnie”):** (1) lista `/invoices` dalej pokazuje faktury ze wszystkich
@@ -1431,6 +1432,12 @@ angielski ogon PostgREST-a. Pulpit filtruje to przez `pulpitErrorMessage`
 — kafle E3 warto przepiąć na ten sam filtr osobnym małym PR. `/przeplywy`
 nie ma strażnika przyjętej faktury bez środowiska, który mają Pulpit
 i `getSalesSeries` (różnica sprzed E4, do przeniesienia w E5).
+
+**Decyzja Bartosza 19.10.2026 (wieczór):** Pulpit 1:1 jak Finora
+(siatka, karty, wykresy, animacje, odstępy, czcionki), po polsku, na danych
+przykładowych; FLO poza Pulpitem (miejsce z projektu Claude Design). Wygląd
+naszego projektu porzucamy — przyjmujemy wyłącznie Finorę. „Wrócimy do tego”:
+podpięcie prawdziwych danych w karty Finory.
 
 **Następny krok:** E4 jest na produkcji (`19bbe9cc`, 19.10 ok. 22:25;
 to samo wdrożenie wniosło też niewdrożone wcześniej #282 E1–E3, #285 zmianę

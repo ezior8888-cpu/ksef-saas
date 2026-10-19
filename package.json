@@ -59,6 +59,7 @@
     "@serwist/next": "^9.5.11",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
+    "@tanstack/react-table": "8.21.3",
     "@upstash/redis": "^1.38.0",
     "@xmldom/xmldom": "^0.9.12",
     "archiver": "^7.0.1",

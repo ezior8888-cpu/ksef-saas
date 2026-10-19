@@ -207,9 +207,11 @@ describe('wątek FLO w dawnych kolorach (D4, kryterium E1)', () => {
     expect(panel['--ff-text-muted']).toBe('var(--muted-foreground)');
   });
 
-  it('haki przypięcia istnieją: slot na pulpicie i panel „Co Flo zrobił” w arkuszu', () => {
+  it('hak przypięcia istnieje: panel „Co Flo zrobił” w arkuszu; Pulpit bez FLO', () => {
+    // Od 19.10.2026 Pulpit nie ma slotu FLO (strona Finance Finory) — hak
+    // dawnych kolorów został tylko w arkuszu kolejki FLO.
     const page = readFileSync(join(ROOT, 'app/(dashboard)/dashboard/page.tsx'), 'utf8');
-    expect(page.match(/className="ff-flo-legacy /g)).toHaveLength(3);
+    expect(page).not.toMatch(/ff-flo-legacy|components\/flo\//);
     // Zmiana tej etykiety w pliku FLO odpina arkusz kolejki od dawnych kolorów.
     const history = readFileSync(join(ROOT, 'components/flo/flo-history-panel.tsx'), 'utf8');
     expect(history).toContain('aria-label="Co Flo zrobił"');
