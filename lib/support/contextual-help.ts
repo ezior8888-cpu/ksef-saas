@@ -64,7 +64,7 @@ const ROUTE_HELP: RouteHelp[] = [
   },
   {
     prefix: '/przeplywy',
-    slugs: ['pierwsze-kroki-w-faktflow', 'ksiega-przychodow-i-rozchodow'],
+    slugs: ['pierwsze-kroki-w-faktway', 'ksiega-przychodow-i-rozchodow'],
   },
   {
     prefix: '/import-danych',
