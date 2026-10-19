@@ -331,7 +331,7 @@ describe('A4b PR2b: pasek akcji faktury przekazuje fakty ponowienia i środowisk
 const DUPLICATE_PANEL_INFO =
   'KSeF ma już fakturę o tym numerze — szczegóły i dalsze kroki są wyżej, w ramce „W KSeF jest już faktura o tym numerze”. Nie wysyłaj tej faktury ponownie.';
 const DUPLICATE_INFO =
-  'KSeF ma już fakturę o tym numerze — tej faktury nie wysyłaj ponownie. Szczegóły są na karcie faktury; pytania: pomoc FaktWay (pomoc@faktflow.pl), podaj numer faktury.';
+  'KSeF ma już fakturę o tym numerze — tej faktury nie wysyłaj ponownie. Szczegóły są na karcie faktury; pytania: pomoc FaktWay (pomoc@faktway.pl), podaj numer faktury.';
 const NUMBER_TAKEN_INFO =
   'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie (szczegóły wyżej). Tego dokumentu nie wyślesz do KSeF. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.';
 

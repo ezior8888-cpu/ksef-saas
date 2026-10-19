@@ -28,6 +28,7 @@ import {
   SPECIAL_KIND_LABEL,
   specialKindOf,
 } from '@/lib/invoices/ksef-send-policy';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import type { KsefEnvironment } from '@/types/ksef';
 
 import {
@@ -252,6 +253,13 @@ export interface DuplicateDecisionSqlText {
  * TRIGGER_AUTO (nr, „fakturę {K}” / „inną fakturę Twojej firmy”); TRIGGER_DELETE,
  * TRIGGER_RENUMBER i TRIGGER_DIRECTION (nr, „faktura {K}” / „inna faktura Twojej firmy”).
  * Test U16e sprawdza, że każdy wzorzec stoi w 00148 zaraz po `RAISE EXCEPTION '`.
+ *
+ * Zmiana marki na FaktWay: te wzorce celowo NIE są przepisane. Wgrana migracja 00148
+ * rzuca je z dawną nazwą produktu i adresem pomocy w dawnej domenie, a testy RLS porównują
+ * `error.message` z bazy z tym lustrem słowo w słowo. Zmiana tekstu = nowa migracja
+ * (kolejny numer z rejestru) z `CREATE OR REPLACE` funkcji i wyzwalaczy, a w tym samym
+ * PR aktualizacja tego lustra. Do tego czasu adres w dawnej domenie obsługuje poczta
+ * przejściowa (`ops/poczta/worker.mjs` przyjmuje obie domeny).
  */
 export const DUPLICATE_DECISION_SQL_TEXTS: Readonly<Record<DuplicateDecisionSqlTextKey, DuplicateDecisionSqlText>> = {
   NOTE: { template: 'Zapisując decyzję klienta, opisz w notatce kanał, datę i osobę (co najmniej 10 znaków).', arity: 0 },
@@ -362,7 +370,7 @@ export const DUPLICATE_DECISION_TEXTS = {
   CONTENT_SAME: 'Treść pozycji jest taka sama jak w fakturze w KSeF — różni się tylko nagłówek pliku.',
   CONTENT_DIFFERENT: 'Treść pozycji różni się od faktury w KSeF.',
   KNOWN_NUMBER_LINE: (k: string, y: string, nr: string) =>
-    `W FaktWay numer KSeF ${k} ma już dokument ${y}. Twoja decyzja dotyczy tylko dokumentu ${nr}; jeśli dane dokumentu ${y} nie zgadzają się z fakturą w KSeF, napisz do nas: pomoc@faktflow.pl, podając oba numery.`,
+    `W FaktWay numer KSeF ${k} ma już dokument ${y}. Twoja decyzja dotyczy tylko dokumentu ${nr}; jeśli dane dokumentu ${y} nie zgadzają się z fakturą w KSeF, napisz do nas: ${SUPPORT_EMAIL}, podając oba numery.`,
   /** Odnośnik do dokumentu Y (`/invoices/{Y.id}`) — panel, baner, notatka. */
   KNOWN_LINK: DUPLICATE_ORIGINAL_NOTES.KNOWN_LINK,
   COLUMN_KSEF: 'W KSeF',
@@ -379,7 +387,7 @@ export const DUPLICATE_DECISION_TEXTS = {
   BUTTON_SAME: 'To ta sama sprzedaż',
   BUTTON_OTHER: 'To inna sprzedaż',
   SUPPORT: (nr: string) =>
-    `Nie wiesz, co wybrać? Napisz do nas: pomoc@faktflow.pl, podając numer ${nr}. Do tego czasu nie wystawiaj tej faktury ponownie.`,
+    `Nie wiesz, co wybrać? Napisz do nas: ${SUPPORT_EMAIL}, podając numer ${nr}. Do tego czasu nie wystawiaj tej faktury ponownie.`,
 
   DIALOG_SAME: {
     TITLE: 'To ta sama sprzedaż?',
@@ -392,7 +400,7 @@ export const DUPLICATE_DECISION_TEXTS = {
     LINE_3: (k: string) =>
       `FaktWay nie ujmie faktury ${k} w JPK ani w KPiR — jeśli składasz je z FaktWay, uwzględnij ją osobno.`,
     LINE_3_KNOWN: (nr: string, k: string, y: string) =>
-      `Dokument ${nr} nie trafi do JPK ani do KPiR w FaktWay. Fakturę ${k} FaktWay zna jako dokument ${y} — sprawdź, czy jego dane zgadzają się z danymi z KSeF w tabeli; jeśli nie, napisz do nas: pomoc@faktflow.pl, podając oba numery.`,
+      `Dokument ${nr} nie trafi do JPK ani do KPiR w FaktWay. Fakturę ${k} FaktWay zna jako dokument ${y} — sprawdź, czy jego dane zgadzają się z danymi z KSeF w tabeli; jeśli nie, napisz do nas: ${SUPPORT_EMAIL}, podając oba numery.`,
     LINE_4: 'Jeśli to jednak inna sprzedaż, zostanie bez faktury — wystaw ją wtedy jako nową fakturę z nowym numerem.',
     /** Etykieta pola „Rozumiem skutki” (wymaganego, gdy `needsConfirmation.same_sale`, C5), gdy tabela zaznacza różnicę (`markedDifference`). */
     CHECKBOX: (k: string, nr: string) =>
@@ -416,7 +424,7 @@ export const DUPLICATE_DECISION_TEXTS = {
     LINE_4_UNKNOWN_PROGRAM: (k: string) =>
       `FaktWay nie ujmuje faktury ${k} w JPK ani w KPiR — rozliczasz ją tam, gdzie ją wystawiono.`,
     LINE_4_KNOWN: (k: string, y: string) =>
-      `Fakturę ${k} FaktWay zna jako dokument ${y} — sprawdź, czy jego dane zgadzają się z danymi z KSeF w tabeli; jeśli nie, napisz do nas: pomoc@faktflow.pl, podając oba numery.`,
+      `Fakturę ${k} FaktWay zna jako dokument ${y} — sprawdź, czy jego dane zgadzają się z danymi z KSeF w tabeli; jeśli nie, napisz do nas: ${SUPPORT_EMAIL}, podając oba numery.`,
     /** Pole wymagane, gdy `needsConfirmation.other_sale` (C5). */
     CHECKBOX: (k: string, nr: string) => `Rozumiem skutki: faktura ${k} w KSeF dokumentuje inną sprzedaż niż dokument ${nr}.`,
     CONFIRM_BUTTON: 'Zapisz: inna sprzedaż',
@@ -430,7 +438,7 @@ export const DUPLICATE_DECISION_TEXTS = {
   ENV_UNKNOWN: KSEF_SEND_MESSAGES.envUnknown,
   STALE: 'Dane faktury w KSeF zmieniły się od otwarcia strony — odśwież stronę i zdecyduj jeszcze raz.',
   CONFIRM: 'Zaznacz „Rozumiem skutki” i zapisz decyzję jeszcze raz.',
-  GENERIC: 'Nie udało się zapisać decyzji. Spróbuj ponownie za chwilę; jeśli błąd się powtarza, napisz do nas: pomoc@faktflow.pl.',
+  GENERIC: `Nie udało się zapisać decyzji. Spróbuj ponownie za chwilę; jeśli błąd się powtarza, napisz do nas: ${SUPPORT_EMAIL}.`,
 
   /** Notatki karty (`describeDuplicateOriginal`, `duplicate-check.ts`). */
   NOTES: DUPLICATE_ORIGINAL_NOTES,
@@ -497,7 +505,7 @@ export const DUPLICATE_DECISION_TEXTS = {
     SUBJECT: (nr: string) => `Faktura ${nr} czeka na Twoją decyzję`,
     REMINDER_SUBJECT: (nr: string) => `Przypomnienie: faktura ${nr} czeka na Twoją decyzję`,
     BODY: (nr: string, k: string) =>
-      `KSeF nie przyjął faktury ${nr}, bo ma już fakturę Twojej firmy o tym numerze (numer KSeF ${k}). Otwórz fakturę w FaktWay, porównaj dane i zdecyduj, czy to ta sama sprzedaż, czy inna. Do tego czasu nie wystawiaj jej ponownie. Pytania: pomoc@faktflow.pl.`,
+      `KSeF nie przyjął faktury ${nr}, bo ma już fakturę Twojej firmy o tym numerze (numer KSeF ${k}). Otwórz fakturę w FaktWay, porównaj dane i zdecyduj, czy to ta sama sprzedaż, czy inna. Do tego czasu nie wystawiaj jej ponownie. Pytania: ${SUPPORT_EMAIL}.`,
     BUTTON: 'Otwórz fakturę',
     PUSH_TITLE: (nr: string) => `Faktura ${nr} czeka na Twoją decyzję`,
     PUSH_BODY: 'KSeF ma już fakturę o tym numerze — porównaj dane i zdecyduj.',
