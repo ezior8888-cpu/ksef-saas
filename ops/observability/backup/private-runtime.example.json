@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "scope": "PREPARATION_ONLY",
+  "sourceRevision": "face09c57f7de756546e58d092dbe6d280f93c91",
+  "coordinator": {
+    "hostname": null,
+    "root": "/var/lib/faktflow-backup/runs",
+    "readerRoot": "/var/lib/faktflow-backup/reader"
+  },
+  "databaseCommand": {
+    "pgContainer": null,
+    "host": {
+      "hostname": null,
+      "user": "root",
+      "port": 22,
+      "identityFile": "/etc/faktflow-backup/ssh/identity",
+      "knownHostsFile": "/etc/faktflow-backup/ssh/known_hosts"
+    },
+    "env": {}
+  },
+  "sources": {
+    "database": {
+      "postgres": {
+        "host": null,
+        "port": 5432,
+        "user": null,
+        "password": null,
+        "databaseName": "postgres",
+        "tls": {
+          "mode": "verify-full"
+        }
+      },
+      "supabase": {
+        "host": null,
+        "port": 5432,
+        "user": null,
+        "password": null,
+        "databaseName": "_supabase",
+        "tls": {
+          "mode": "verify-full"
+        }
+      }
+    },
+    "s3": {
+      "application": {
+        "endpoint": null,
+        "region": null,
+        "accessKeyId": null,
+        "secretAccessKey": null,
+        "tls": {
+          "mode": "verify-full"
+        }
+      },
+      "supabase": {
+        "endpoint": null,
+        "region": null,
+        "accessKeyId": null,
+        "secretAccessKey": null,
+        "tls": {
+          "mode": "verify-full"
+        }
+      }
+    },
+    "bucketBindings": {
+      "applicationPrimary": null,
+      "applicationBackups": {
+        "mode": "shared",
+        "bucket": null
+      }
+    }
+  },
+  "restic": {
+    "repositories": {
+      "database": {
+        "repositoryFile": "/etc/faktflow-backup/writer/database.repository",
+        "passwordFile": "/etc/faktflow-backup/writer/database.password"
+      },
+      "application": {
+        "repositoryFile": "/etc/faktflow-backup/writer/application.repository",
+        "passwordFile": "/etc/faktflow-backup/writer/application.password"
+      },
+      "supabase": {
+        "repositoryFile": "/etc/faktflow-backup/writer/supabase.repository",
+        "passwordFile": "/etc/faktflow-backup/writer/supabase.password"
+      }
+    },
+    "readerRepositories": {
+      "database": {
+        "repositoryFile": "/etc/faktflow-backup/reader/database.repository",
+        "passwordFile": "/etc/faktflow-backup/reader/database.password"
+      },
+      "application": {
+        "repositoryFile": "/etc/faktflow-backup/reader/application.repository",
+        "passwordFile": "/etc/faktflow-backup/reader/application.password"
+      },
+      "supabase": {
+        "repositoryFile": "/etc/faktflow-backup/reader/supabase.repository",
+        "passwordFile": "/etc/faktflow-backup/reader/supabase.password"
+      }
+    },
+    "writerClientId": "f0-coordinator",
+    "readerClientId": "f0-independent-reader",
+    "writerEnv": {
+      "PATH": "/usr/bin:/bin",
+      "HOME": "/etc/faktflow-backup/writer-home"
+    },
+    "readerHost": {
+      "hostname": null,
+      "user": "root",
+      "port": 22,
+      "identityFile": "/etc/faktflow-backup/ssh/identity",
+      "knownHostsFile": "/etc/faktflow-backup/ssh/known_hosts"
+    },
+    "readerRemoteEnvironment": {
+      "HOME": "/etc/faktflow-backup/reader-home"
+    }
+  }
+}

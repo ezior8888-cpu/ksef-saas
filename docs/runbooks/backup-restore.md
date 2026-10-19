@@ -1,5 +1,12 @@
 # Kopie bazy i odtwarzanie
 
+**Aktualizacja F0, 10.10.2026:** poniżej pozostaje procedura z 01.10,
+niekompletna dla obu baz postgres/_supabase i obu MinIO; transport off-host
+w db-backup.sh jest opcjonalny. [Nowy pakiet przygotowania](f0-backup-preparation.md)
+jest wyłącznie lokalny, nie instaluje kopii ani nie zastępuje działającego
+jobu. Dyspozycja Igora: **„Tylko przygotowanie — bez zakupu i zmian”**;
+F0_OPEN, G03/G09 FAIL.
+
 Stan po kroku 6 planu automatyzacji (1 października 2026). Decyzja
 i uzasadnienie: [ADR-0009](../adr/0009-pg-dump-na-db-1-i-storage-box.md).
 Poprzednia wersja tego runbooka opisywała Supabase Cloud i PITR. Jest

@@ -1,0 +1,159 @@
+{
+  "schema_version": 5,
+  "date": "2026-10-10",
+  "status": "F0_OPEN",
+  "scope": "public_allowlisted_choices_catalog_and_access_limitations_not_execution_evidence",
+  "recorded_at_utc": "2026-10-10T07:28:01.339Z",
+  "reference_revision": "97527a3cf8b65177eee8ec8799c49c5e48382ded",
+  "authority": {
+    "kind": "user_requirement_and_existing_delegation",
+    "owner": "Igor",
+    "selection_by": "Codex",
+    "source": "current_F0_chat_user_messages",
+    "source_message_time_utc": "not_supplied",
+    "current_direction": "paid_cloud_quality_first",
+    "previous_local_no_new_subscription_direction": "historical_fallback",
+    "purchase_or_operations_authorized": false
+  },
+  "decision_documents": {
+    "contracts": "../contracts.md",
+    "data_policy": "../data-policy.md",
+    "roles_and_paid_choices": "../ownership.md#płatny-wariant-i-pełna-historia-błędów--10102026",
+    "acceptance": "../acceptance-plan.md"
+  },
+  "choices": {
+    "invoice_error_history": {
+      "source": "protected_domain_and_invoice_audit_history",
+      "coverage": ["before_POST", "retry", "later_recovered", "still_open"],
+      "required_error_records_sampling_percent": 100,
+      "success_removes_prior_errors": false,
+      "minimal_error_record_project_retention_calendar_years": 10,
+      "diagnostic_details_days": 90,
+      "SLI_journal_months": 13,
+      "coverage_freshness_and_historical_gaps_visible": true,
+      "unrecorded_past_errors_reconstruction_claimed": false,
+      "dashboard_implemented_or_accepted": false
+    },
+    "future_developer_agent": {
+      "separate_identity": true,
+      "interface": "sanitized_read_only_diagnostics_server_authorized_tenant_scope",
+      "reads_audited": true,
+      "error_text_is_data_not_instructions": true,
+      "service_role_sql_ssh_secrets_documents_mutations": "excluded",
+      "grant_or_connection_created": false,
+      "implementation_condition": "after_formal_F0_acceptance_in_separate_F1_chat"
+    },
+    "sentry": {
+      "region": "EU",
+      "target_tier": "Team",
+      "billing_target": "monthly_initially",
+      "monthly_base_before_tax_usd": 29,
+      "annual_base_prepaid_before_tax_usd": 312,
+      "included_errors_per_month": 50000,
+      "included_spans_per_month": 5000000,
+      "error_lookback_up_to_days": 90,
+      "spans_transactions_retention_days": 30,
+      "pay_as_you_go_target_usd": 0,
+      "usage_warning_quota_percent": 80,
+      "quota_exhaustion_can_drop_events": true,
+      "active_tier_and_retention_verified": false,
+      "subscription_started": false
+    },
+    "posthog": { "region": "EU", "target_tier": "Free", "active_tier_verified": false },
+    "backup": {
+      "primary": "BX11_HEL1_restic_client_side_encryption",
+      "scope": ["full_database_and_required_globals", "application_MinIO", "Supabase_MinIO"],
+      "retained_copy_counts": { "daily": 7, "weekly": 4, "monthly": 12 },
+      "additional_independent_target_recommended": "B2_EU_Central_Amsterdam_client_encrypted_complete_archives_Object_Lock_COMPLIANCE",
+      "additional_target_is_new_G09_gate": false,
+      "B2_storage_public_rate_usd_per_TB_month": 6.95,
+      "B2_actual_total_cost": "unknown_requires_volume_and_retention_measurement",
+      "B2_immutable_storage_created": false,
+      "previous_first_copy_planning_target_passed_without_execution_proof": true,
+      "full_backup_executed_or_accepted": false
+    },
+    "staging": {
+      "recommended_quality_candidate": "CPX42_NBG1_x86_8_vCPU_16_GiB_320_GB",
+      "available_lower_price_candidate": "none_at_required_parameters_within_previous_ceiling",
+      "unavailable_lower_price_candidate": "CX43_x86_8_vCPU_16_GiB_160_GB",
+      "previous_infrastructure_monthly_net_ceiling_eur": 45,
+      "ceiling_automatically_increased": false,
+      "acquisition_status": "BLOCKED_budget_or_CX43_availability",
+      "separate_project_network_database_queue_storage_and_keys": true,
+      "synthetic_data_KSeF_TEST_Stripe_test": true,
+      "production_secrets_allowed": false,
+      "headroom_measurement_required": true,
+      "latest_agreed_date": "2026-10-31",
+      "ordered_or_created": false
+    }
+  },
+  "measurements": {
+    "collector_attempt": {
+      "kind": "read_only_attempt_no_runtime_obtained",
+      "observed_at_utc": "2026-10-10T07:18:59.020Z",
+      "private_artifact_sha256": "d52a9b0dba7061a685c4470e309e1b4b173c292fdd8abfe14756a7f264368868",
+      "exit_code": 2,
+      "hosts": { "app-1": "unverified", "ops-1": "unverified", "db-1": "unverified" },
+      "reason": "ssh_or_remote_probe_failed",
+      "current_runtime_SHA_health_versions_or_sizes_verified": false
+    },
+    "local_access_prerequisites": {
+      "kind": "local_read_only_not_server_authentication",
+      "observed_at_utc": "2026-10-10T07:28:01.339Z",
+      "private_artifact_sha256": "ae3dee2db01ef4b3726f7187b4371b81211a72c14984dee4311b38dd0561eb7d",
+      "key_file_exists": true,
+      "key_encrypted": true,
+      "agent_has_identities": false,
+      "known_hosts_entry_present": { "app-1": false, "ops-1": false, "db-1": true },
+      "server_authentication_verified": false,
+      "configuration_changed": false,
+      "SSH_Codex_mandatory_F0_gate": false,
+      "alternative": "dated_authorized_operator_or_panel_readout"
+    },
+    "hetzner_public_catalog": {
+      "kind": "read_only_provider_catalog_not_account_or_runtime",
+      "utc_window": { "from": "2026-10-10T07:20:56.151Z", "to": "2026-10-10T07:20:56.7770299Z" },
+      "safe_source_excerpt_sha256": "03f0ca610e622ce35732d8e6cd4a371f30abd951cfd6bc3ceeea0c0a9dd6c201",
+      "GET_200_endpoints": [
+        "https://api.hetzner.cloud/v1/server_types?per_page=50",
+        "https://api.hetzner.cloud/v1/locations?per_page=50",
+        "https://api.hetzner.cloud/v1/pricing",
+        "https://api.hetzner.com/v1/storage_box_types?name=bx11"
+      ],
+      "server_types_returned": 26,
+      "next_page": null,
+      "monthly_net_eur": { "BX11_HEL1": 3.2, "CPX42_NBG1": 69.49, "CX43_NBG1": 15.99, "IPv4": 0.5, "CPX42_IPv4_BX11_total": 73.19, "unavailable_CX43_IPv4_BX11_total": 19.69 },
+      "CPX42_EU_available_indicator": true,
+      "CX43_all_queried_EU_available_indicator": false,
+      "indicator_is_reservation": false,
+      "purchase_or_invoice_verified": false
+    },
+    "CI_prior_revision": { "kind": "GitHub_checks_read", "checked_on_date": "2026-10-10", "revision": "97527a3cf8b65177eee8ec8799c49c5e48382ded", "successful_checks": 11, "total_checks": 11, "production_or_new_revision_acceptance": false }
+  },
+  "public_sources_checked_on_date": [
+    "https://sentry.io/pricing/",
+    "https://docs.sentry.io/pricing/",
+    "https://www.sentry.help/en/articles/13965032-how-is-my-team-plan-changing-august-27-2025",
+    "https://www.sentry.help/en/articles/13964378-sentry-s-eu-region-faq",
+    "https://www.sentry.help/en/articles/13964878-how-does-pay-as-you-go-work",
+    "https://posthog.com/product-analytics/pricing",
+    "https://docs.hetzner.cloud/changelog",
+    "https://www.backblaze.com/cloud-storage/pricing",
+    "https://www.backblaze.com/docs/cloud-storage-data-regions",
+    "https://www.backblaze.com/docs/cloud-storage-object-lock",
+    "https://www.backblaze.com/docs/cloud-storage-s3-compatible-app-keys"
+  ],
+  "gates": {
+    "F0-G01": "PARTIAL", "F0-G02": "PARTIAL", "F0-G03": "FAIL_NO_RUNNING_ISOLATED_STAGING",
+    "F0-G04": "PASS_CONTRACT_DECISION_ONLY_WITH_2026_10_10_REQUIREMENT",
+    "F0-G05": "PASS_POLICY_DECISION_ONLY_WITH_2026_10_10_REQUIREMENT",
+    "F0-G06": "PASS_INSTRUMENTATION_BUDGET_AND_METHOD_DECISION_ONLY",
+    "F0-G07": "PARTIAL_TARGET_SELECTED_ACTIVE_ACCOUNT_EVIDENCE_INCOMPLETE",
+    "F0-G08": "PARTIAL_REAL_READINESS_AND_ROUTING_UNVERIFIED",
+    "F0-G09": "FAIL_NO_EXECUTION_EVIDENCE_FOR_COMPLETE_COPIES"
+  },
+  "all_TEST_01_to_07": "NOT_RUN",
+  "formal_F0_results_accepted": false,
+  "handoff": { "prompt_for_second_chat_condition": "after_real_formal_F0_acceptance", "F1_started": false, "new_chat_created": false },
+  "not_executed": ["purchase", "server_change", "provider_setting_change", "backup", "staging_creation", "dashboard_implementation", "agent_grant_or_connection", "migration", "deployment", "restore", "real_alert", "F1"]
+}

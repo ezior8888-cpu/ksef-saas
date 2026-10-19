@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "recorded_at_utc": "2026-10-10T15:36:22.716Z",
+  "reference_revision": "6b1a972391511e676722d4903c293d0ee9c3a2a6",
+  "status": "F0_OPEN",
+  "scope": "read_only_follow_up_and_user_declarations_not_execution_acceptance",
+  "declarations": {
+    "source": "current_F0_chat_user_answers",
+    "source_message_time_utc": "not_supplied",
+    "computer_country": "PL",
+    "location_kind": "user_declaration_not_technical_measurement",
+    "conditional_monthly_willingness_eur": 5,
+    "VAT_basis": "not_specified",
+    "condition": "if_materially_helpful",
+    "specific_purchase_approved": false,
+    "operational_execution_explicitly_resumed": false,
+    "Igor_panel_access": "unavailable_for_Sentry_and_PostHog"
+  },
+  "runtime": {
+    "started_at_utc": "2026-10-10T15:21:45.821Z",
+    "private_artifact_sha256": "58d02428927ccde5d4e3e05557d7e5624f58bc4e433552185cef02258edad6ad",
+    "collector_exit": 0,
+    "host_statuses": {
+      "app-1": "observed",
+      "ops-1": "observed",
+      "db-1": "observed"
+    },
+    "web_worker": {
+      "release": "face09c57f7de756546e58d092dbe6d280f93c91",
+      "health": "healthy",
+      "node": "22.23.3",
+      "restart_count_each": 0
+    },
+    "postgres_db1_version": "15.8",
+    "postgres_meta_classification_corrected": true,
+    "all_hosts_ntp_reported_synchronized": true,
+    "deployment_by_this_session": false,
+    "G01_G02_accepted": false
+  },
+  "accounts": {
+    "utc_window": {
+      "from": "2026-10-10T15:20:37.868Z",
+      "to": "2026-10-10T15:20:39.305Z"
+    },
+    "private_redacted_artifact_sha256": "6ce68c818e17960f1998121dd834cd8ed60c37fb6ca80d794fbacb6ac36c6197",
+    "metadata_http_statuses": [
+      200,
+      200,
+      200,
+      200
+    ],
+    "billing_http_statuses": [
+      403,
+      403
+    ],
+    "region_endpoints": "EU",
+    "sentry_reported_org_role": "owner",
+    "posthog_reported_org_role": "owner",
+    "posthog_reported_project_level": "administrator",
+    "roles_prove_Igor_access": false,
+    "full_token_scopes_verified": false,
+    "active_plan_cost_quota_verified": false,
+    "posthog_replay_retention_days": 30,
+    "posthog_org_entitlements": {
+      "analytics_years": 1,
+      "flags_years": 1,
+      "surveys_years": 1,
+      "replay_months": 1,
+      "alerts": 5,
+      "error_tracking_destinations": 2
+    },
+    "SDK_delivery_verified": false,
+    "settings_changed": false
+  },
+  "billing_diagnostic": {
+    "utc_window": {
+      "from": "2026-10-10T15:24:10.929Z",
+      "to": "2026-10-10T15:24:11.088Z"
+    },
+    "http_status": 403,
+    "private_redacted_artifact_sha256": "417395eef6f1d696861a15052956e2bbe5bd7e3fa208126a6f594c2f885af4d6",
+    "response_sha256": "9fced537b02695c9cf838e30daf3a75986d6bf9257a006b715349071ca1adf62",
+    "response_matches_both_previous_billing_responses": true,
+    "evidence_kind": "allowlisted_literal_keyword_presence",
+    "inference": "response_indicates_organization_billing_api_feature_flag_requirement_not_proof_of_insufficient_token_scope"
+  },
+  "CI": {
+    "fixed_revision": "6b1a972391511e676722d4903c293d0ee9c3a2a6",
+    "security_run": "https://github.com/ezior8888-cpu/ksef-saas/actions/runs/38063192354",
+    "security_status": "SUCCESS",
+    "open_PR_CodeQL_alerts": 0,
+    "local_offline_tests": {
+      "pass": 73,
+      "skip": 2,
+      "fail": 0
+    },
+    "local_lint": "PASS",
+    "local_typecheck": "PASS",
+    "full_CI_status_at_recording": "SUCCESS",
+    "full_CI_run": "https://github.com/ezior8888-cpu/ksef-saas/actions/runs/38063192364",
+    "PR_checks_succeeded": 11
+  },
+  "alarm_routing_review": {
+    "kind": "repository_code_not_delivery_measurement",
+    "critical_implemented": [
+      "Slack",
+      "Telegram"
+    ],
+    "daily_summary_implemented": [
+      "email",
+      "Telegram"
+    ],
+    "selected_critical_email_route_implemented": false,
+    "Igor_delivery_readiness_verified": false
+  },
+  "decision_documents": {
+    "overview": "../README.md",
+    "ownership": "../ownership.md#uzupełnienie-deklaracji-i-dostępu--10102026",
+    "inventory": "../runtime-inventory.md#uzupełnienie-odczytów-po-1520-utc--10102026",
+    "acceptance": "../acceptance-plan.md"
+  },
+  "gates": {
+    "F0-G01": "PARTIAL",
+    "F0-G02": "PARTIAL",
+    "F0-G03": "FAIL_NO_RUNNING_ISOLATED_STAGING",
+    "F0-G04": "PASS_CONTRACT_V1_2_DECISION_ONLY",
+    "F0-G05": "PASS_DATA_POLICY_DECISION_ONLY",
+    "F0-G06": "PASS_INSTRUMENTATION_BUDGET_AND_METHOD_DECISION_ONLY",
+    "F0-G07": "PARTIAL_FREE_TARGET_SELECTED_ACTIVE_ACCOUNT_EVIDENCE_INCOMPLETE",
+    "F0-G08": "PARTIAL_REAL_READINESS_AND_ROUTING_UNVERIFIED",
+    "F0-G09": "FAIL_NO_EXECUTION_EVIDENCE_FOR_COMPLETE_COPIES"
+  },
+  "formal_F0_results_accepted": false,
+  "all_TEST_01_to_07": "NOT_RUN",
+  "handoff": {
+    "F1_started": false,
+    "prompt_for_second_chat_condition": "after_real_formal_F0_acceptance"
+  },
+  "not_executed": [
+    "purchase",
+    "server_change",
+    "account_setting_change",
+    "backup",
+    "staging",
+    "migration",
+    "deployment",
+    "restore",
+    "real_alert",
+    "F1"
+  ],
+  "catalog": {
+    "kind": "authenticated_provider_catalog_not_purchase_or_invoice",
+    "types_utc_window": {
+      "from": "2026-10-10T15:33:02.373Z",
+      "to": "2026-10-10T15:33:02.613Z"
+    },
+    "types_private_safe_excerpt_sha256": "ca6b052ec825c9e34a251eebba79780a0d7973b32a37f9100801f8d2aa283e3e",
+    "currency_utc_window": {
+      "from": "2026-10-10T15:31:11.189Z",
+      "to": "2026-10-10T15:31:11.384Z"
+    },
+    "currency_private_safe_excerpt_sha256": "7524987089d01ccd7c1ca1e00321189cc2f36f900b6807cdf21b468b87030f32",
+    "currency_endpoint": "https://api.hetzner.cloud/v1/pricing",
+    "types_endpoint": "https://api.hetzner.com/v1/storage_box_types?name=bx11",
+    "sku": "bx11",
+    "location": "hel1",
+    "size_bytes": 1099511627776,
+    "monthly_net": "3.2000",
+    "monthly_gross": "3.9360",
+    "setup_fee_net": "0.0000",
+    "setup_fee_gross": "0.0000",
+    "currency_from_separate_pricing_catalog": "EUR",
+    "catalog_vat_percent": "23.000000",
+    "types_endpoint_has_currency_field": false,
+    "final_account_charge_verified": false,
+    "ordered": false
+  },
+  "private_metadata_follow_up": {
+    "utc_window": {
+      "from": "2026-10-10T15:34:58.074Z",
+      "to": "2026-10-10T15:35:04.864Z"
+    },
+    "private_artifact_sha256": "a8e873ce5ff37e29e8b96b133a0a34380cad6ea7c0cee8851a4b83a48cae1e6b",
+    "prior_attempt_private_artifact_sha256": "59d0e71f3457fa918b407e30c244b176833da20acdd2d6a7d3f2a5b35b3c833a",
+    "prior_attempt_status": "docker_metadata_observed_Coolify_projection_unverified",
+    "container_counts": {
+      "app-1": 6,
+      "ops-1": 8,
+      "db-1": 16
+    },
+    "Coolify_targets": {
+      "web": "runner",
+      "worker": "worker"
+    },
+    "finished_records": 2,
+    "record_selection": "highest_queue_id_per_application_among_finished",
+    "both_record_commits_match_running_tags_and_earlier_runtime_release": true,
+    "matched_commit": "face09c57f7de756546e58d092dbe6d280f93c91",
+    "container_image_IDs_match_earlier_runtime": true,
+    "record_timestamps": "without_time_zone_not_claimed_UTC",
+    "extended_image_metadata": "partial_not_full_build_provenance",
+    "network_details": "private_not_effective_ACL_evidence",
+    "Kuma_on_ops1_container_count": 1,
+    "Kuma_monitor_configuration": "NOT_READ",
+    "effective_ACL": "NOT_READ",
+    "server_changed": false
+  }
+}
