@@ -41,7 +41,7 @@ export default function OgImage() {
               fontWeight: 700,
             }}
           >
-            K
+            F
           </div>
           <div
             style={{

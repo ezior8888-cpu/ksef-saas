@@ -62,7 +62,7 @@ function InvoiceMockup() {
         <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
         <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
         <span className="ml-3 text-[11px] font-medium text-[var(--marketing-muted)]">
-          faktflow.pl · Faktura
+          faktway.pl · Faktura
         </span>
       </div>
 

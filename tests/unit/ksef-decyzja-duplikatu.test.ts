@@ -621,7 +621,7 @@ describe('U1g (C1): teksty SQL 00148 — wzorce RAISE z % i fillSqlText', () => 
   it('TRIGGER_AUTO bez K: „przez inną fakturę Twojej firmy wystawioną” (poprawka v3)', () => {
     const t = (DUPLICATE_DECISION_SQL_TEXTS as Record<string, { template: string }>).TRIGGER_AUTO!.template;
     expect(fillSqlText(t, DUP_NR, 'inną fakturę Twojej firmy')).toContain('przez inną fakturę Twojej firmy wystawioną');
-    expect(fillSqlText(t, DUP_NR, `fakturę ${DUP_K}`)).toContain(`przez fakturę ${DUP_K} wystawioną poza FaktFlow`);
+    expect(fillSqlText(t, DUP_NR, `fakturę ${DUP_K}`)).toContain(`przez fakturę ${DUP_K} wystawioną poza FaktWay`);
   });
 });
 
