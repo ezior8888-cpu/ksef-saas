@@ -6,6 +6,7 @@ import StatsCards from '@/components/dashboard/stats-cards';
 import { SectionErrorBoundary } from '@/components/dashboard/section-error-boundary';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { describeCardError } from '@/lib/dashboard/card-error-message';
 import { getReceivables, RECEIVABLES_NOTE } from '@/lib/dashboard/receivables';
 import { formatPlInt, formatPlMoney } from '@/lib/format/pl';
 import { plural } from '@/lib/i18n/plural';
@@ -19,7 +20,10 @@ import type { PageContext } from '@/lib/supabase/page-context';
  *
  * Komunikat błędu bierzemy z samego wyjątku w tile'u (try/catch), bo granica
  * błędu nie przekazuje tekstu, a Next.js w produkcji ukrywa treść wyjątków
- * serwerowych. Granica zostaje siatką bezpieczeństwa na błąd renderu.
+ * serwerowych. Klient widzi go przefiltrowanego (`describeCardError`, ten sam
+ * filtr co karty Pulpitu): polski komunikat strażnika albo ogólny, bez
+ * angielskiego tekstu PostgREST-a. Granica zostaje siatką bezpieczeństwa na
+ * błąd renderu.
  */
 
 export interface TileProps {
@@ -30,7 +34,7 @@ export interface TileProps {
 
 const money = (n: number) => `${formatPlMoney(n)} zł`;
 
-/** Karta błędu jednego kafla: tekst wyjątku + wyjście do przepływów. */
+/** Karta błędu jednego kafla: komunikat dla klienta + wyjście do przepływów. */
 export function TileError({ label, message }: { label: string; message: string }) {
   return (
     <Card className="shadow-none" role="status">
@@ -67,7 +71,7 @@ async function loadTile(
     const { value, note, icon } = await load();
     return <StatsCards stats={[{ label, value, note, icon }]} iconPosition="right" />;
   } catch (error) {
-    return <TileError label={label} message={error instanceof Error ? error.message : 'Nie udało się wczytać kafla.'} />;
+    return <TileError label={label} message={describeCardError('lista faktur', label, error)} />;
   }
 }
 
