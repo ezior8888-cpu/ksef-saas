@@ -204,6 +204,7 @@ lib/dashboard/rankings.ts                    produkty i klienci (§2.4 pkt 13)
 lib/dashboard/receivables-aging.ts           należności według terminu
 lib/dashboard/recent-invoices.ts             ostatnie faktury
 lib/dashboard/pulpit-report.ts               karta „Ten miesiąc”
+lib/dashboard/vat-limit.ts                   limit zwolnienia z VAT (na lib/flo/functions/vat-limit.ts)
 components/dashboard/vat-summary-card.tsx    przeniesione na /przeplywy
 components/dashboard/sales-chart-card.tsx    przeniesione na /przeplywy
 

@@ -32,7 +32,10 @@ export interface FinanceCardProps {
 
 const chartConfig = {
   net: { label: 'Przychody netto', color: 'var(--chart-1)' },
-  costs: { label: 'Koszty', color: 'var(--chart-5)' },
+  // Ciemny motyw: chart-5 ma ok. 1,8:1 (WCAG 1.4.11); chart-1 zajmują Przychody, więc chart-2.
+  // W ciemnym: chart-2 obok chart-1 to 1,45:1 (nie do odróżnienia), foreground ma
+  // 11,9:1 do karty i inną barwę niż niebieskie przychody.
+  costs: { label: 'Koszty', theme: { light: 'var(--chart-5)', dark: 'var(--foreground)' } },
 } satisfies ChartConfig;
 
 function moneyZl(n: number): string {

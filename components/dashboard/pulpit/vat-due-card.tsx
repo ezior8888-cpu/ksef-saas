@@ -20,7 +20,7 @@ export interface VatDueCardProps {
 }
 
 const chartConfig = {
-  vat: { label: 'VAT należny', color: 'var(--chart-5)' },
+  vat: { label: 'VAT należny', theme: { light: 'var(--chart-5)', dark: 'var(--chart-1)' } },
 } satisfies ChartConfig;
 
 export function VatDueCard({ months, vat, net, vatDueLabel, daysToVatDue, className }: VatDueCardProps) {

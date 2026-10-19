@@ -19,6 +19,7 @@ const data = vi.hoisted(() => ({
   getTopClients: vi.fn(),
   getRecentInvoices: vi.fn(),
   readTenantVatExemption: vi.fn(),
+  getVatLimit: vi.fn(),
   listProposals: vi.fn(),
   listScheduled: vi.fn(),
 }));
@@ -58,6 +59,7 @@ vi.mock('@/lib/dashboard/recent-invoices', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/dashboard/recent-invoices')>()),
   getRecentInvoices: data.getRecentInvoices,
 }));
+vi.mock('@/lib/dashboard/vat-limit', () => ({ getVatLimit: data.getVatLimit }));
 vi.mock('@/lib/invoices/vat-exemption', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/invoices/vat-exemption')>()),
   readTenantVatExemption: data.readTenantVatExemption,
@@ -76,7 +78,6 @@ import {
 } from '@/components/dashboard/pulpit/pulpit-grid';
 import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
 import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
-import { formatPlMoney } from '@/lib/format/pl';
 
 const CARD = { supabase: {} as never, tenantId: 'firma-a', nowIso: '2026-10-19T10:00:00.000Z' };
 const SALES_FUNCTIONS = ['getSalesSeries', 'getMonthlyFigures', 'getCosts', 'getReceivables', 'getTopProducts', 'getTopClients', 'getRecentInvoices'] as const;
@@ -214,33 +215,55 @@ describe('treść wyjątku na karcie (przegląd E4)', () => {
   });
 });
 
-describe('firma zwolniona podmiotowo z VAT — karta „Sprzedaż od 1 stycznia”', () => {
-  const months = ['2025-11', '2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10']
-    .map((key) => ({ key, label: key.slice(5) }));
-  const netSeries = [5000, 7000, 1000.1, 0, 2000.2, 0, 0, 0, 0, 0, 0, 3000.3];
+describe('firma zwolniona podmiotowo z VAT — karta „Limit zwolnienia z VAT”', () => {
+  const overview = {
+    year: 2026,
+    today: '2026-10-19',
+    months: [{ key: '2026-01', label: 'Sty' }, { key: '2026-02', label: 'Lut' }],
+    cumulative: [10_000, 150_000],
+    used: 150_000,
+    annualLimit: 240_000,
+    startedOn: '2020-01-01',
+    limit: {
+      effectiveLimit: 240_000, prorated: false, activeDays: 365, daysInYear: 365, pct: 62.5,
+      remaining: 90_000, level: 60 as const, formula: '240 000,00 zł (pełny rok)', crossesOn: '2026-12-01',
+    },
+    lowerBound: null,
+  };
 
   beforeEach(() => {
     data.readTenantVatExemption.mockResolvedValue('art. 113 ust. 1 ustawy o VAT');
-    data.getSalesSeries.mockResolvedValue({
-      months, netSeries, vatSeries: months.map(() => 0), currentSeries: netSeries, prevSeries: [], currentMonthKey: '2026-10',
-    });
+    data.getVatLimit.mockResolvedValue(overview);
   });
 
-  it('narastająco tylko od stycznia bieżącego roku; bez VAT należnego i terminu JPK', async () => {
+  it('limit z funkcji vat-limit, bez VAT należnego, terminu JPK i serii sprzedaży', async () => {
     const html = renderToStaticMarkup(await VatSlotCard(CARD));
-    expect(html).toContain('Sprzedaż od 1 stycznia');
-    // 1000,10 + 2000,20 + 3000,30 — bez listopada i grudnia 2025, grosze bez szumu.
-    expect(html).toContain(`title="${formatPlMoney(6000.6)} zł"`);
+    expect(html).toContain('Limit zwolnienia z VAT');
+    // 62,5% w dół — wyświetlany procent nie wyprzedza progu (jak propozycja FLO).
+    expect(html).toContain('62%');
+    expect(html).toContain('01.12.2026');
     expect(html).not.toContain('VAT należny');
-    expect(html).not.toContain('Termin');
+    expect(data.getVatLimit).toHaveBeenCalledWith(CARD.supabase, CARD.tenantId, new Date(CARD.nowIso));
+    expect(data.getSalesSeries).not.toHaveBeenCalled();
     expect(data.getMonthlyFigures).not.toHaveBeenCalled();
   });
 
-  it('błąd odczytu sprzedaży: karta błędu pod tytułem „Sprzedaż od 1 stycznia”', async () => {
-    data.getSalesSeries.mockRejectedValue(new OutgoingInvoiceCurrencyNotSupportedError());
+  it('błąd odczytu sprzedaży: karta błędu pod tytułem „Limit zwolnienia z VAT”', async () => {
+    data.getVatLimit.mockRejectedValue(new OutgoingInvoiceCurrencyNotSupportedError());
     const html = renderToStaticMarkup(await VatSlotCard(CARD));
-    expect(html).toContain('Sprzedaż od 1 stycznia');
+    expect(html).toContain('Limit zwolnienia z VAT');
+    expect(html).toContain('potwierdzonej waluty PLN');
     expect(html).not.toContain('VAT należny');
   });
-});
 
+  it('czynny podatnik dalej dostaje „VAT należny”', async () => {
+    data.readTenantVatExemption.mockResolvedValue(null);
+    data.getSalesSeries.mockResolvedValue({
+      months: [{ key: '2026-10', label: 'Paź' }], netSeries: [1000], vatSeries: [230], currentSeries: [1230], prevSeries: [], currentMonthKey: '2026-10',
+    });
+    data.getMonthlyFigures.mockResolvedValue({ vatDueLabel: '25.11.2026', daysToVatDue: 37 });
+    const html = renderToStaticMarkup(await VatSlotCard(CARD));
+    expect(html).toContain('VAT należny');
+    expect(data.getVatLimit).not.toHaveBeenCalled();
+  });
+});

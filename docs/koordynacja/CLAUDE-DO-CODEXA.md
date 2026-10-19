@@ -92,7 +92,8 @@ Przed nadaniem numeru: sprawdzić `main` **i wszystkie gałęzie zdalne**.
 | 00150 | Claude (A5, plan zero zgubionych faktur; C-22) | `ksef_send_attempts` — dziennik prób wysyłki: wiersz na wykonanie joba wysyłki i na odmowę przed kolejką (etap, kod i klasa z chwili zdarzenia, job pg-boss, SHA workera); RLS bez polityk, zapis tylko `service_role`, bez DELETE | #249; **przed** wdrożeniem (addytywna) — wgrana na db-1 17.10 |
 | 00151 | Claude (zmiana marki FaktWay, stos na #277) | `faktway_duplicate_decision_texts` — `CREATE OR REPLACE` `decide_ksef_duplicate` i `guard_ksef_retired_draft` z 00148: teksty RAISE z „FaktWay” i `pomoc@faktway.pl` zamiast „FaktFlow” i adresu w dawnej domenie; ciała poza literałami z marką bez zmian (strażnik U16h), bez DROP i DML | PR #280; **wgrać w dniu przełączenia marki**, przed wdrożeniem #277 |
 | 00152 | Claude (zmiana nazwy FaktFlow → FaktWay) | `billing_invoice_faktway_name`: CREATE OR REPLACE `create_billing_vat_invoice` — nazwa pozycji i uwagi faktury za abonament w obu nazwach (FaktFlow i FaktWay), ponowienie porównuje treść bez nazwy produktu (ta sama faktura, bez drugiej), dawna faktura szukana po uwagach w obu nazwach | #279; **przed** wdrożeniem (addytywna) — wgrana na db-1 17.10 |
-| **00153** | — | następny wolny (00200 zajęte) | — |
+| 00153 | Claude (plan Finora E4, limit zwolnienia z VAT) | `tenant_business_started_on`: kolumna `tenants.business_started_on` DATE (NULL = nieznana) + CHECK `>= 1900-01-01` + `GRANT SELECT (business_started_on) … TO authenticated` (00112); zapis kluczem serwisowym w akcji po roli właściciela/administratora | PR limitu VAT (stos na #287); **przed** wdrożeniem (addytywna) |
+| **00154** | — | następny wolny (00200 zajęte) | — |
 
 **Reguła numeracji (Bartosz, 05.10.2026):** rezerwacje sprzed bieżącej
 kolejności (00129, 00130) nie wracają „wstecz” — migracja przenoszona

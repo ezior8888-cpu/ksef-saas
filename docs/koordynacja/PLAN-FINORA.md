@@ -1376,6 +1376,7 @@ Transactions, Monthly Analytics, Accounts i Invoice List.
 | 17.10.2026 | E3 | #282 (razem z E1 i E2) | brak wglądu w rozliczenie; agenci: budowa (dane na mocnym modelu, lista i podgląd na Sonnecie), przegląd 1,38 mln (szukanie Sonnet + dane na mocnym modelu, weryfikacja mocny model), poprawki 0,71 mln (dane mocny model, UI Sonnet, weryfikacja mocny model) | gotowe, czeka na punkt kontrolny | — | P3 lista faktur (kafle, pasek filtrów `platnosc`/`rodzaj`/`na_stronie`, tabela z zaznaczaniem i PDF zaznaczonych, paginacja Finory, karty na telefonie), P4 podgląd (dokument + karty „Status” i „Dokument”, VAT per stawka w walucie faktury, kod QR KOD I, „Korekta”, „Drukuj” jako PDF w nowej karcie), `lib/dashboard/receivables.ts`, `list-row-facts`, `list-stats`, `batch-pdf ?ids=`; bez `@tanstack/react-table` (tabela na prymitywach, decyzja przed E6). Karty UPO, błędu KSeF i e-maila bez szkła. Przegląd: 10 potwierdzonych (2 to ten sam `limit(50)` formularza korekty — osobna sesja z sugerowanego zadania, nie w tym PR), 3 obalone; 8 poprawionych z czerwonymi testami + 6 drobnych z weryfikacji poprawek. Filtr `not.eq.{}` i kilka `or()` naraz sprawdzone na prawdziwym PostgREST (job RLS) |
 | 19.10.2026 | §2.4 pkt 10 (strefa czasowa) | #284 | sesja lokalna (bez kredytów chmury); agenci: przegląd wszystkich `getMonth`/`getFullYear` 0,53 mln (szukanie Sonnet, weryfikacja mocny model) | gotowe, czeka na scalenie | — | `getMonthlyFigures`, `getSalesSeries` i 4 miejsca z tą samą przyczyną (rok legendy na `/przeplywy`, okno `CashFlowDashboard`, rok szacunku podatku, domyślny miesiąc i granice KPiR) liczą „dziś” z `todayInWarsaw`. Czerwone przed naprawą: 6 + 5 + 1. Obalone: eksporty (stan liczy się ponownie w przeglądarce), stopka, blog, klucze S3 |
 | 19.10.2026 | E4 | #287 (stos na #284) | sesja lokalna; agenci: mapowanie 0,28 mln (Sonnet), budowa 0,53 mln (dane mocny model, karty Sonnet), przegląd 2,77 mln (szukanie: dane i strona mocny model, karty i testy Sonnet; weryfikacja mocny model), poprawki 0,23 mln (dane mocny model, karty Sonnet) | gotowe, czeka na odbiór lokalny | — | P1 Pulpit: slot FLO `min(640px,70dvh)` od `lg` nad siatką Finance (poniżej `lg` FLO na pełny ekran, blokada przewijania tylko do 1023,98 px), 8 kart w `components/dashboard/pulpit/` (każda w `Suspense` + `SectionErrorBoundary`, treść wyjątku przez filtr `pulpitErrorMessage`), `lib/dashboard/costs.ts` (§2.4 pkt 12), `getSalesSeries({ months, withPrevYear })` z `netSeries`/`vatSeries` w groszach, rankingi (§2.4 pkt 13), należności według terminu, ostatnie faktury, `formatPlCompactMoney`, `shortCompanyName`. Przegląd: 25 znalezisk, 18 potwierdzonych (w tym duplikaty) — poprawione z czerwonymi testami, 7 obalonych. Konflikt planu z D4: wariant „Limit zwolnienia z VAT” (niżej) |
+| 19.10.2026 | E4: limit zwolnienia z VAT (decyzja „Opcja A”) | (ten PR, stos na #287) | sesja lokalna; agenci: budowa 0,33 mln (funkcja limitu mocny model, ustawienia i karta Sonnet), przegląd (szukanie: prawo/dane i migracja mocny model, karta i testy Sonnet; weryfikacja mocny model) | gotowe, czeka na odbiór lokalny | — | znacznik NIEAKTYWNE zdjęty z `vat-limit.ts`; migracja **00153** (`tenants.business_started_on`, przed wdrożeniem); pole w `/settings`; `getVatLimit` + `VatLimitCard`; test na bazie `rls-data-rozpoczecia` (grant z 00112, CHECK, izolacja) |
 
 **Decyzje po E3 (Bartosz 17.10: „odpowiedz sam, ma być jak najbardziej
 poprawnie”):** (1) lista `/invoices` dalej pokazuje faktury ze wszystkich
@@ -1393,22 +1394,35 @@ a widok w bazie to migracja bez zysku dla liczb (kafle liczą poprawnie).
 `mv_tenant_monthly_stats` (tor silnika). Zgłoszone, nie naprawiamy w tym
 planie.
 
-**Konflikt E4 do decyzji Bartosza — „Limit zwolnienia z VAT” (P1, potem P2).**
-Plan każe importować `vatLimitState`, `proratedLimit` i `forecast`
-z `lib/flo/functions/vat-limit.ts`. Ten moduł ma znacznik NIEAKTYWNE
-(AUD-115), a `tests/unit/flo-nieaktywne.test.ts` pada przy każdym imporcie
-z kodu produkcyjnego — podpięcie wymaga zdjęcia znacznika w `lib/flo/*`, czego
-D4 zabrania. Do tego data rozpoczęcia działalności (proporcja limitu dla firmy
-z tego roku) istnieje tylko w profilu podatkowym FLO (`flo_prefs`), a FLO nie
-jest wdrożone. **Do decyzji wariant tymczasowy z E4:** firma zwolniona
-podmiotowo (`isSubjectiveVatExemption`) widzi w miejscu „VAT należny” kartę
-„Sprzedaż od 1 stycznia” (netto narastająco) bez limitu i bez procentu —
-bez proporcji procent zaniżyłby wykorzystanie firmie założonej w tym roku.
-Możliwe dalej: (A) zdjąć znacznik w `vat-limit.ts` (tylko komentarz + lista
-w teście; wyjątek od D4) i dodać do ustawień firmy datę rozpoczęcia
-działalności (migracja); (B) osobny czysty moduł limitu w `lib/dashboard`
-(druga kopia reguły prawnej); (C) zostać przy wariancie tymczasowym.
-Ta sama decyzja blokuje kartę „Limit zwolnienia z VAT” w P2 (E5).
+**Decyzja po E4 (Bartosz 19.10.2026: „Opcja A”) — „Limit zwolnienia z VAT”.**
+Plan kazał importować `vatLimitState`, `proratedLimit` i `forecast`
+z `lib/flo/functions/vat-limit.ts`, ale moduł miał znacznik NIEAKTYWNE
+(AUD-115), a data rozpoczęcia działalności była tylko w profilu FLO.
+Zrobione osobnym PR (stos na #287): znacznik zdjęty (wyjątek od D4, tylko
+komentarz i lista w `tests/unit/flo-nieaktywne.test.ts`, logika modułu bez
+zmian, przegląd modułu w tym PR), migracja **00153**
+`tenants.business_started_on` (przed wdrożeniem, z `GRANT SELECT` — 00112),
+pole „Data rozpoczęcia działalności” w `/settings` (sekcja VAT, kotwica
+`#data-rozpoczecia`, właściciel i administrator), `lib/dashboard/vat-limit.ts`
+(`getVatLimit`: sprzedaż §2.4 po dacie sprzedaży od 1 stycznia, proporcja
+limitu, progi 60/80/90/100, prognoza) i karta „Limit zwolnienia z VAT” na
+Pulpicie w miejscu „VAT należny” dla firmy zwolnionej podmiotowo. Bez daty
+startu karta pokazuje sprzedaż i prosi o datę, bez procentu. E5 (P2
+„Savings goal”) bierze `getVatLimit` do pierścienia.
+
+**Dla Bartosza z przeglądu PR limitu (poza jego zakresem):**
+(1) `app/actions/vat-exemption.ts` (i tak samo metoda kasowa) ma dwie luki
+naprawione w akcji daty startu: zapis przed migracją dostaje od PostgREST-a
+`PGRST204`, a nie `42703`, więc klient widzi ogólny błąd zamiast „czeka na
+aktualizację bazy”; wyjątek z odczytu stanu „przed” wychodzi poza wynik
+`{ success: false }` i przewraca `/settings` w `error.tsx` — osobny mały PR.
+(2) Tor silnika: `crossedThreshold` i tytuł propozycji `tax.limit`
+w `lib/flo/functions/vat-limit.ts` traktują sprzedaż RÓWNĄ limitowi jako
+przekroczenie (`>= 100`), a art. 113 ust. 5 mówi „przekroczy”. Karta Pulpitu
+liczy to ściśle; moduł FLO bez zmian (D4).
+(3) Karta limitu liczy tylko faktury przyjęte w KSeF — mówi to wprost
+(„sprzedaż bez faktury i z faktur spoza FaktWay dolicz sam”). Uwzględnienie
+sprzedaży z kasy fiskalnej to osobna funkcja (dane z raportów kasy).
 
 **Dla Bartosza (poza zakresem E4):** kafle listy faktur z E3
 (`app/(dashboard)/invoices/_components/invoice-stat-tiles.tsx`, `TileError`)
@@ -1424,10 +1438,12 @@ w jasnym i ciemnym motywie, 375 / 768 / 1440 px, pasek rozwinięty
 i zwinięty, obok demo Finory (`/dashboard/finance`); FLO w slocie 640 px
 (Masło: czy wątek, „Zatwierdzone” i historia mieszczą się i przewijają);
 konto bez certyfikatu KSeF przy 1440 i 375 px; firma zwolniona podmiotowo
-(karta „Sprzedaż od 1 stycznia”); Playwright 03, 06 i `flo-*` (axe na
-`/dashboard`). Potem decyzja w sprawie limitu VAT (wyżej), scalenie #284
-i #287 (stos: #284 najpierw albo od razu #287, który go zawiera) i wdrożenie
-(`./scripts/ops/wdroz-produkcje.sh`). Dalej **E5** (P2 Przepływy: przeniesienie
+(karta „Limit zwolnienia z VAT” z datą startu i bez niej, pole w `/settings`);
+Playwright 03, 06 i `flo-*` (axe na `/dashboard`). Potem scalenie stosu
+#284 → #287 → PR limitu (scalenie samego PR limitu wnosi wszystkie trzy),
+**migracja 00153 na db-1 przed wdrożeniem**, wdrożenie
+(`./scripts/ops/wdroz-produkcje.sh`) i typy bazy z produkcji (zdjąć
+rzutowania `as never` przy `business_started_on`). Dalej **E5** (P2 Przepływy: przeniesienie
 odczytu `/przeplywy` do `lib/dashboard/`, karty P1 „Ten miesiąc”
 i „Przychody i koszty” `lg:hidden` nad siatką — komponenty z E4 są gotowe
 w `components/dashboard/pulpit/`). Osobno, bez zmian: #283 (`limit(50)`

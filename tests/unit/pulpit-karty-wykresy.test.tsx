@@ -1,10 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { formatPlMoney } from '@/lib/format/pl';
+import { formatPlCompactMoney, formatPlMoney } from '@/lib/format/pl';
 import { FinanceCard } from '@/components/dashboard/pulpit/finance-card';
 import { NetRevenueCard } from '@/components/dashboard/pulpit/net-revenue-card';
-import { SalesYtdCard } from '@/components/dashboard/pulpit/sales-ytd-card';
+import { VatLimitCard } from '@/components/dashboard/pulpit/vat-limit-card';
 import { VatDueCard } from '@/components/dashboard/pulpit/vat-due-card';
 import { PULPIT_EMPTY } from '@/components/dashboard/pulpit/card-states';
 
@@ -162,24 +162,170 @@ describe('VatDueCard', () => {
   });
 });
 
-describe('SalesYtdCard', () => {
+describe('VatLimitCard', () => {
   const months = m12.slice(0, 4);
-  it('≥ 2 miesiące: tytuł i kwota narastająca', () => {
-    const out = html(<SalesYtdCard months={months} cumulative={[1000, 3000, 6000, 10000]} />);
-    expect(out).toContain('Sprzedaż od 1 stycznia');
-    expect(out).toContain(`title="${formatPlMoney(10000)} zł"`);
-    expect(out).not.toContain('$');
-    expect(out).not.toMatch(/\d\s?%</);
-    expect(out).not.toContain('limit');
+  const cumulative = [1000, 3000, 6000, 10000];
+  const mkLimit = (over: Partial<NonNullable<React.ComponentProps<typeof VatLimitCard>['limit']>> = {}) => ({
+    effectiveLimit: 240000,
+    prorated: false,
+    activeDays: 365,
+    daysInYear: 365,
+    pct: 63.4,
+    remaining: 88000,
+    level: 60 as const,
+    formula: '240 000 zł × 365/365',
+    crossesOn: null as string | null,
+    ...over,
   });
-  it('same zera: noInvoices', () => {
-    const out = html(<SalesYtdCard months={months} cumulative={[0, 0, 0, 0]} />);
+  const base = { months, cumulative, used: 152000, annualLimit: 240000, startedOn: null as string | null };
+
+  it('z limitem: kwoty, procent bez plusa, stopka bez daty', () => {
+    const out = html(<VatLimitCard {...base} limit={mkLimit()} />);
+    expect(out).toContain('Limit zwolnienia z VAT');
+    expect(out).toContain('Sprzedaż z faktur w KSeF od 1 stycznia');
+    expect(out).toContain(`${formatPlCompactMoney(152000)} z ${formatPlCompactMoney(240000)}`);
+    expect(out).toContain(`title="${formatPlMoney(152000)} zł z ${formatPlMoney(240000)} zł"`);
+    expect(out).toContain('63%');
+    expect(out).not.toContain('+63');
+    expect(out).toContain('text-amber-700');
+    expect(out).toContain('Przy obecnym tempie limit wystarczy do końca roku');
+    expect(out).not.toContain('Limit proporcjonalny');
+    expect(out).not.toContain('$');
+  });
+
+  it('kolory według poziomu: ok, 80, 90, 100', () => {
+    expect(html(<VatLimitCard {...base} limit={mkLimit({ level: 'ok', pct: 10 })} />)).toMatch(/text-muted-foreground[^>]*>10%</);
+    expect(html(<VatLimitCard {...base} limit={mkLimit({ level: 80, pct: 82 })} />)).toContain('dark:text-amber-400');
+    const o90 = html(<VatLimitCard {...base} limit={mkLimit({ level: 90, pct: 93 })} />);
+    expect(o90).toMatch(/text-destructive[^>]*>93%</);
+    const o100 = html(<VatLimitCard {...base} limit={mkLimit({ level: 100, pct: 104.4 })} />);
+    expect(o100).toMatch(/text-destructive[^>]*>104%</);
+  });
+
+  it('stopka: data przekroczenia i przekroczony limit', () => {
+    const soon = html(<VatLimitCard {...base} limit={mkLimit({ crossesOn: '2026-11-05' })} />);
+    expect(soon).toContain('Przy obecnym tempie limit skończy się ok. 05.11.2026');
+    const over = html(<VatLimitCard {...base} limit={mkLimit({ level: 100, pct: 101, crossesOn: '2026-11-05' })} />);
+    expect(over).toContain('Limit przekroczony. Sprawdź z księgową rejestrację do VAT.');
+    expect(over).not.toContain('skończy się');
+  });
+
+  it('limit proporcjonalny: dopisek z datą startu i wzorem w title', () => {
+    const out = html(
+      <VatLimitCard
+        {...base}
+        startedOn="2026-03-15"
+        limit={mkLimit({ prorated: true, activeDays: 292, formula: 'wzór X' })}
+      />,
+    );
+    expect(out).toContain('Limit proporcjonalny: działalność od 15.03.2026');
+    expect(out).toContain('title="wzór X"');
+  });
+
+  it('bez daty startu: link do ustawień, bez procentu', () => {
+    const out = html(<VatLimitCard {...base} limit={null} />);
+    expect(out).toContain('Podaj datę rozpoczęcia działalności, a policzymy wykorzystanie limitu.');
+    expect(out).toMatch(/<a[^>]*href="\/settings#data-rozpoczecia"[^>]*>Uzupełnij w ustawieniach<\/a>/);
+    expect(out).toContain(`title="${formatPlMoney(152000)} zł"`);
+    expect(out).not.toMatch(/>\d+%</);
+    expect(out).not.toContain('$');
+  });
+
+  it('brak sprzedaży: noInvoices i limit na ten rok', () => {
+    const z = [0, 0, 0, 0];
+    const out = html(<VatLimitCard {...base} cumulative={z} used={0} limit={mkLimit({ effectiveLimit: 200000 })} />);
     expect(out).toContain(PULPIT_EMPTY.noInvoices);
+    expect(out).toContain('href="/invoices/new"');
+    expect(out).toContain(`Limit na ten rok: ${formatPlMoney(200000)} zł`);
   });
-  it('jeden miesiąc: trendAfterSecondMonth', () => {
-    const out = html(<SalesYtdCard months={months.slice(0, 1)} cumulative={[2500]} />);
+
+  it('styczeń: trendAfterSecondMonth, kwoty, procent i stopka zostają', () => {
+    const out = html(
+      <VatLimitCard {...base} months={months.slice(0, 1)} cumulative={[2500]} used={2500} limit={mkLimit({ pct: 1.04, level: 'ok' })} />,
+    );
     expect(out).toContain(PULPIT_EMPTY.trendAfterSecondMonth);
-    expect(out).toContain('title="2500,00 zł"');
+    expect(out).toContain('1%');
+    expect(out).toContain('Przy obecnym tempie limit wystarczy do końca roku');
     expect(out).not.toContain('$');
+  });
+
+  const KASA = 'Sprzedaż bez faktury (np. z kasy fiskalnej) i z faktur spoza FaktWay dolicz sam.';
+
+  it('lowerBound 100: pełny limit przekroczony, na czerwono', () => {
+    const out = html(
+      <VatLimitCard {...base} limit={null} lowerBound={{ pct: 120, level: 100, remaining: 0 }} />,
+    );
+    expect(out).toMatch(/text-destructive[^>]*>Sprzedaż przekroczyła pełny roczny limit /);
+    expect(out).toContain(`${formatPlMoney(240000)} zł. Sprawdź z księgową rejestrację do VAT.`);
+    expect(out).toContain('href="/settings#data-rozpoczecia"');
+  });
+
+  it('lowerBound 60: „Co najmniej N%” w kolorze progu; ok bez dopisku', () => {
+    const out = html(
+      <VatLimitCard {...base} limit={null} lowerBound={{ pct: 63.9, level: 60, remaining: 80000 }} />,
+    );
+    expect(out).toContain('Co najmniej 63% pełnego limitu — podaj datę rozpoczęcia, jeśli firma ruszyła w tym roku.');
+    expect(out).toContain('text-amber-700');
+    const ok = html(<VatLimitCard {...base} limit={null} lowerBound={{ pct: 10, level: 'ok', remaining: 1 }} />);
+    expect(ok).not.toContain('Co najmniej');
+    expect(ok).toContain('Podaj datę rozpoczęcia działalności');
+  });
+
+  it('procent w dół: 99,6 % to „99%”, 59,6 % to „59%”, bez „Limit przekroczony”', () => {
+    const a = html(<VatLimitCard {...base} limit={mkLimit({ level: 90, pct: 99.6, remaining: 900 })} />);
+    expect(a).toMatch(/>99%</);
+    expect(a).not.toContain('Limit przekroczony');
+    const b = html(<VatLimitCard {...base} limit={mkLimit({ level: 'ok', pct: 59.6 })} />);
+    expect(b).toMatch(/>59%</);
+  });
+
+  it('remaining 0 bez przekroczenia: limit wykorzystany w całości', () => {
+    const out = html(<VatLimitCard {...base} limit={mkLimit({ level: 90, pct: 100, remaining: 0 })} />);
+    expect(out).toContain('wykorzystany w całości');
+    expect(out).toMatch(/text-destructive[^>]*>Limit wykorzystany w całości/);
+    expect(out).not.toContain('Przy obecnym tempie');
+  });
+
+  it('zastrzeżenie o sprzedaży bez faktury we wszystkich wariantach', () => {
+    const z = [0, 0, 0, 0];
+    expect(html(<VatLimitCard {...base} limit={mkLimit()} />)).toContain(KASA);
+    expect(html(<VatLimitCard {...base} limit={null} />)).toContain(KASA);
+    expect(html(<VatLimitCard {...base} cumulative={z} used={0} limit={null} />)).toContain(KASA);
+  });
+
+  it('pusty stan bez daty: brak „Limit na ten rok”, pełny limit i link', () => {
+    const z = [0, 0, 0, 0];
+    const out = html(<VatLimitCard {...base} cumulative={z} used={0} limit={null} />);
+    expect(out).not.toContain('Limit na ten rok');
+    expect(out).toContain(`Pełny limit roczny: ${formatPlMoney(240000)} zł — mniejszy, jeśli działalność ruszyła w tym roku`);
+    expect(out).toMatch(/<a[^>]*href="\/settings#data-rozpoczecia"[^>]*>Uzupełnij datę rozpoczęcia działalności<\/a>/);
+  });
+
+  it('wzór widoczny zwykłym tekstem, także przy pełnym roku', () => {
+    const out = html(<VatLimitCard {...base} limit={mkLimit()} />);
+    expect(out).toContain('Wzór: 240 000 zł × 365/365');
+  });
+
+  it('kolory serii zależne od motywu: ChartStyle ma wariant .dark', () => {
+    const out = html(<VatLimitCard {...base} limit={mkLimit()} />);
+    expect(out).toMatch(/\.dark[^}]*--color-sales:\s*var\(--chart-1\)/);
+    expect(out).toMatch(/--color-sales:\s*var\(--chart-5\)/);
+    const due = html(<VatDueCard months={m6} net={[1, 2, 3, 4, 5, 6]} vat={[1, 2, 3, 4, 5, 6]} vatDueLabel="x" daysToVatDue={3} />);
+    expect(due).toMatch(/\.dark[^}]*--color-vat:\s*var\(--chart-1\)/);
+    const fin = html(
+      <FinanceCard months={m12} net={nums(12, (i) => 1000 * (i + 1))} costs={nums(12, (i) => 500 * (i + 1))} report={report} costsHint="none" />,
+    );
+    // Koszty w ciemnym na foreground: chart-2 obok przychodów (chart-1) miał 1,45:1.
+    expect(fin).toMatch(/\.dark[^}]*--color-costs:\s*var\(--foreground\)/);
+  });
+
+  it('sprzedaż ujemna (sama korekta in minus w styczniu): procent 0%, nie „-1%”', () => {
+    const out = html(
+      <VatLimitCard {...base} cumulative={[-2400, -2400]} months={months.slice(0, 2)} used={-2400}
+        limit={mkLimit({ pct: -1, remaining: 242400, level: 'ok' })} />,
+    );
+    expect(out).toMatch(/>0%</);
+    expect(out).not.toMatch(/>-\d+%</);
+    expect(out).not.toContain('\u22121%');
   });
 });

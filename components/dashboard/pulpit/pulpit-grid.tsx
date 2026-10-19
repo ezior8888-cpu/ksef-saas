@@ -10,24 +10,23 @@ import { PRODUCTS_NOTE, getTopClients, getTopProducts } from '@/lib/dashboard/ra
 import { getReceivables, RECEIVABLES_NOTE } from '@/lib/dashboard/receivables';
 import { receivablesAging } from '@/lib/dashboard/receivables-aging';
 import { getRecentInvoices } from '@/lib/dashboard/recent-invoices';
+import { getVatLimit } from '@/lib/dashboard/vat-limit';
 import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
 import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import { formatPlCompactMoney, formatPlInt, formatPlMoney } from '@/lib/format/pl';
-import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { plural } from '@/lib/i18n/plural';
 import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import type { PageContext } from '@/lib/supabase/page-context';
 import { cn } from '@/lib/utils';
-import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 import { PulpitCardError, PulpitCardSkeleton } from './card-states';
 import { FinanceCard } from './finance-card';
 import { NetRevenueCard } from './net-revenue-card';
 import { ReceivablesAgingCard } from './receivables-aging-card';
 import { RecentInvoicesCard } from './recent-invoices-card';
-import { SalesYtdCard } from './sales-ytd-card';
 import { StatTile } from './stat-tile';
 import { TopListsCard } from './top-lists-card';
+import { VatLimitCard } from './vat-limit-card';
 import { VatDueCard } from './vat-due-card';
 
 /**
@@ -204,7 +203,8 @@ export async function NetRevenueSlotCard({ supabase, tenantId, nowIso, className
  * „VAT należny” — ta sama liczba co `VatSummaryCard` na `/przeplywy` dla
  * bieżącego miesiąca (seria VAT z tych samych wierszy co `getMonthlyFigures`).
  * Firma zwolniona podmiotowo (art. 113) nie ma VAT należnego ani terminu JPK:
- * widzi tu sprzedaż od 1 stycznia (`SalesYtdCard`).
+ * widzi tu „Limit zwolnienia z VAT” (`getVatLimit` na funkcjach
+ * `lib/flo/functions/vat-limit.ts`, decyzja Bartosza 19.10.2026).
  */
 export async function VatSlotCard({ supabase, tenantId, nowIso, className }: PulpitCardProps & { className?: string }) {
   // Najpierw samo zwolnienie: od niego zależy, jaką kartę (i jaki tytuł karty
@@ -216,17 +216,12 @@ export async function VatSlotCard({ supabase, tenantId, nowIso, className }: Pul
     return <PulpitCardError title="VAT należny" message={pulpitErrorMessage(error)} className={className} />;
   }
   const exempt = isSubjectiveVatExemption(exemption);
-  return loadCard(exempt ? 'Sprzedaż od 1 stycznia' : 'VAT należny', className, async () => {
-    const series = await loadSalesSeries(supabase, tenantId, nowIso);
+  return loadCard(exempt ? 'Limit zwolnienia z VAT' : 'VAT należny', className, async () => {
     if (exempt) {
-      const year = todayInWarsaw(new Date(nowIso)).slice(0, 4);
-      const ytd = series.months
-        .map((m, i) => ({ month: m, net: series.netSeries[i] ?? 0 }))
-        .filter(({ month }) => month.key.startsWith(`${year}-`));
-      let running = 0;
-      const cumulative = ytd.map(({ net }) => (running = roundToCents(running + net)));
-      return <SalesYtdCard months={ytd.map(({ month }) => month)} cumulative={cumulative} className={className} />;
+      const overview = await getVatLimit(supabase, tenantId, new Date(nowIso));
+      return <VatLimitCard {...overview} className={className} />;
     }
+    const series = await loadSalesSeries(supabase, tenantId, nowIso);
     const figures = await loadMonthlyFigures(supabase, tenantId, nowIso);
     return (
       <VatDueCard
