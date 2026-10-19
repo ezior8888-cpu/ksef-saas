@@ -81,7 +81,7 @@ describe.skipIf(!hasDatabase)('00153: data rozpoczęcia działalności na prawdz
     ]);
     if (mErr) throw mErr;
     const { error: uErr } = await admin.from('tenants')
-      .update({ business_started_on: '2026-07-01' } as never)
+      .update({ business_started_on: '2026-07-01' })
       .eq('id', ORG);
     if (uErr) throw uErr;
   });
@@ -106,12 +106,12 @@ describe.skipIf(!hasDatabase)('00153: data rozpoczęcia działalności na prawdz
 
   it('CHECK odrzuca datę sprzed 1900 roku, NULL przechodzi', async () => {
     const bad = await admin.from('tenants')
-      .update({ business_started_on: '1899-12-31' } as never)
+      .update({ business_started_on: '1899-12-31' })
       .eq('id', ORG);
     expect(bad.error?.code).toBe('23514');
 
     const cleared = await admin.from('tenants')
-      .update({ business_started_on: null } as never)
+      .update({ business_started_on: null })
       .eq('id', ORG);
     expect(cleared.error).toBeNull();
     const owner = await signedIn(OWNER_EMAIL, ORG);

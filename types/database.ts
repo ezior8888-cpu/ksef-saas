@@ -1,6 +1,6 @@
-// Wygenerowane 04.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00142
-// (cykl życia faktury, K4, D5, A2, A2b, D-A4-1). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// Wygenerowane 19.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00153
+// (m.in. 00150 dziennik prób wysyłki, 00151/00152 marka FaktWay, 00153 data rozpoczęcia działalności). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -2015,6 +2015,7 @@ export type Database = {
           scheduled_deletion_at?: string | null
           seller_data?: Json | null
           seller_nip?: string | null
+          special_data?: Json | null
           stripe_invoice_id?: string | null
           submission_attempts?: number
           submitted_to_ksef_at?: string | null
@@ -2390,6 +2391,118 @@ export type Database = {
           },
         ]
       }
+      ksef_send_attempts: {
+        Row: {
+          error_class: string | null
+          error_code: string | null
+          error_message: string | null
+          execution: number
+          finished_at: string | null
+          id: string
+          invoice_id: string
+          job_id: string | null
+          ksef_code: number | null
+          ksef_environment: string | null
+          ksef_http_status: number | null
+          result: string | null
+          retryable: boolean | null
+          send_attempt_id: string | null
+          stage: string
+          started_at: string
+          status: string
+          tenant_id: string
+          user_id: string | null
+          worker_sha: string | null
+        }
+        Insert: {
+          error_class?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          execution?: number
+          finished_at?: string | null
+          id?: string
+          invoice_id: string
+          job_id?: string | null
+          ksef_code?: number | null
+          ksef_environment?: string | null
+          ksef_http_status?: number | null
+          result?: string | null
+          retryable?: boolean | null
+          send_attempt_id?: string | null
+          stage?: string
+          started_at?: string
+          status: string
+          tenant_id: string
+          user_id?: string | null
+          worker_sha?: string | null
+        }
+        Update: {
+          error_class?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          execution?: number
+          finished_at?: string | null
+          id?: string
+          invoice_id?: string
+          job_id?: string | null
+          ksef_code?: number | null
+          ksef_environment?: string | null
+          ksef_http_status?: number | null
+          result?: string | null
+          retryable?: boolean | null
+          send_attempt_id?: string | null
+          stage?: string
+          started_at?: string
+          status?: string
+          tenant_id?: string
+          user_id?: string | null
+          worker_sha?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ksef_send_attempts_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_send_attempts_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_send_attempts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "ksef_send_attempts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_send_attempts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ksef_send_attempts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ksef_sessions: {
         Row: {
           auth_method: string | null
@@ -2451,6 +2564,7 @@ export type Database = {
           id: string
           invoice_id: string
           invoice_reference_number: string | null
+          original_check: Json | null
           original_ksef_number: string | null
           original_session_reference_number: string | null
           request_payload_hash: string | null
@@ -2470,6 +2584,7 @@ export type Database = {
           id?: string
           invoice_id: string
           invoice_reference_number?: string | null
+          original_check?: Json | null
           original_ksef_number?: string | null
           original_session_reference_number?: string | null
           request_payload_hash?: string | null
@@ -2489,6 +2604,7 @@ export type Database = {
           id?: string
           invoice_id?: string
           invoice_reference_number?: string | null
+          original_check?: Json | null
           original_ksef_number?: string | null
           original_session_reference_number?: string | null
           request_payload_hash?: string | null
@@ -4478,6 +4594,7 @@ export type Database = {
       tenants: {
         Row: {
           address_json: Json | null
+          business_started_on: string | null
           created_at: string | null
           created_by_user_id: string | null
           deleted_at: string | null
@@ -4503,6 +4620,7 @@ export type Database = {
         }
         Insert: {
           address_json?: Json | null
+          business_started_on?: string | null
           created_at?: string | null
           created_by_user_id?: string | null
           deleted_at?: string | null
@@ -4528,6 +4646,7 @@ export type Database = {
         }
         Update: {
           address_json?: Json | null
+          business_started_on?: string | null
           created_at?: string | null
           created_by_user_id?: string | null
           deleted_at?: string | null
@@ -5127,6 +5246,20 @@ export type Database = {
         Returns: string
       }
       days_overdue: { Args: { invoice_due_date: string }; Returns: number }
+      decide_ksef_duplicate: {
+        Args: {
+          p_actor_user_id: string
+          p_choice: string
+          p_env: string
+          p_invoice_id: string
+          p_note?: string
+          p_original_ksef_number: string
+          p_original_sha256: string
+          p_tenant_id: string
+          p_via: string
+        }
+        Returns: Json
+      }
       deny_join_request: { Args: { p_request_id: string }; Returns: undefined }
       enqueue_ksef_send: {
         Args: {
@@ -5194,6 +5327,7 @@ export type Database = {
           scheduled_deletion_at: string | null
           seller_data: Json | null
           seller_nip: string | null
+          special_data: Json | null
           stripe_invoice_id: string | null
           submission_attempts: number
           submitted_to_ksef_at: string | null
@@ -5283,6 +5417,14 @@ export type Database = {
       is_nip_ksef_claimed: {
         Args: { p_nip: string; p_tenant_id: string }
         Returns: boolean
+      }
+      ksef_duplicate_check_allows: {
+        Args: { p_check: Json; p_choice: string }
+        Returns: boolean
+      }
+      ksef_duplicate_decision_blocker: {
+        Args: { p_invoice_id: string; p_tenant_id: string }
+        Returns: string
       }
       ksef_error_class: { Args: { p_code: string }; Returns: string }
       ksef_has_contact_evidence: {
@@ -5440,6 +5582,7 @@ export type Database = {
           scheduled_deletion_at: string | null
           seller_data: Json | null
           seller_nip: string | null
+          special_data: Json | null
           stripe_invoice_id: string | null
           submission_attempts: number
           submitted_to_ksef_at: string | null
@@ -5523,6 +5666,7 @@ export type Database = {
           scheduled_deletion_at: string | null
           seller_data: Json | null
           seller_nip: string | null
+          special_data: Json | null
           stripe_invoice_id: string | null
           submission_attempts: number
           submitted_to_ksef_at: string | null

@@ -43,10 +43,9 @@ export async function updateBusinessStartAction(input: string | null): Promise<B
     return { success: false, error: 'Nie udało się zapisać daty rozpoczęcia działalności. Spróbuj ponownie.' };
   }
 
-  // Rzutowanie: typy bazy nie znają jeszcze kolumny z migracji 00153 (do wgrania).
   const { error } = await admin
     .from('tenants')
-    .update({ business_started_on: startedOn } as never)
+    .update({ business_started_on: startedOn })
     .eq('id', ctx.tenantId);
 
   if (error) {
