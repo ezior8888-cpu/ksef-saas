@@ -36,7 +36,7 @@ export default function TermsPage() {
             Ministerstwo Finansów
           </li>
           <li>
-            <strong>Usługa</strong> — FaktWay dostępny pod adresem faktflow.pl
+            <strong>Usługa</strong> — FaktWay dostępny pod adresem faktway.pl
           </li>
           <li>
             <strong>Użytkownik</strong> — osoba fizyczna lub prawna korzystająca z

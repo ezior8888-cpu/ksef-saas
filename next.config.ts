@@ -125,11 +125,22 @@ const nextConfig: NextConfig = {
   },
 
   // Redesign: `/vs/fakturownia` → `/vs/inni` (SEO 308).
+  // Zmiana marki: artykuły pomocy z nazwą w slugu (stare linki z maili i zakładek).
   async redirects() {
     return [
       {
         source: '/vs/fakturownia',
         destination: '/vs/inni',
+        permanent: true,
+      },
+      {
+        source: '/pomoc/pierwsze-kroki-w-faktflow',
+        destination: '/pomoc/pierwsze-kroki-w-faktway',
+        permanent: true,
+      },
+      {
+        source: '/pomoc/platnosci-i-faktury-za-faktflow',
+        destination: '/pomoc/platnosci-i-faktury-za-faktway',
         permanent: true,
       },
     ];

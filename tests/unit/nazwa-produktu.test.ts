@@ -35,13 +35,10 @@ const OWNED_ELSEWHERE = [
 
 // Teksty, które baza ma u siebie i porównuje albo zwraca dosłownie.
 // Zmieniają się razem z migracją, która przepisze te funkcje bazy:
-//  - `DUPLICATE_DECISION_SQL_TEXTS` (wiersze `{ template: '…' }`): lustro
-//    odmów `decide_ksef_duplicate` i wyzwalaczy z 00148, które
-//    `ksef-decyzja-duplikatu-migracja.test.ts` porównuje z plikiem migracji.
-// Faktura za abonament (`lib/billing/self-invoice.ts`) pisze już FaktWay —
-// `create_billing_vat_invoice` przyjmuje obie nazwy od 00152.
-const DB_BOUND = new Map([
-  ['lib/ksef/duplicate-decision.ts', ["{ template: '"]],
+// Dziś żadnych: fakturę za abonament przyjmuje w obu nazwach migracja 00152
+// (`lib/billing/self-invoice.ts` pisze FaktWay), a lustro odmów decyzji
+// o duplikacie (`DUPLICATE_DECISION_SQL_TEXTS`) przepisała na FaktWay 00151.
+const DB_BOUND = new Map<string, string[]>([
 ]);
 
 function walk(dir: string): string[] {

@@ -2,7 +2,7 @@
  * Resend webhook handler (Faza 26).
  *
  * Setup w Resend Dashboard → Webhooks → Add endpoint:
- *   URL: https://app.faktflow.pl/api/email/resend-webhook
+ *   URL: https://faktway.pl/api/email/resend-webhook
  *   Events subskrybuj: email.bounced, email.complained, email.delivery_delayed
  *
  * Resend używa **Svix** do signature verification (RFC 8037 / JWS-style).
