@@ -3,6 +3,7 @@ import { RiFileList3Line, RiMoneyDollarCircleLine } from '@remixicon/react';
 
 import { SectionErrorBoundary } from '@/components/dashboard/section-error-boundary';
 import { getDashboardActiveOrgVerified } from '@/lib/dashboard-shell-data';
+import { CARD_GENERIC_ERROR, cardErrorMessage, describeCardError } from '@/lib/dashboard/card-error-message';
 import { getCosts, sumCostsByMonth } from '@/lib/dashboard/costs';
 import { getMonthlyFigures, getSalesSeries } from '@/lib/dashboard/monthly-figures';
 import { buildMonthReport } from '@/lib/dashboard/pulpit-report';
@@ -10,8 +11,6 @@ import { PRODUCTS_NOTE, getTopClients, getTopProducts } from '@/lib/dashboard/ra
 import { getReceivables, RECEIVABLES_NOTE } from '@/lib/dashboard/receivables';
 import { receivablesAging } from '@/lib/dashboard/receivables-aging';
 import { getRecentInvoices } from '@/lib/dashboard/recent-invoices';
-import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
-import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import { formatPlCompactMoney, formatPlInt, formatPlMoney } from '@/lib/format/pl';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { plural } from '@/lib/i18n/plural';
@@ -72,37 +71,16 @@ function nextMonthStart(monthKey: string): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`;
 }
 
-export const PULPIT_GENERIC_ERROR = 'Nie udało się wczytać karty. Odśwież stronę za chwilę.';
-
-/** Polskie komunikaty strażników §2.4 i odczytów — te klient może przeczytać. */
-const CUSTOMER_MESSAGE_PREFIXES = ['Nie można ', 'Przyjęte faktury ', 'Koszty ze skrzynki KSeF '];
-
-/**
- * Treść wyjątku dla klienta. Strażniki walut i środowiska mówią po polsku, co
- * klient ma zrobić — te pokazujemy. `readCompletePages` i odczyty dopisują po
- * dwukropku tekst PostgREST-a (po angielsku, techniczny), więc z nich zostaje
- * polska część przed dwukropkiem. Wszystko inne (konfiguracja serwera, błąd
- * programu) to ogólny komunikat, a pełny wyjątek idzie do logu.
- */
-export function pulpitErrorMessage(error: unknown): string {
-  if (error instanceof OutgoingInvoiceCurrencyNotSupportedError || error instanceof KsefExpenseCurrencyNotSupportedError) {
-    return error.message;
-  }
-  const message = error instanceof Error ? error.message : '';
-  if (CUSTOMER_MESSAGE_PREFIXES.some((prefix) => message.startsWith(prefix))) {
-    return message.split(': ')[0]!;
-  }
-  return PULPIT_GENERIC_ERROR;
-}
+// Filtr treści wyjątku jest wspólny z kaflami listy faktur (E3) — nazwy
+// Pulpitu zostają, żeby nie ruszać importów w testach i kartach.
+export { CARD_GENERIC_ERROR as PULPIT_GENERIC_ERROR, cardErrorMessage as pulpitErrorMessage };
 
 /** Ładowarka karty: dane albo karta błędu z treścią wyjątku. */
 async function loadCard(title: string, className: string | undefined, render: () => Promise<ReactNode>) {
   try {
     return await render();
   } catch (error) {
-    const message = pulpitErrorMessage(error);
-    if (message === PULPIT_GENERIC_ERROR) console.error(`[pulpit] karta „${title}”:`, error);
-    return <PulpitCardError title={title} message={message} className={className} />;
+    return <PulpitCardError title={title} message={describeCardError('pulpit', title, error)} className={className} />;
   }
 }
 
@@ -213,7 +191,7 @@ export async function VatSlotCard({ supabase, tenantId, nowIso, className }: Pul
   try {
     exemption = await readTenantVatExemption(supabase, tenantId);
   } catch (error) {
-    return <PulpitCardError title="VAT należny" message={pulpitErrorMessage(error)} className={className} />;
+    return <PulpitCardError title="VAT należny" message={cardErrorMessage(error)} className={className} />;
   }
   const exempt = isSubjectiveVatExemption(exemption);
   return loadCard(exempt ? 'Sprzedaż od 1 stycznia' : 'VAT należny', className, async () => {

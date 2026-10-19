@@ -62,6 +62,7 @@ import {
   ReceivablesTile,
 } from '@/app/(dashboard)/invoices/_components/invoice-stat-tiles';
 import { RECEIVABLES_NOTE } from '@/lib/dashboard/receivables';
+import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
 import { formatPlMoney } from '@/lib/format/pl';
 import type { InvoiceListRowFacts } from '@/lib/invoices/list-row-facts';
 import { PAID_EMPTY_STATE, PAID_NOTE } from '@/lib/invoices/list-stats';
@@ -170,6 +171,44 @@ describe('kafle (każdy to osobny Server Component)', () => {
     const html = renderToStaticMarkup(await ReceivablesTile(tile));
     expect(html).toContain('Przyjęte faktury wymagają uzgodnienia środowiska KSeF');
     expect(html).toContain('href="/przeplywy"');
+  });
+
+  describe('treść wyjątku na kaflu (ten sam filtr co karty Pulpitu)', () => {
+    const GENERIC = 'Nie udało się wczytać karty. Odśwież stronę za chwilę.';
+
+    it('odczyt: polska część bez technicznego ogona PostgREST-a', async () => {
+      stats.getReceivables.mockRejectedValue(new Error('Nie można odczytać należności: permission denied for table invoices'));
+      const html = renderToStaticMarkup(await ReceivablesTile(tile));
+      expect(html).toContain('Nie można odczytać należności');
+      expect(html).not.toContain('permission denied');
+      expect(html).not.toContain('invoices');
+    });
+
+    it('wyjątek konfiguracji serwera po angielsku: ogólny komunikat i wpis w logu', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const thrown = new Error('KSEF_ENV is not configured');
+      stats.countContractors.mockRejectedValue(thrown);
+      const html = renderToStaticMarkup(await ContractorsTile(tile));
+      expect(html).not.toContain('KSEF_ENV');
+      expect(html).toContain(GENERIC);
+      expect(html).toContain('href="/przeplywy"');
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('Kontrahenci'), thrown);
+      error.mockRestore();
+    });
+
+    it('polski komunikat dla klienta nie trafia do logu błędów', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      stats.getReceivables.mockRejectedValue(new Error('Przyjęte faktury wymagają uzgodnienia środowiska KSeF'));
+      await ReceivablesTile(tile);
+      expect(error).not.toHaveBeenCalled();
+      error.mockRestore();
+    });
+
+    it('strażnik waluty: pełny polski komunikat', async () => {
+      stats.getReceivables.mockRejectedValue(new OutgoingInvoiceCurrencyNotSupportedError());
+      const html = renderToStaticMarkup(await ReceivablesTile(tile));
+      expect(html).toContain('potwierdzonej waluty PLN');
+    });
   });
 });
 
