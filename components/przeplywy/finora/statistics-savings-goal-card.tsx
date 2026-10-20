@@ -51,10 +51,15 @@ const RING_START = 90
 
 const DISCLAIMER = 'Sprzedaż bez faktury (np. z kasy fiskalnej) i z faktur spoza FaktWay dolicz sam.'
 
+/**
+ * Kolor pierścienia według progów 60/80/90/100%. Tylko zmienne, które
+ * Tailwind na pewno wygeneruje (`amber-600` i `amber-700` stoją w klasach
+ * kart Przepływów) — nieużyta zmienna motywu nie trafia do CSS.
+ */
 function ringColor(level: VatLimitLevel): string {
   if (level === 'ok') return 'var(--chart-2)'
-  if (level === 60) return 'var(--color-amber-500)'
-  if (level === 80) return 'var(--color-orange-500)'
+  if (level === 60) return 'var(--color-amber-600)'
+  if (level === 80) return 'var(--color-amber-700)'
   return 'var(--destructive)'
 }
 

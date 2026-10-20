@@ -107,14 +107,22 @@ describe('monthFlows — Wpłynęło / Wydano w tym miesiącu', () => {
       [cost('2026-10-05', 40), cost('2026-09-30', 80)],
       TODAY,
     );
-    expect(inflowFlow).toMatchObject({ amount: 150, prevAmount: 120, count: 2 });
-    expect(inflowFlow.changePct).toBeCloseTo(25);
-    expect(inflowFlow.daily).toHaveLength(20);
+    // Cały miesiąc, jak słupek miesiąca na wykresie; wykres do ostatniego dokumentu.
+    expect(inflowFlow).toMatchObject({ amount: 1149, prevAmount: 120, count: 3 });
+    expect(inflowFlow.changePct).toBeCloseTo(857.5);
+    expect(inflowFlow.daily).toHaveLength(25);
     expect(inflowFlow.daily[0]).toEqual({ date: '2026-10-01', value: 0 });
     expect(inflowFlow.daily[1]).toEqual({ date: '2026-10-02', value: 100 });
-    expect(inflowFlow.daily.at(-1)).toEqual({ date: '2026-10-20', value: 150 });
+    expect(inflowFlow.daily[19]).toEqual({ date: '2026-10-20', value: 150 });
+    expect(inflowFlow.daily.at(-1)).toEqual({ date: '2026-10-25', value: 1149 });
     expect(outflow).toMatchObject({ amount: 40, prevAmount: 80, count: 1 });
     expect(outflow.changePct).toBeCloseTo(-50);
+  });
+
+  it('bez późniejszych dokumentów wykres kończy się dziś', () => {
+    const flow = monthFlows([inflow('2026-10-02', 100)], [], TODAY).inflow;
+    expect(flow.daily).toHaveLength(20);
+    expect(flow.daily.at(-1)).toEqual({ date: '2026-10-20', value: 100 });
   });
 
   it('bez poprzedniego miesiąca procent nie istnieje', () => {

@@ -195,7 +195,10 @@ export interface MonthFlow {
   count: number;
   /** Zmiana vs poprzedni miesiąc w procentach; `null`, gdy poprzedni ≤ 0. */
   changePct: number | null;
-  /** Suma narastająca od 1. dnia miesiąca do dziś — punkty wykresu. */
+  /**
+   * Suma narastająca od 1. dnia miesiąca do dziś (albo do późniejszego
+   * dokumentu w tym miesiącu) — punkty wykresu; ostatni = `amount`.
+   */
   daily: Array<{ date: string; value: number }>;
 }
 
@@ -205,15 +208,21 @@ function monthFlow(entries: ReadonlyArray<{ date: string; amount: number }>, tod
   const monthIndex = Number(today.slice(5, 7)) - 1;
   const prevKey = monthKeyOf(year, monthIndex - 1);
 
-  const inMonth = entries.filter((e) => e.date.slice(0, 7) === monthKey && e.date <= today);
+  // Cały miesiąc, jak słupek bieżącego miesiąca na wykresie i dawny kafel
+  // „Wydatki miesiąca” — dokument kosztowy z datą z dalszej części miesiąca
+  // też się liczy.
+  const inMonth = entries.filter((e) => e.date.slice(0, 7) === monthKey);
   const amount = cents(inMonth.reduce((s, e) => s + e.amount, 0));
   const prevAmount = cents(entries.filter((e) => e.date.slice(0, 7) === prevKey).reduce((s, e) => s + e.amount, 0));
 
   const byDay = new Map<string, number>();
   for (const e of inMonth) byDay.set(e.date, (byDay.get(e.date) ?? 0) + e.amount);
+  // Wykres do dziś, a gdy w miesiącu jest dokument z późniejszą datą — do niego,
+  // żeby ostatni punkt równał się kwocie kafla.
+  const lastDay = inMonth.reduce((last, e) => (e.date > last ? e.date : last), today);
   const daily: MonthFlow['daily'] = [];
   let running = 0;
-  for (let day = `${monthKey}-01`; day <= today; day = addDays(day, 1)) {
+  for (let day = `${monthKey}-01`; day <= lastDay; day = addDays(day, 1)) {
     running += byDay.get(day) ?? 0;
     daily.push({ date: day, value: cents(running) });
   }
