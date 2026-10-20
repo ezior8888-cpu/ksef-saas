@@ -66,6 +66,7 @@ import { formatInvoiceDate } from '@/lib/invoices/display-date';
 import { parseInvoiceListParams } from '@/lib/invoices/list-query';
 import type { InvoiceListRowFacts } from '@/lib/invoices/list-row-facts';
 import { RiUserLine } from '@remixicon/react';
+import { tekstBezZnacznikow } from './helpers/tekst-html';
 
 const tile = { supabase: {} as never, tenantId: 'ten-1' };
 
@@ -360,7 +361,7 @@ describe('dostępność poprawek E (WCAG)', () => {
   it('paczka PDF: widoczny tekst przycisku opisuje cel (3.3.2), nie samo „ZIP”', () => {
     const html = renderToStaticMarkup(<BatchPdfDownload />);
     const button = html.match(/<button[\s\S]*?<\/button>/)?.[0] ?? '';
-    expect(button.replace(/<[^>]+>/g, '')).toContain('PDF za miesiąc');
+    expect(tekstBezZnacznikow(button)).toContain('PDF za miesiąc');
   });
 
   it('ikony płatności w kółku: jasny motyw w odcieniu 700 (kontrast 1.4.11), dark bez zmian', () => {
