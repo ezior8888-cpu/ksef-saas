@@ -51,7 +51,7 @@ export default async function LegalGatePage({
             <BrandWordmark variant="app" href="/" />
           </div>
           <h1 className="mb-3 text-center text-2xl font-semibold tracking-tight">
-            {isUpdate ? 'Zmieniliśmy dokumenty FaktFlow' : 'Zanim zaczniesz — dokumenty FaktFlow'}
+            {isUpdate ? 'Zmieniliśmy dokumenty FaktWay' : 'Zanim zaczniesz — dokumenty FaktWay'}
           </h1>
           <p className="mb-6 leading-relaxed text-muted-foreground">
             {isUpdate

@@ -1,5 +1,5 @@
 /**
- * Podmioty, którym FaktFlow powierza dane — jedna lista dla polityki
+ * Podmioty, którym FaktWay powierza dane — jedna lista dla polityki
  * prywatności, umowy powierzenia (załącznik) i strony /legal/podprocesorzy.
  *
  * Do 15.10.2026 polityka wymieniała Vercel, Supabase Cloud, Cloudflare R2,
@@ -16,9 +16,9 @@
  */
 
 export type ProcessingRole =
-  /** Przetwarza dane, które FaktFlow powierzył klient (faktury, kontrahenci) — podprocesor z umowy powierzenia. */
+  /** Przetwarza dane, które FaktWay powierzył klient (faktury, kontrahenci) — podprocesor z umowy powierzenia. */
   | 'client_data'
-  /** Przetwarza wyłącznie dane, których administratorem jest FaktFlow (konta, rozliczenia, analityka). */
+  /** Przetwarza wyłącznie dane, których administratorem jest FaktWay (konta, rozliczenia, analityka). */
   | 'own_data';
 
 export interface Subprocessor {
@@ -85,12 +85,12 @@ export const SUBPROCESSORS: Subprocessor[] = [
   {
     name: 'Cloudflare, Inc.',
     seat: 'USA',
-    // Poczta: rekordy MX faktflow.pl wskazują Cloudflare Email Routing
-    // (docs/runbooks/skrzynka-pomoc.md) — przez Cloudflare przechodzi każdy
-    // mail na pomoc@, także żądania RODO. Skrzynka docelowa to osobny
-    // dostawca (lista kontrolna, docs/prawne/).
+    // Poczta: Cloudflare Email Routing na faktway.pl i dawnej faktflow.pl
+    // (lib/site.ts, docs/runbooks/skrzynka-pomoc.md) — przez Cloudflare
+    // przechodzi każdy mail na pomoc@, także żądania RODO. Skrzynka docelowa
+    // to osobny dostawca (lista kontrolna, docs/prawne/).
     purpose:
-      'ochrona formularzy logowania i rejestracji przed botami (Turnstile); przekazywanie poczty przychodzącej na adresy @faktflow.pl',
+      'ochrona formularzy logowania i rejestracji przed botami (Turnstile); przekazywanie poczty przychodzącej na adresy @faktway.pl (i dawne @faktflow.pl)',
     location: 'globalna sieć Cloudflare',
     transfer: SCC_OR_DPF,
     roles: ['own_data'],

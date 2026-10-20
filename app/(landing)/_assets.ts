@@ -19,8 +19,9 @@ const IMG = '/landing/img';
 const VID = '/landing/video';
 
 export const asset = {
-  // Znak FaktFlow. Do 15.10.2026 był tu znak „Zova AI” z szablonu — cudze
-  // oznaczenie podpisane alt="FaktFlow" w nawigacji, stopce i logowaniu.
+  // Znak marki — ten sam plik co w panelu (components/brand/faktflow-mark.tsx).
+  // Do 15.10.2026 był tu znak „Zova AI” z szablonu — cudze oznaczenie
+  // podpisane nazwą produktu w nawigacji, stopce i logowaniu.
   logo: '/brand/faktflow-mark.png',
 
   hero: {

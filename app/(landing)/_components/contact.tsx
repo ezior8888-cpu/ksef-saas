@@ -24,7 +24,7 @@ const DETAILS = [{ icon: '4022663340', value: SUPPORT_EMAIL }];
  */
 function composeMail(form: HTMLFormElement): string {
   const data = new FormData(form);
-  const topic = String(data.get('topic') || 'Wiadomość ze strony FaktFlow');
+  const topic = String(data.get('topic') || 'Wiadomość ze strony FaktWay');
   const lines = [String(data.get('message') ?? ''), '', `— ${String(data.get('name') ?? '')}`.trim()];
   const params = new URLSearchParams({ subject: topic, body: lines.join('\n') });
   // URLSearchParams koduje spacje jako „+”, a klienty poczty pokazałyby plusy.
@@ -119,7 +119,7 @@ export function Contact() {
             <p className="z-small text-[var(--z-muted)]">
               Wiadomość otworzy się w Twoim programie pocztowym, zaadresowana
               na {SUPPORT_EMAIL} — wyślesz ją stamtąd. Administratorem danych
-              z korespondencji jest usługodawca FaktFlow, szczegóły w{' '}
+              z korespondencji jest usługodawca FaktWay, szczegóły w{' '}
               <a href="/legal/polityka-prywatnosci" className="underline underline-offset-2">
                 polityce prywatności
               </a>

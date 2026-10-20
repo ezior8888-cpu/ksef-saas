@@ -54,7 +54,7 @@ describe('wezwania do zapłaty — podstawy prawne i zapowiedzi', () => {
     expect(t.body).not.toMatch(/zostanie skierowana|zostaną naliczone|obciążą dłużnika/);
   });
 
-  it('mail z fakturą wskazuje sprzedawcę jako nadawcę i FaktFlow jako przetwarzającego', async () => {
+  it('mail z fakturą wskazuje sprzedawcę jako nadawcę i FaktWay jako przetwarzającego', async () => {
     const { invoiceEmailFooter } = await import('@/lib/email/send');
     const footer = invoiceEmailFooter('Firma <Test> & Syn');
     expect(footer).toContain('Firma &lt;Test&gt; &amp; Syn');

@@ -24,7 +24,7 @@ describe('terminy usuwania konta — kod i dokumenty mówią to samo', () => {
   it('polityka prywatności: 14 dni i „najpóźniej w ciągu miesiąca”, bez 30 dni i bez noty „docelowo”', () => {
     // Od 15.10.2026 treść polityki żyje w lib/legal/documents (strona tylko ją
     // renderuje) — sprawdzamy tekst, który widzi klient.
-    const text = renderPlainText(POLITYKA_PRYWATNOSCI, 'https://faktflow.example').replace(/\s+/g, ' ');
+    const text = renderPlainText(POLITYKA_PRYWATNOSCI, 'https://faktway.example').replace(/\s+/g, ' ');
     expect(text).toContain('14 dni');
     expect(text).toContain('najpóźniej w ciągu miesiąca');
     expect(text).not.toContain('obecnie jest to 30 dni');
@@ -71,7 +71,7 @@ describe('kopie zapasowe — dokumenty zgodne z retencją w kodzie', () => {
   const daily = constant('DAILY_RETENTION_DAYS');
   const weekly = constant('WEEKLY_RETENTION_DAYS');
   const plain = (doc: typeof UMOWA_POWIERZENIA) =>
-    renderPlainText(doc, 'https://faktflow.example').replace(/\s+/g, ' ');
+    renderPlainText(doc, 'https://faktway.example').replace(/\s+/g, ' ');
 
   it('kopie tygodniowe to pełne tygodnie (dokumenty podają je w tygodniach)', () => {
     expect(weekly % 7).toBe(0);
@@ -148,7 +148,7 @@ describe('usuwanie firmy — teksty nie obiecują mechanizmu, którego nie ma', 
 
   it('regulamin i umowa powierzenia: usunięcie Organizacji zlecane e-mailem, bez „od razu wyłączona”', () => {
     for (const doc of [REGULAMIN, UMOWA_POWIERZENIA]) {
-      const text = renderPlainText(doc, 'https://faktflow.example').replace(/\s+/g, ' ');
+      const text = renderPlainText(doc, 'https://faktway.example').replace(/\s+/g, ' ');
       expect(text, doc.title).not.toMatch(/od razu wyłączon/);
       expect(text, doc.title).not.toContain('usunięcie Organizacji (Ustawienia');
       expect(text, doc.title).not.toContain('przez usunięcie Organizacji');

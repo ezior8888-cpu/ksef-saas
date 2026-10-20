@@ -20,7 +20,7 @@ export function legalTextHeader(): string[] {
 export function contractAttachments(): Array<{ filename: string; content: Buffer }> {
   const header = legalTextHeader();
   return CONTRACT_DOCUMENTS.map((doc) => ({
-    filename: `FaktFlow-${doc.slug}-${doc.version}.txt`,
+    filename: `FaktWay-${doc.slug}-${doc.version}.txt`,
     content: Buffer.concat([
       Buffer.from([0xef, 0xbb, 0xbf]),
       Buffer.from(renderPlainText(doc, siteUrl(), header), 'utf8'),

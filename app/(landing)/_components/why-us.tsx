@@ -20,7 +20,7 @@ import { Container, Icon } from './ui';
  * to dwa nałożone SVG przenikające się przezroczystością.
  */
 // Bez obrazków od 15.10.2026: „zrzuty” z szablonu pokazywały panel
-// inwestycyjny „Zova AI” (Apple Store, $150,000), nie FaktFlow — klient
+// inwestycyjny „Zova AI” (Apple Store, $150,000), nie FaktWay — klient
 // oglądał produkt, którego nie kupuje. Wracają tylko prawdziwe zrzuty.
 // Blok 3 obiecywał „dziesięć lat” przechowywania — regulamin i umowa
 // powierzenia mówią o czasie trwania umowy (§ 7 ust. 6, umowa powierzenia § 9).
@@ -38,7 +38,7 @@ const BLOCKS = [
   {
     icon: '1430394497',
     title: 'Porządek przy kontroli',
-    body: 'Dokumenty są w jednym miejscu przez cały czas korzystania z FaktFlow, a dziennik zdarzeń pokazuje, kto i kiedy co zrobił. Eksport danych w każdej chwili.',
+    body: 'Dokumenty są w jednym miejscu przez cały czas korzystania z FaktWay, a dziennik zdarzeń pokazuje, kto i kiedy co zrobił. Eksport danych w każdej chwili.',
   },
 ];
 
@@ -96,7 +96,7 @@ export function WhyUs() {
         <div className="flex flex-col gap-10 lg:w-[376px] lg:shrink-0 lg:sticky lg:top-28 lg:self-start">
           <div className="flex flex-col gap-4">
             <h2 className="z-h2">
-              <MaskRevealWords text="Dlaczego FaktFlow" />
+              <MaskRevealWords text="Dlaczego FaktWay" />
             </h2>
             <MaskReveal delay={0.18}>
               {/* Dawniej „mikrofirmy zostają z nami” (przed startem nie ma

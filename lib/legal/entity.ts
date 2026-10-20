@@ -1,5 +1,5 @@
 /**
- * Dane usługodawcy FaktFlow — JEDYNE miejsce, z którego czytają je regulamin,
+ * Dane usługodawcy FaktWay — JEDYNE miejsce, z którego czytają je regulamin,
  * polityka prywatności, umowa powierzenia i stopki dokumentów.
  *
  * Dlaczego osobny plik: do 15.10.2026 regulamin i polityka miały wpisane na
@@ -63,7 +63,7 @@ export interface LegalEntity {
  * w opisie PR i w memo dla prawnika). Pola `null` = jeszcze nie wiadomo.
  */
 export const LEGAL_ENTITY: LegalEntity = {
-  brand: 'FaktFlow',
+  brand: 'FaktWay',
   name: null,
   legalForm: null,
   street: null,
@@ -77,7 +77,7 @@ export const LEGAL_ENTITY: LegalEntity = {
   partners: [],
   email: SUPPORT_EMAIL,
   phone: null,
-  website: 'faktflow.pl',
+  website: 'faktway.pl',
 };
 
 /** Pola wymagane zależnie od formy prawnej. */

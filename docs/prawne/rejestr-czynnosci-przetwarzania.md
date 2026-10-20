@@ -1,7 +1,7 @@
 # Rejestr czynności przetwarzania (art. 30 RODO)
 
 Wersja robocza z 15.10.2026 — do zatwierdzenia przez prawnika. Prowadzący:
-usługodawca FaktFlow (dane: `lib/legal/entity.ts`), kontakt `pomoc@faktflow.pl`.
+usługodawca FaktWay (dane: `lib/legal/entity.ts`), kontakt `pomoc@faktway.pl`.
 Inspektora ochrony danych nie wyznaczono (art. 37 RODO — brak obowiązku).
 
 Rejestr obowiązuje także mikroprzedsiębiorcę, bo przetwarzanie nie jest
@@ -40,7 +40,7 @@ Odbiorcy i transfery do USA: `lib/legal/subprocessors.ts`.
 
 ## Część B — jako podmiot przetwarzający (art. 30 ust. 2)
 
-**Administratorzy:** klienci FaktFlow (każda organizacja w tabeli `tenants`;
+**Administratorzy:** klienci FaktWay (każda organizacja w tabeli `tenants`;
 lista w bazie — nie powielać tutaj). Umowa powierzenia: `/legal/umowa-powierzenia`.
 
 | Kategoria przetwarzania na zlecenie klienta | Dalsi przetwarzający | Transfer poza EOG |

@@ -7,7 +7,7 @@ export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: 'Umowa powierzenia przetwarzania danych',
-  description: 'Umowa powierzenia przetwarzania danych osobowych (art. 28 RODO) zawierana z każdym klientem FaktFlow.',
+  description: 'Umowa powierzenia przetwarzania danych osobowych (art. 28 RODO) zawierana z każdym klientem FaktWay.',
 };
 
 export default function DpaPage() {

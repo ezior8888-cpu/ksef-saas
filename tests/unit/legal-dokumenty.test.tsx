@@ -43,7 +43,7 @@ import { THEME_STORAGE_KEY } from '@/lib/theme/theme';
  */
 
 const ALL_DOCS: LegalDocument[] = [REGULAMIN, UMOWA_POWIERZENIA, POLITYKA_PRYWATNOSCI, POLITYKA_COOKIES];
-const SITE = 'https://faktflow.example';
+const SITE = 'https://faktway.example';
 const text = (doc: LegalDocument) => renderPlainText(doc, SITE);
 
 function allStrings(doc: LegalDocument): string[] {
@@ -121,7 +121,7 @@ describe('znaczniki w tekście dokumentu', () => {
       sections: [{ id: 's', title: '§ 1.', blocks: [{ type: 'ol', items: [{ text: 'Zob. [Regulamin](/legal/regulamin).', items: ['pierwszy'] }] }] }],
     };
     const out = renderPlainText(doc, SITE);
-    expect(out).toContain('1. Zob. Regulamin (https://faktflow.example/legal/regulamin).');
+    expect(out).toContain('1. Zob. Regulamin (https://faktway.example/legal/regulamin).');
     expect(out).toContain('   1) pierwszy');
     expect(out).toContain('\r\n');
   });
@@ -157,6 +157,17 @@ describe('treść odpowiada rzeczywistości', () => {
   it.each(ALL_DOCS.map((d) => [d.slug, d] as const))('%s: bez nieaktualnych obietnic i dostawców', (_slug, doc) => {
     const t = text(doc);
     for (const word of STALE) expect(t, word).not.toContain(word);
+  });
+
+  // Nazwa usługi zmieniona 17.10.2026 (FaktFlow → FaktWay, faktway.pl).
+  // Dokument umowy z nieaktualną nazwą usługi i adresem to błąd w umowie.
+  // Dawna domena może wystąpić tylko jako adres poczty, który dalej działa.
+  it.each(ALL_DOCS.map((d) => [d.slug, d] as const))('%s: nazwa usługi FaktWay, bez dawnej nazwy', (_slug, doc) => {
+    const t = text(doc);
+    // Polityka cookies nie wymienia nazwy usługi w ogóle — reszta musi.
+    if (doc !== POLITYKA_COOKIES) expect(t).toContain('FaktWay');
+    expect(t).not.toContain('FaktFlow');
+    expect(t.replace(/@faktflow\.pl/g, '')).not.toMatch(/faktflow\.pl/i);
   });
 
   it('strona RODO: bez nieaktualnych obietnic (treść widoczna dla klienta)', async () => {
@@ -265,7 +276,7 @@ describe('linki w dokumentach prowadzą do istniejących stron', () => {
 describe('trwały nośnik', () => {
   it('mail dostaje regulamin i umowę powierzenia jako pliki UTF-8 z BOM', () => {
     const files = contractAttachments();
-    expect(files.map((f) => f.filename)).toEqual(CONTRACT_DOCUMENTS.map((d) => `FaktFlow-${d.slug}-${d.version}.txt`));
+    expect(files.map((f) => f.filename)).toEqual(CONTRACT_DOCUMENTS.map((d) => `FaktWay-${d.slug}-${d.version}.txt`));
     for (const f of files) {
       expect([...f.content.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
       expect(f.content.toString('utf8')).toContain('Usługodawca:');

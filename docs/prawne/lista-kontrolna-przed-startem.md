@@ -1,6 +1,6 @@
 # Lista kontrolna przed startem — sprawy prawne
 
-Stan na 15.10.2026. Każdy punkt ma właściciela. Dokumenty dla klientów
+Stan na 20.10.2026 (po zmianie nazwy na FaktWay). Każdy punkt ma właściciela. Dokumenty dla klientów
 (regulamin, umowa powierzenia, polityki) obiecują rzeczy z tej listy —
 **dopóki punkt nie jest zrobiony, dokument mija się z rzeczywistością.**
 
@@ -12,12 +12,15 @@ Oznaczenia: 🔴 bloker startu · 🟠 przed pierwszym płacącym klientem · �
   `lib/legal/entity.ts`. Do tego czasu strony `/legal/*` mają baner
   „wersja robocza”, a bramka akceptacji regulaminu śpi. — Igor, Bartosz
 - [ ] 🔴 **Przegląd prawnika** regulaminu, umowy powierzenia, polityk
-  i pytań z memo (artefakt „Pakiet prawny FaktFlow”). — Igor
+  i pytań z memo (artefakt „Pakiet prawny”). — Igor
 - [ ] 🔴 **Szablon strony Zova** (Framer Marketplace, 19 USD) — potwierdzić
   zakup i zachować dowód (faktura/e-mail z Framera) albo kupić. Licencja
   obejmuje jeden projekt i tylko po zapłacie; bez tego ilustracje, filmy
   i zdjęcia z `public/landing/` naruszają prawa autorskie. — Bartosz
-- [ ] 🟠 **Zrzuty prawdziwego panelu FaktFlow** na stronę główną (zrzuty
+- [ ] 🔴 **Szablon panelu Finora** (`docs/koordynacja/PLAN-FINORA.md`) —
+  sprawdzić warunki licencji (czy obejmuje produkt SaaS dla klientów)
+  i zachować dowód zakupu. — Bartosz
+- [ ] 🟠 **Zrzuty prawdziwego panelu FaktWay** na stronę główną (zrzuty
   z szablonu usunięte — pokazywały cudzy produkt). — Bartosz
 
 ## 2. Dostawcy (podprocesorzy)
@@ -27,7 +30,7 @@ Oznaczenia: 🔴 bloker startu · 🟠 przed pierwszym płacącym klientem · �
   PostHog, Cloudflare, Slack, Stripe. Przy każdym zapisać mechanizm
   przekazania do USA (DPF albo SCC) — polityka podaje dziś oba warianty.
   — Bartosz
-- [ ] 🔴 **Poczta `pomoc@faktflow.pl`** — runbook `docs/runbooks/skrzynka-pomoc.md`
+- [ ] 🔴 **Poczta `pomoc@faktway.pl`** (i dawne `pomoc@faktflow.pl`) — runbook `docs/runbooks/skrzynka-pomoc.md`
   przekazuje ją na prywatne skrzynki (np. Gmail). Prywatny Gmail nie ma
   umowy powierzenia, a trafiają tam żądania RODO i dokumenty klientów.
   Przenieść na skrzynkę firmową z DPA (np. Google Workspace) i dopisać
@@ -40,12 +43,16 @@ Oznaczenia: 🔴 bloker startu · 🟠 przed pierwszym płacącym klientem · �
 
 ## 3. Kod — obietnice z dokumentów, których jeszcze nie ma
 
-- [ ] 🔴 **Wykonanie usunięcia firmy** po `tenants.hard_delete_at`
-  (umowa powierzenia § 9, regulamin § 14 ust. 6). Dziś „Usuń firmę”
-  tylko oznacza firmę — nic jej potem nie usuwa. Wymaga pracy na bazie
-  (wyzwalacze chronią faktury) — osobne zadanie z listą inwariantów.
-- [ ] 🟠 **Retencja rozmów czatu pomocy — 24 miesiące** i usuwanie przy
-  usunięciu konta (polityka, pkt 3). Osobna sesja w toku (15.10.2026).
+- [ ] 🔴 **Prawdziwe usuwanie firmy** (umowa powierzenia § 9, regulamin
+  § 14 ust. 6). Samoobsługa jest wstrzymana, zlecenie idzie przez pomoc
+  techniczną i ręczną procedurę operatora. Projekt z decyzjami:
+  `docs/prawne/usuwanie-firmy-projekt.md`. — Bartosz
+- [ ] 🟠 **Kopie zapasowe w terminie z umowy powierzenia** (§ 9 ust. 2:
+  cykl do 60 dni): przy zakupie Storage Box ustawić retencję ≤ 60 dni
+  (`db-backup.sh` wysyła przez `rclone copy`, więc kopie tam same nie
+  znikają); kopie `manual` usuwać w tym samym terminie. — Bartosz
+- [x] **Retencja rozmów czatu pomocy — 24 miesiące** i usuwanie przy
+  usunięciu konta (polityka, pkt 3) — `cron.support-chat-retention`.
 - [ ] 🟠 **Tabela `legal_acceptances`** wyłączona z czyszczenia
   dziennika — dowód akceptacji regulaminu przez cały czas umowy
   i do przedawnienia. Dziś: `app_metadata` + `audit_logs` (12 mies.).

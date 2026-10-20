@@ -27,7 +27,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   return new Response(body, {
     headers: {
       'Content-Type': 'text/plain; charset=utf-8',
-      'Content-Disposition': `attachment; filename="FaktFlow-${doc.slug}-${doc.version}.txt"`,
+      'Content-Disposition': `attachment; filename="FaktWay-${doc.slug}-${doc.version}.txt"`,
       'Cache-Control': 'public, max-age=3600',
     },
   });

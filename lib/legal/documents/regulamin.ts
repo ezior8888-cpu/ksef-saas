@@ -6,7 +6,7 @@ import { CONTRACT_VERSION } from '@/lib/legal/versions';
 const E = LEGAL_ENTITY;
 
 /**
- * Regulamin świadczenia usług FaktFlow.
+ * Regulamin świadczenia usług FaktWay.
  *
  * Wymagania, które ten tekst pokrywa (do weryfikacji przez prawnika — memo):
  *  - art. 8 ust. 3 u.ś.u.d.e.: rodzaje i zakres usług, wymagania techniczne,
@@ -25,10 +25,10 @@ const E = LEGAL_ENTITY;
  */
 export const REGULAMIN: LegalDocument = {
   slug: 'regulamin',
-  title: 'Regulamin świadczenia usług FaktFlow',
+  title: 'Regulamin świadczenia usług FaktWay',
   version: CONTRACT_VERSION,
   summary: [
-    `FaktFlow to narzędzie do wystawiania i odbierania faktur w KSeF. Konto jest bezpłatne; pełny zakres działa w subskrypcji za ${PRICE_GROSS} brutto miesięcznie, z ${TRIAL_DAYS} dniami bez opłat na start.`,
+    `FaktWay to narzędzie do wystawiania i odbierania faktur w KSeF. Konto jest bezpłatne; pełny zakres działa w subskrypcji za ${PRICE_GROSS} brutto miesięcznie, z ${TRIAL_DAYS} dniami bez opłat na start.`,
     'Za treść faktur i rozliczenia podatkowe odpowiadasz Ty — my dostarczamy program, pilnujemy wysyłki i pokazujemy jej status. Nie jesteśmy biurem rachunkowym ani doradcą podatkowym.',
     'Wyniki funkcji AI (odczyt dokumentów, podpowiedzi KPiR, czat) sprawdzasz przed zatwierdzeniem.',
     'Subskrypcję możesz wypowiedzieć w każdej chwili; jako jednoosobowa firma na prawach konsumenta masz też 14 dni na odstąpienie od umowy.',

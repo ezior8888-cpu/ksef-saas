@@ -170,6 +170,6 @@ w wersji z dnia ${CONTRACT_VERSION}, które zaakceptowano.</p>
 <p><strong>Prawo odstąpienia.</strong> Jeżeli zawierasz umowę jako konsument albo jako przedsiębiorca
 na prawach konsumenta, możesz odstąpić od niej bez podawania przyczyny w ciągu 14 dni, wysyłając
 oświadczenie na adres ${LEGAL_ENTITY.email}. Wzór formularza jest w załączniku nr 1 do Regulaminu.</p>
-<p>Dokumenty są też dostępne w serwisie: <a href="${base}/legal/regulamin">dokumenty prawne FaktFlow</a>.</p>
+<p>Dokumenty są też dostępne w serwisie: <a href="${base}/legal/regulamin">dokumenty prawne FaktWay</a>.</p>
 <p>Pytania? Odpisz na tę wiadomość.</p>`;
 }

@@ -11,7 +11,8 @@ type AuthPageShellProps = {
   children: React.ReactNode;
 };
 
-// Znak FaktFlow (do 15.10.2026 — znak „Zova AI” z szablonu strony).
+// Znak marki — ten sam plik co w panelu (do 15.10.2026 — znak „Zova AI”
+// z szablonu strony).
 const LOGO = '/brand/faktflow-mark.png';
 
 /**

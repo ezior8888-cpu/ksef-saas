@@ -41,7 +41,7 @@ my dajemy mu informacje (umowa powierzenia § 7 ust. 2, § 8).
 
 ## Szablon — zawiadomienie klienta (umowa powierzenia § 8)
 
-> Temat: Naruszenie ochrony danych w FaktFlow — [data]
+> Temat: Naruszenie ochrony danych w FaktWay — [data]
 >
 > Dzień dobry, informujemy o naruszeniu ochrony danych osobowych, które
 > powierzyli nam Państwo jako administrator.

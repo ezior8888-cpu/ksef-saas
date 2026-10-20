@@ -8,7 +8,7 @@ export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: 'Polityka cookies',
-  description: 'Jakie pliki cookies i dane w przeglądarce zapisuje FaktFlow oraz jak zmienić zgodę na analitykę.',
+  description: 'Jakie pliki cookies i dane w przeglądarce zapisuje FaktWay oraz jak zmienić zgodę na analitykę.',
 };
 
 export default function CookiesPage() {

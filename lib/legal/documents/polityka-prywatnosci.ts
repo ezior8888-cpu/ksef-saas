@@ -18,7 +18,7 @@ const E = LEGAL_ENTITY;
  */
 export const POLITYKA_PRYWATNOSCI: LegalDocument = {
   slug: 'polityka-prywatnosci',
-  title: 'Polityka prywatności FaktFlow',
+  title: 'Polityka prywatności FaktWay',
   version: PRIVACY_POLICY_VERSION,
   summary: [
     'Dane Twojego konta przetwarzamy, żeby świadczyć usługę, rozliczać subskrypcję i chronić serwis. Nie sprzedajemy danych i nie wyświetlamy reklam.',
@@ -38,7 +38,7 @@ export const POLITYKA_PRYWATNOSCI: LegalDocument = {
       'zakres',
       '2. Kogo dotyczy ta Polityka',
       ul(
-        'osób, które zakładają Konto w FaktFlow i z niego korzystają — w tym właścicieli firm, ich pracowników i księgowych zaproszonych do Organizacji;',
+        'osób, które zakładają Konto w FaktWay i z niego korzystają — w tym właścicieli firm, ich pracowników i księgowych zaproszonych do Organizacji;',
         'osób, które odwiedzają naszą stronę, piszą do nas, korzystają z czatu pomocy albo zapisują się na newsletter;',
         'osób reprezentujących naszych klientów w sprawach rozliczeń.',
       ),
@@ -95,7 +95,7 @@ export const POLITYKA_PRYWATNOSCI: LegalDocument = {
             'do 24 miesięcy od ostatniej wiadomości',
           ],
           [
-            'E-maile z poradami, nowościami i ofertami FaktFlow',
+            'E-maile z poradami, nowościami i ofertami FaktWay',
             'e-mail, imię, informacja o zgodzie',
             'art. 6 ust. 1 lit. a RODO (zgoda) w zw. z art. 398 ustawy Prawo komunikacji elektronicznej',
             'do wycofania zgody',
@@ -163,7 +163,7 @@ export const POLITYKA_PRYWATNOSCI: LegalDocument = {
     section(
       'transfer',
       '6. Przekazywanie danych poza Europejski Obszar Gospodarczy',
-      p('Serwery FaktFlow znajdują się w Niemczech. Część dostawców ma siedzibę w USA (patrz tabela w punkcie 5). Przekazanie danych do państwa trzeciego odbywa się na podstawie decyzji Komisji Europejskiej stwierdzającej odpowiedni stopień ochrony (EU-US Data Privacy Framework — art. 45 RODO), jeśli odbiorca jest certyfikowany, albo standardowych klauzul umownych przyjętych przez Komisję Europejską (art. 46 ust. 2 lit. c RODO). Kopię zabezpieczeń możesz otrzymać, pisząc na adres kontaktowy.'),
+      p('Serwery FaktWay znajdują się w Niemczech. Część dostawców ma siedzibę w USA (patrz tabela w punkcie 5). Przekazanie danych do państwa trzeciego odbywa się na podstawie decyzji Komisji Europejskiej stwierdzającej odpowiedni stopień ochrony (EU-US Data Privacy Framework — art. 45 RODO), jeśli odbiorca jest certyfikowany, albo standardowych klauzul umownych przyjętych przez Komisję Europejską (art. 46 ust. 2 lit. c RODO). Kopię zabezpieczeń możesz otrzymać, pisząc na adres kontaktowy.'),
     ),
     section(
       'prawa',

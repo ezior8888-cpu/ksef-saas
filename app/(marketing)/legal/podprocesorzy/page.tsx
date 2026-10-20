@@ -9,7 +9,7 @@ export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: 'Podmioty przetwarzające',
-  description: 'Lista dostawców, którym FaktFlow powierza przetwarzanie danych osobowych.',
+  description: 'Lista dostawców, którym FaktWay powierza przetwarzanie danych osobowych.',
 };
 
 /**
@@ -25,7 +25,7 @@ export default function SubprocessorsPage() {
         <h1 className="mb-2">Podmioty przetwarzające dane</h1>
         <p className="mt-0 text-sm">Stan na dzień {CONTRACT_VERSION}</p>
         <p>
-          Poniżej są dostawcy, z których usług korzystamy przy świadczeniu FaktFlow. Kolumna „Dane klientów”
+          Poniżej są dostawcy, z których usług korzystamy przy świadczeniu FaktWay. Kolumna „Dane klientów”
           wskazuje, czy dostawca może przetwarzać dane, które powierzają nam klienci (np. dane kontrahentów
           w fakturach) — ci dostawcy są dalszymi podmiotami przetwarzającymi w rozumieniu{' '}
           <Link href="/legal/umowa-powierzenia#podprocesorzy">umowy powierzenia</Link>. O planowanej zmianie

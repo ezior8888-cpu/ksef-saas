@@ -29,12 +29,12 @@ niezwłocznie, z uzasadnieniem (§ 6 ust. 4).
 
 Szablon:
 
-> Temat: Zmiana dostawcy przetwarzającego dane w FaktFlow — od [data]
+> Temat: Zmiana dostawcy przetwarzającego dane w FaktWay — od [data]
 >
 > Dzień dobry, zgodnie z umową powierzenia (§ 6) informujemy, że od [data,
 > min. 14 dni] będziemy korzystać z [dostawca, siedziba] w zakresie [cel].
 > Dane będą przetwarzane w [lokalizacja]; przekazanie poza EOG zabezpiecza
-> [mechanizm]. Aktualna lista: https://faktflow.pl/legal/podprocesorzy.
+> [mechanizm]. Aktualna lista: https://faktway.pl/legal/podprocesorzy.
 > Jeśli mają Państwo zastrzeżenia, prosimy o odpowiedź do [data].
 
 Wysyłka do wszystkich właścicieli — transakcyjnie (nie wymaga zgody

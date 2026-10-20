@@ -9,7 +9,7 @@ const E = LEGAL_ENTITY;
  * Umowa powierzenia przetwarzania danych osobowych (art. 28 ust. 3 RODO).
  *
  * Do 15.10.2026 strona RODO obiecywała „DPA do pobrania na e-mail”, ale
- * takiego dokumentu nie było — a FaktFlow przetwarza dane kontrahentów
+ * takiego dokumentu nie było — a FaktWay przetwarza dane kontrahentów
  * klientów (faktury, przypomnienia o płatności, OCR) od pierwszego dnia.
  * Bez umowy powierzenia przetwarzanie narusza art. 28 RODO po obu stronach.
  *
@@ -23,7 +23,7 @@ export const UMOWA_POWIERZENIA: LegalDocument = {
   title: 'Umowa powierzenia przetwarzania danych osobowych',
   version: CONTRACT_VERSION,
   summary: [
-    'Gdy wystawiasz fakturę albo dodajesz kontrahenta, jesteś administratorem jego danych, a FaktFlow przetwarza je w Twoim imieniu. RODO wymaga na to umowy — to jest ta umowa.',
+    'Gdy wystawiasz fakturę albo dodajesz kontrahenta, jesteś administratorem jego danych, a FaktWay przetwarza je w Twoim imieniu. RODO wymaga na to umowy — to jest ta umowa.',
     'Przetwarzamy te dane wyłącznie po to, żeby świadczyć Ci usługę, i tylko w sposób, jaki wynika z Twoich działań w serwisie.',
     'Wiesz, z jakich dostawców korzystamy, i dowiesz się z wyprzedzeniem o każdej zmianie — możesz się sprzeciwić.',
     'O naruszeniu bezpieczeństwa dowiesz się od nas bez zbędnej zwłoki, nie później niż w 36 godzin.',
@@ -33,7 +33,7 @@ export const UMOWA_POWIERZENIA: LegalDocument = {
       'strony',
       '§ 1. Strony i zawarcie umowy',
       ol(
-        'Umowa powierzenia przetwarzania danych osobowych (dalej „Umowa powierzenia”) zostaje zawarta między Klientem w rozumieniu Regulaminu FaktFlow, jako administratorem danych (dalej „Administrator”), a ' +
+        'Umowa powierzenia przetwarzania danych osobowych (dalej „Umowa powierzenia”) zostaje zawarta między Klientem w rozumieniu Regulaminu FaktWay, jako administratorem danych (dalej „Administrator”), a ' +
           `${entityIdentification()}, jako podmiotem przetwarzającym (dalej „Przetwarzający”).`,
         'Umowa powierzenia jest zawierana razem z Umową o świadczenie Usług na podstawie [Regulaminu](/legal/regulamin), przez akceptację w Serwisie, i obowiązuje przez czas jej trwania oraz do zakończenia czynności opisanych w § 9. Pojęcia z wielkiej litery mają znaczenie nadane w Regulaminie, a pojęcia dotyczące danych osobowych — w rozporządzeniu (UE) 2016/679 (RODO).',
         'Jeżeli Klient korzysta z Serwisu jako podmiot przetwarzający na rzecz innego administratora (np. biuro rachunkowe prowadzące Organizację klienta), Przetwarzający działa jako dalszy podmiot przetwarzający, a Klient zapewnia, że ma zgodę swojego administratora na korzystanie z Przetwarzającego.',

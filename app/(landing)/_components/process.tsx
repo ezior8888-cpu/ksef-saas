@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { Container, SectionHeading } from './ui';
 
 // Bez obrazków od 15.10.2026: kroki ilustrowały akcje Apple, Microsoft
-// i Walmart oraz wykresy w dolarach z szablonu, nie FaktFlow.
+// i Walmart oraz wykresy w dolarach z szablonu, nie FaktWay.
 // Krok 3: numer KSeF przychodzi po przyjęciu faktury przez system
 // ministerstwa — „jedno kliknięcie i masz numer” obiecywało za dużo.
 const STEPS = [

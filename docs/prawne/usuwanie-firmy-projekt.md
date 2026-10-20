@@ -317,7 +317,7 @@ rolę. Większość strażników przepuszcza role spoza API:
 | `b_guard_pending_invoice_lines` (00119:116-162) | `invoice_line_items` | **blokuje każdą rolę**, gdy rodzic jest wysłany… | …ale przy kaskadzie z `invoices` rodzica już nie ma (pętla nic nie znajduje). Pozycje usuwamy **wyłącznie kaskadą** z faktury, nigdy bezpośrednio. Do potwierdzenia testem (§ 10, T3). |
 | `guard_ksef_expense_provenance` (00128:24-41) | `expenses` | przepuszcza | — |
 | `trg_audit_logs_prevent_delete` (00052:16-41) | `audit_logs` | **blokuje** | `SET LOCAL app.allow_audit_purge = 'true'` (istniejąca furtka) — o ile usuwamy dziennik, D-5 |
-| `trigger_guard_tenant_ksef_claim_fields` (00117:309-367) | `tenants` | wyczyszczenie `ksef_verified_at` i środowiska **tylko** dla `postgres` (00117:338-347) | nagrobek musi je wyczyścić, inaczej unikalny indeks `(nip, ksef_verified_environment) WHERE ksef_verified_at IS NOT NULL` (00117:41-43) zablokuje ponowną rejestrację tej firmy w FaktFlow |
+| `trigger_guard_tenant_ksef_claim_fields` (00117:309-367) | `tenants` | wyczyszczenie `ksef_verified_at` i środowiska **tylko** dla `postgres` (00117:338-347) | nagrobek musi je wyczyścić, inaczej unikalny indeks `(nip, ksef_verified_environment) WHERE ksef_verified_at IS NOT NULL` (00117:41-43) zablokuje ponowną rejestrację tej firmy w FaktWay |
 | `ksef_send_attempts` — `REVOKE ALL … FROM service_role` (00150:85) | dziennik prób | tylko funkcje właściciela | funkcja `postgres` może usuwać |
 
 **Nie wolno** obchodzić strażników przez `ALTER TABLE … DISABLE TRIGGER`
@@ -474,7 +474,7 @@ i w `tenant_closures`. Akcja serwera sprawdza `requireAdmin()` jak
 
 | Mail | Kiedy | Do kogo | Treść |
 |---|---|---|---|
-| Planowane usunięcie (regulamin § 14 ust. 6) | przy `closing` | właściciele; członkowie — informacyjnie | data T0, do kiedy eksport (`export_until`), jak wyeksportować, data najpóźniejszego usunięcia, że faktury są w KSeF, że obowiązek przechowywania jest po stronie klienta, jak cofnąć uprawnienia FaktFlow w KSeF |
+| Planowane usunięcie (regulamin § 14 ust. 6) | przy `closing` | właściciele; członkowie — informacyjnie | data T0, do kiedy eksport (`export_until`), jak wyeksportować, data najpóźniejszego usunięcia, że faktury są w KSeF, że obowiązek przechowywania jest po stronie klienta, jak cofnąć uprawnienia FaktWay w KSeF |
 | Przypomnienie | 7 dni przed `export_until` | właściciele | jw. skrótem |
 | Potwierdzenie usunięcia (umowa § 9 ust. 2) | po `purged` | zlecający (`requester_email`) i właściciele | data usunięcia, co usunięto (liczby z `tenant_closures`), co zostało i dlaczego (nasze dokumenty rozliczeń, nagrobek), kiedy znikną kopie zapasowe (najpóźniej `purged_at` + 60 dni), że faktury są w KSeF |
 

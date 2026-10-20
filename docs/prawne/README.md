@@ -1,4 +1,4 @@
-# Dokumentacja prawna FaktFlow — wewnętrzna
+# Dokumentacja prawna FaktWay — wewnętrzna
 
 Dokumenty, których wymagają RODO i nasze własne dokumenty dla klientów
 (regulamin, umowa powierzenia, polityki — treść w `lib/legal/documents/`,

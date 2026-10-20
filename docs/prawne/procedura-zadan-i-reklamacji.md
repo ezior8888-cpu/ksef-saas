@@ -1,6 +1,6 @@
 # Procedura: żądania RODO, reklamacje, odstąpienia, zgłoszenia treści
 
-Wszystko trafia na `pomoc@faktflow.pl` (skrzynka: `docs/runbooks/skrzynka-pomoc.md`;
+Wszystko trafia na `pomoc@faktway.pl` (skrzynka: `docs/runbooks/skrzynka-pomoc.md`;
 worker oznacza kategorię „RODO” w temacie). Każdą sprawę wpisz do
 rejestru żądań POZA repozytorium: data wpływu, rodzaj, termin, kto
 prowadzi, data i sposób odpowiedzi.

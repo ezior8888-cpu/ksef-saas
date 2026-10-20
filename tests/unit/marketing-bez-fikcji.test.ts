@@ -14,7 +14,7 @@ import { COMPARISON_PAGES_PUBLISHED } from '@/lib/marketing/comparisons';
 
 /**
  * Przegląd prawny 15.10.2026: strona i maile pokazywały treści z szablonu
- * jako fakty o FaktFlow — fikcyjne logotypy „klientów”, ocenę 4,8, opinię
+ * jako fakty o FaktWay (wtedy FaktFlow) — fikcyjne logotypy „klientów”, ocenę 4,8, opinię
  * nieistniejącej osoby, zmyślone statystyki („1,2 mln faktur”), fikcyjny
  * zespół, zmyślony telefon i adres firmy, integracje, których nie ma
  * („bank, poczta, sklep”). Fałszywe opinie i oceny są zakazane w każdych

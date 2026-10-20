@@ -11,10 +11,15 @@
  * zmiany wobec klientów opisuje regulamin (§ 15) — powiadomienie z wyprzedzeniem.
  */
 
-/** Regulamin + umowa powierzenia są akceptowane razem — jedna wersja. */
-export const CONTRACT_VERSION = '2026-10-15';
-export const PRIVACY_POLICY_VERSION = '2026-10-15';
-export const COOKIE_POLICY_VERSION = '2026-10-15';
+/**
+ * Regulamin + umowa powierzenia są akceptowane razem — jedna wersja.
+ * 2026-10-20: zmiana nazwy na FaktWay (faktway.pl). Wersja 2026-10-15 nigdy
+ * nie była pokazana klientom (pakiet prawny nie był wdrożony), więc nie ma
+ * zapisów zgód, które by się do niej odwoływały — zastąpiona, nie dopisana.
+ */
+export const CONTRACT_VERSION = '2026-10-20';
+export const PRIVACY_POLICY_VERSION = '2026-10-20';
+export const COOKIE_POLICY_VERSION = '2026-10-20';
 
 /**
  * Oświadczenie przy rejestracji / w bramce (obowiązkowe). Znaczniki linków
@@ -22,9 +27,9 @@ export const COOKIE_POLICY_VERSION = '2026-10-15';
  * (components/legal/legal-document.tsx, `LegalInline`).
  */
 export const TERMS_STATEMENT = {
-  version: '2026-10-15',
+  version: '2026-10-20',
   text:
-    'Akceptuję [Regulamin](/legal/regulamin) FaktFlow i [Umowę powierzenia przetwarzania danych osobowych](/legal/umowa-powierzenia) ' +
+    'Akceptuję [Regulamin](/legal/regulamin) FaktWay i [Umowę powierzenia przetwarzania danych osobowych](/legal/umowa-powierzenia) ' +
     'oraz potwierdzam, że zapoznałem(-am) się z [Polityką prywatności](/legal/polityka-prywatnosci).',
 } as const;
 
@@ -33,9 +38,9 @@ export const TERMS_STATEMENT = {
  * komunikacji elektronicznej + art. 6 ust. 1 lit. a RODO).
  */
 export const MARKETING_STATEMENT = {
-  version: '2026-10-15',
+  version: '2026-10-20',
   text:
-    'Chcę otrzymywać e-mailem od FaktFlow porady dotyczące korzystania z serwisu, ' +
+    'Chcę otrzymywać e-mailem od FaktWay porady dotyczące korzystania z serwisu, ' +
     'informacje o nowościach i oferty. Zgodę mogę wycofać w każdej chwili ' +
     '(link w każdej wiadomości albo Ustawienia → Powiadomienia).',
 } as const;
@@ -47,7 +52,7 @@ export const MARKETING_STATEMENT = {
  * bez znaczenia, więc zaznacza je każdy.
  */
 export const CHECKOUT_STATEMENT = {
-  version: '2026-10-15',
+  version: '2026-10-20',
   text:
     'Zamawiam subskrypcję z obowiązkiem zapłaty po okresie próbnym i akceptuję [Regulamin](/legal/regulamin). ' +
     'Jeśli zawieram umowę jako konsument lub przedsiębiorca na prawach konsumenta: żądam ' +
