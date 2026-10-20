@@ -73,6 +73,13 @@ export type AuditAction =
   | 'invoice.ksef_duplicate_decision_notified'
   | 'invoice.emailed'
   | 'invoice.resubmit_requested'
+  // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina; samą
+  // fakturę zapisuje `invoice.draft_created` z `recurringInvoiceId` w metadanych.
+  | 'recurring_invoice.created'
+  | 'recurring_invoice.updated'
+  | 'recurring_invoice.paused'
+  | 'recurring_invoice.resumed'
+  | 'recurring_invoice.deleted'
   | 'ksef.credentials_uploaded'
   | 'ksef.credentials_removed'
   | 'ksef.environment_changed'

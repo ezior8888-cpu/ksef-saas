@@ -190,6 +190,11 @@ export const invoiceFormSchema = z
     notes: z.string().max(3500).refine(xmlSafe, NO_CONTROL_CHARS_MESSAGE).optional(),
     /** P_18A — mechanizm podzielonej płatności (art. 106e ust. 1 pkt 18a). */
     splitPayment: z.boolean().optional(),
+    /**
+     * Pozycja cykliczna (plan Finora N1), z której wystawiamy fakturę —
+     * ukryte pole formularza otwartego z `?cykliczna=<id>`. Brak = zwykła faktura.
+     */
+    recurringInvoiceId: z.string().uuid('Nieprawidłowa faktura cykliczna').optional(),
   })
   .refine(
     (d) =>

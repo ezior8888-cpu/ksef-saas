@@ -147,6 +147,8 @@ export function InvoiceForm({
   vatExempt = false,
   suggestedNumber = null,
   seller = null,
+  initialValues = null,
+  recurringInvoiceId = null,
 }: {
   /**
    * Dane sprzedawcy do nagłówka dokumentu (P5) — tylko do wyświetlenia.
@@ -162,6 +164,13 @@ export function InvoiceForm({
    * Nowe pozycje dostają wtedy „zw” — inaczej z przyzwyczajenia wpada 23%.
    */
   vatExempt?: boolean;
+  /**
+   * Podkład wpisany od razu w formularz (plan Finora N1: `?wzor=` i
+   * `?cykliczna=` — `prefillFromInvoiceAction`). Bez niego formularz pusty.
+   */
+  initialValues?: Partial<InvoiceFormValues> | null;
+  /** Pozycja cykliczna (`?cykliczna=`) — ukryte pole; akcja zapisu zajmuje nim okres. */
+  recurringInvoiceId?: string | null;
 } = {}) {
   const newLine: InvoiceFormValues['lines'][number] = vatExempt
     ? { ...defaultLine, vatRate: 'zw' }
@@ -225,6 +234,8 @@ export function InvoiceForm({
       bankAccount: '',
       notes: '',
       splitPayment: false,
+      ...initialValues,
+      ...(recurringInvoiceId ? { recurringInvoiceId } : {}),
     },
   });
 
@@ -513,6 +524,7 @@ export function InvoiceForm({
 
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-6 pb-32 lg:pb-10">
+      {recurringInvoiceId ? <input type="hidden" {...form.register('recurringInvoiceId')} /> : null}
       {/* NAGŁÓWEK — dwa układy.
           Na telefonie pasek z makiety: strzałka wstecz, tytuł z podtytułem,
           „Szkic” po prawej. Zapis szkicu wchodzi tu z dolnego paska, żeby
