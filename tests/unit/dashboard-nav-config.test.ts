@@ -62,6 +62,19 @@ describe('isActiveNavPath (plan Finora §4)', () => {
   });
 });
 
+describe('Faktury cykliczne w menu (plan Finora E9)', () => {
+  it('są aktywne dla /invoices/recurring, a „Faktury” i „Wystaw fakturę” nie', () => {
+    expect(isActiveNavPath('/invoices/recurring', '/invoices/recurring')).toBe(true);
+    expect(isActiveNavPath('/invoices/recurring', '/invoices')).toBe(false);
+    expect(isActiveNavPath('/invoices/recurring', '/invoices/new')).toBe(false);
+    expect(isActiveNavPath('/invoices/recurringx', '/invoices/recurring')).toBe(false);
+  });
+
+  it('mają prefetch (lekka strona), w przeciwieństwie do /analizy/*', () => {
+    expect(getDashboardPrefetchHrefs()).toContain('/invoices/recurring');
+  });
+});
+
 describe('struktura menu (plan Finora §4)', () => {
   it('sekcje, etykiety i adresy w kolejności', () => {
     expect(
@@ -82,6 +95,9 @@ describe('struktura menu (plan Finora §4)', () => {
         items: [
           ['Faktury', '/invoices'],
           ['Wystaw fakturę', '/invoices/new'],
+          // Plan Finora E9: „Faktury cykliczne” dochodzą razem ze stroną P6 (zasada wpinania §4)
+          // — świadoma zmiana oczekiwanej struktury menu (sekcja Sprzedaż: 4 → 5 pozycji).
+          ['Faktury cykliczne', '/invoices/recurring'],
           ['Przypomnienia', '/payments/overdue'],
           ['Kontrahenci', '/contractors'],
         ],
@@ -162,6 +178,7 @@ describe('struktura menu (plan Finora §4)', () => {
       'Księgowość',
     ]);
     expect(more[0].items.map((i) => i.href)).toEqual([
+      '/invoices/recurring',
       '/payments/overdue',
       '/contractors',
     ]);

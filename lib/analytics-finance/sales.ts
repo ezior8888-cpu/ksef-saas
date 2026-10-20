@@ -36,10 +36,17 @@ export interface SaleInvoice {
   buyer_nip: string | null;
   buyer_data: unknown;
   is_b2c: boolean | null;
+  /**
+   * N1: skąd faktura (`app` = wystawiona w FaktWay) i jej typ — tylko po to,
+   * by „Stali klienci” wiedzieli, która faktura może być wzorem faktury
+   * cyklicznej. Opcjonalne: fabryki w testach ich nie podają.
+   */
+  origin?: string | null;
+  invoiceType?: string | null;
 }
 
 const SALES_COLUMNS =
-  'id, issue_date, internal_number, net_total, gross_total, invoice_kind, advance_invoice_ids, currency, buyer_nip, buyer_data, is_b2c';
+  'id, issue_date, internal_number, net_total, gross_total, invoice_kind, advance_invoice_ids, currency, buyer_nip, buyer_data, is_b2c, origin, invoice_type';
 
 function amount(value: number | string | null | undefined): number {
   const n = Number(value ?? 0);
@@ -80,6 +87,8 @@ export async function getSalesInvoices(
       buyer_nip: row.buyer_nip ?? null,
       buyer_data: row.buyer_data,
       is_b2c: row.is_b2c ?? null,
+      origin: row.origin ?? null,
+      invoiceType: row.invoice_type ?? null,
     }))
     .sort((a, b) => a.issueDate.localeCompare(b.issueDate) || a.id.localeCompare(b.id));
 }

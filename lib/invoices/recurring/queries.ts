@@ -198,3 +198,37 @@ export async function listRecurringTemplateCandidates(
     contractorName: buyerName(r.buyer_data),
   }));
 }
+
+/**
+ * Jedna faktura jako kandydat na wzór (`?wzor=<id>` na `/invoices/recurring`)
+ * albo `null`: nie ma jej, jest obca albo nie spełnia warunków wzoru
+ * (`TEMPLATE_FILTERS`, te same co lista kandydatów i akcja tworzenia).
+ * Błąd odczytu też daje `null` — strona pokazuje wtedy komunikat i pusty
+ * wybór, nie 500.
+ */
+export async function getRecurringTemplateCandidate(
+  supabase: AnyClient,
+  tenantId: string,
+  invoiceId: string,
+): Promise<RecurringTemplateCandidate | null> {
+  const { data, error } = await recurringDb(supabase)
+    .from('invoices')
+    .select('id, internal_number, issue_date, gross_total, buyer_data')
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .eq('direction', TEMPLATE_FILTERS.direction)
+    .eq('origin', TEMPLATE_FILTERS.origin)
+    .eq('invoice_kind', TEMPLATE_FILTERS.invoice_kind)
+    .eq('invoice_type', TEMPLATE_FILTERS.invoice_type)
+    .eq('ksef_status', TEMPLATE_FILTERS.ksef_status)
+    .eq('currency', TEMPLATE_FILTERS.currency)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    id: data.id,
+    internalNumber: data.internal_number,
+    issueDate: data.issue_date,
+    grossTotal: data.gross_total == null ? null : Number(data.gross_total),
+    contractorName: buyerName(data.buyer_data),
+  };
+}

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { amountDueOf } from '@/lib/invoices/amount-due';
 import { parentsWithOpenCorrection } from '@/lib/invoices/correction-parents';
 import { canCorrectInvoice } from '@/lib/invoices/list-row-facts';
+import { canSetAsRecurring } from '@/lib/invoices/recurring/visibility';
 import { KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { canManageKsefSend } from '@/lib/invoices/ksef-send-policy';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -49,6 +50,7 @@ export default async function InvoiceDetailPage({
       ${KSEF_RESEND_SOURCE_COLUMNS},
       sale_date,
       direction,
+      origin,
       ksef_status,
       ksef_number,
       ksef_accepted_at,
@@ -184,6 +186,15 @@ export default async function InvoiceDetailPage({
     split_payment: splitPayment,
     amount_due: amountDue,
     can_correct: canCorrect,
+    // N1: „Ustaw jako cykliczną” tylko dla faktury, którą przyjmie akcja tworzenia (te same warunki).
+    can_set_recurring: canSetAsRecurring({
+      direction: invoice.direction as string | null,
+      origin: (invoice.origin as string | null) ?? null,
+      invoice_kind: invoice.invoice_kind as string | null,
+      invoice_type: invoice.invoice_type as string | null,
+      ksef_status: invoice.ksef_status as string | null,
+      currency: invoice.currency as string | null,
+    }),
     qr,
     upo_status:
       upo?.status ??

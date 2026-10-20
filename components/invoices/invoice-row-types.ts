@@ -24,6 +24,14 @@ export interface InvoiceRow {
   currency?: string | null;
   invoice_kind?: string | null;
   last_error_code?: string | null;
+  /**
+   * N1: skąd faktura i jaki ma typ — z tych pól (razem z `invoice_kind`,
+   * `ksef_status` i `currency`) lista wylicza „Duplikuj” i „Ustaw jako
+   * cykliczną” (`lib/invoices/recurring/visibility.ts`). Strona listy je
+   * wybiera; brak pola = przycisk ukryty.
+   */
+  origin?: string | null;
+  invoice_type?: string | null;
 }
 
 /** Fakty wierszy (`loadInvoiceListRowFacts`) jako zwykły obiekt: id → fakty. */
