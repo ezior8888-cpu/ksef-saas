@@ -328,15 +328,17 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
               />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <div className="sm:col-span-2 xl:col-span-1">
-                  <Label className={labelClass}>Nazwa podmiotu</Label>
+                  <Label htmlFor="final-buyer-name" className={labelClass}>Nazwa podmiotu</Label>
                   <Input
+                    id="final-buyer-name"
                     value={currentBuyer().name}
                     onChange={(e) => patchBuyer({ name: e.target.value })}
                   />
                 </div>
                 <div>
-                  <Label className={labelClass}>Adres — linia 1</Label>
+                  <Label htmlFor="final-buyer-address-1" className={labelClass}>Adres — linia 1</Label>
                   <Input
+                    id="final-buyer-address-1"
                     value={currentBuyer().address.addressLine1}
                     onChange={(e) =>
                       patchBuyer({
@@ -346,8 +348,9 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
                   />
                 </div>
                 <div>
-                  <Label className={labelClass}>Adres — linia 2</Label>
+                  <Label htmlFor="final-buyer-address-2" className={labelClass}>Adres — linia 2</Label>
                   <Input
+                    id="final-buyer-address-2"
                     value={currentBuyer().address.addressLine2}
                     onChange={(e) =>
                       patchBuyer({
@@ -364,7 +367,7 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
 
             <DocumentSection title="Płatność" testId="sekcja-platnosc" description="Sposób zapłaty i rachunek">
               <div>
-                <Label className={labelClass}>Metoda</Label>
+                <Label htmlFor="final-payment-method" className={labelClass}>Metoda</Label>
                 <Select
                   value={paymentMethodWatch}
                   items={PAYMENT_METHOD_ITEMS}
@@ -373,7 +376,7 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
                     form.setValue('paymentMethod', v as FinalFormIn['paymentMethod'])
                   }}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="final-payment-method" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -386,8 +389,8 @@ export function FinalInvoiceForm({ initialSeller, advanceInvoices }: FinalInvoic
                 </Select>
               </div>
               <div>
-                <Label className={labelClass}>Numer rachunku (26 cyfr, opcja)</Label>
-                <Input {...form.register('bankAccount')} />
+                <Label htmlFor="final-bank-account" className={labelClass}>Numer rachunku (26 cyfr, opcja)</Label>
+                <Input id="final-bank-account" {...form.register('bankAccount')} />
                 {form.formState.errors.bankAccount ? (
                   <p className={errorClass}>{String(form.formState.errors.bankAccount.message)}</p>
                 ) : null}

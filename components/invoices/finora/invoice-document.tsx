@@ -116,11 +116,13 @@ export function DocumentHeaderRow({
 }) {
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between gap-3">
-        <Label htmlFor={htmlFor} className="shrink-0 text-sm font-medium">
+      {/* Poniżej sm etykieta nad polem: na 375 px etykieta „Data sprzedaży /
+          dostawy” + pole 11rem nie mieszczą się w karcie (przegląd P5). */}
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <Label htmlFor={htmlFor} className="text-sm font-medium sm:shrink-0">
           {label}
         </Label>
-        <div className="w-44 flex-none">{children}</div>
+        <div className="w-full sm:w-44 sm:flex-none">{children}</div>
       </div>
       {error ? <div className="sm:ml-auto sm:max-w-64">{error}</div> : null}
       {!error && hint ? (
@@ -130,7 +132,13 @@ export function DocumentHeaderRow({
   );
 }
 
-/** Dwie kolumny pod nagłówkiem (Finora: „Invoice To:” | „Bill To:”). */
+/**
+ * Dwie kolumny pod nagłówkiem (Finora: „Invoice To:” | „Bill To:”).
+ * Odstępstwo: Finora składa je od `sm`, my od `xl`. Sekcja Nabywca (trzy
+ * rodzaje nabywcy, NIP z GUS, VAT-UE, kraj, adres) nie mieści się w połowie
+ * karty, a od `lg` obok dokumentu stoi jeszcze kolumna akcji 18rem — poniżej
+ * `xl` obie sekcje mają pełną szerokość (przegląd P5).
+ */
 export function DocumentColumns({ children }: { children: ReactNode }) {
   return <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">{children}</div>;
 }
