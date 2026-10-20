@@ -55,7 +55,9 @@ Mapa własności z części IV.2 planu obowiązuje dalej, z **jedną zmianą**:
   z 17.10.2026. Plik był Masła; nowe sekcje (Pulpit, Sprzedaż, Koszty,
   Księgowość), ikony Remix i reguły `isActiveNavPath` pilnuje
   `tests/unit/dashboard-nav-config.test.ts`. Dolny pasek (Flo / Faktury /
-  Nowa / Miesiąc / Więcej) zostaje bez zmian pozycji.
+  Nowa / Miesiąc / Więcej) zostaje bez zmian pozycji. Etap E7 (20.10.2026)
+  dopisał sekcję „Analizy” (`/analizy/sprzedaz`, `/analizy/koszty`,
+  `prefetch: false`) razem ze stronami — zasada wpinania z §4 planu.
 - **Shell jest na szablonie Finora** (plan Finora, E2):
   `app/(dashboard)/layout.tsx` oraz nowe `components/dashboard/app-sidebar.tsx`,
   `app-header.tsx`, `command-menu.tsx`, `profile-menu.tsx`, `footer.tsx`.
