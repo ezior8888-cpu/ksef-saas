@@ -160,7 +160,8 @@ describe('szczegóły faktury na ekranie (F-094)', () => {
   it('pokazuje formę, termin płatności i rachunek', () => {
     const t = render(base);
     expect(t).toContain('Przelew');
-    expect(t).toContain('2026-10-16');
+    // Daty w formacie DD.MM.RRRR (PLAN-FINORA §7.1, E3b).
+    expect(t).toContain('16.10.2026');
     expect(t).toContain('PL61109010140000071219812874');
   });
 

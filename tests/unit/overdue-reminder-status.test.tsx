@@ -306,6 +306,32 @@ describe('overdue reminder status', () => {
     expect(html).not.toContain('aria-label="Przygotuj przypomnienie"');
   });
 
+  it('shows the latest reminder entry (any status) after the pending read, scoped to the tenant', async () => {
+    rows.payment_reminders = [
+      { ...reminder(INVOICE, TENANT, '2026-09-10T08:00:00.000Z'), stage: 'stage_1', status: 'sent' },
+      { ...reminder(INVOICE, TENANT, '2026-09-17T08:00:00.000Z'), stage: 'stage_2', status: 'failed' },
+    ];
+    const page = await OverduePage();
+    const [first] = (page.props as { overdueInvoices: Array<{ latest_reminder: unknown }> }).overdueInvoices;
+    expect(first?.latest_reminder).toEqual({ stage: 2, status: 'failed', scheduledFor: '2026-09-17T08:00:00.000Z' });
+    const html = renderToStaticMarkup(page);
+    expect(html).toContain('17.09.2026');
+    expect(html).toContain('Etap 2');
+    expect(html).toContain('Nieudane');
+    const reads = queries.filter((q) => q.table === 'payment_reminders' && !q.head);
+    expect(reads[0]?.selection).toBe('invoice_id, scheduled_for');
+    expect(reads[1]).toMatchObject({ selection: 'invoice_id, stage, status, scheduled_for', exactCount: true });
+    expect(reads[1]?.filters).toEqual([['tenant_id', TENANT], ['invoice_id', [INVOICE]]]);
+  });
+
+  it('shows the settings link only to the owner of the active organization', async () => {
+    expect(await markup()).not.toContain('href="/settings/reminders"');
+    mocks.activeOrg.mockResolvedValue({ activeOrgId: TENANT, memberships: [{ organizationId: TENANT, role: 'owner', isActive: true }] });
+    expect(await markup()).toContain('href="/settings/reminders"');
+    mocks.activeOrg.mockResolvedValue({ activeOrgId: TENANT, memberships: [{ organizationId: TENANT, role: 'member', isActive: true }] });
+    expect(await markup()).not.toContain('href="/settings/reminders"');
+  });
+
   it('leaves fresh preparation available only when the status read succeeds and finds no pending row', async () => {
     const html = await markup();
     expect(html).toContain('aria-label="Przygotuj przypomnienie"');

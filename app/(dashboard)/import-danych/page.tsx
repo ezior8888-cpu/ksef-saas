@@ -1,29 +1,77 @@
 import Link from 'next/link';
-import { cn } from '@/lib/utils';
-import { Sparkles } from 'lucide-react';
+import { RiArrowRightLine, RiSparkling2Line } from '@remixicon/react';
 
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { getPageContext } from '@/lib/supabase/page-context';
+import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
+/** Klasy karty rachunku z Accounts Finory (`account-card`: przycisk `outline` jako karta). */
+const ACCOUNT_CARD = cn(
+  buttonVariants({ variant: 'outline' }),
+  'h-auto w-full flex-col items-stretch gap-4 p-4 text-left whitespace-normal',
+);
+
+function ImportHeading() {
+  return (
+    <div>
+      <h1 className="text-2xl font-semibold tracking-tight">Import danych</h1>
+      <p className="text-muted-foreground text-sm">
+        Magiczny import historii z KSeF — ten sam krok co w ustawieniach KSeF.
+      </p>
+    </div>
+  );
+}
+
+function MagicImportCardBody({ ready }: { ready: boolean }) {
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <Avatar className="size-9 items-center justify-center">
+          <AvatarFallback className="bg-transparent">
+            <RiSparkling2Line className="text-foreground size-5" />
+          </AvatarFallback>
+        </Avatar>
+        <Badge
+          variant="secondary"
+          className={cn(
+            'font-normal',
+            ready
+              ? 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400'
+              : 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
+          )}
+        >
+          {ready ? 'Gotowy' : 'Wymaga certyfikatu KSeF'}
+        </Badge>
+      </div>
+      <div>
+        <p className="text-foreground font-medium wrap-break-word">Magiczny Import historii</p>
+        <p className="text-muted-foreground text-sm wrap-break-word">
+          Pobierz faktury z KSeF w wybranym zakresie i uzupełnij kartotekę
+          kontrahentów oraz produktów bez ręcznego przepisywania.
+        </p>
+      </div>
+    </>
+  );
+}
+
+/** Import danych (P13): karta w stylu Accounts Finory; logika bez zmian. */
 export default async function ImportDanychPage() {
   const { supabase, tenantId } = await getPageContext();
 
   if (!tenantId) {
     return (
-      <div className="space-y-8 pb-6 text-[var(--ff-on-surface)]">
-        <div>
-          <h1 className="text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-            Import danych
-          </h1>
-          <p className="mt-2 text-sm text-[var(--ff-text-muted)]">
-            Magiczny import historii z KSeF — ten sam krok co w ustawieniach KSeF.
-          </p>
-        </div>
-        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 text-center text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_58%,transparent)]">
-          Import uruchomisz po założeniu organizacji i konfiguracji certyfikatu KSeF.
-        </div>
+      <div className="space-y-6 pb-6">
+        <ImportHeading />
+        <Alert>
+          <AlertDescription>
+            Import uruchomisz po założeniu organizacji i konfiguracji certyfikatu KSeF.
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }
@@ -37,58 +85,38 @@ export default async function ImportDanychPage() {
   const hasCredentials = !!tenant?.has_ksef_credentials;
 
   return (
-    <div className="space-y-8 pb-6 text-[var(--ff-on-surface)]">
-      <div>
-        <h1 className="text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-          Import danych
-        </h1>
-        <p className="mt-2 text-sm text-[var(--ff-text-muted)]">
-          Magiczny import historii z KSeF — ten sam krok co w ustawieniach KSeF.
-        </p>
-      </div>
+    <div className="space-y-6 pb-6">
+      <ImportHeading />
 
-      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 sm:p-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          <div className="mx-auto flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--ff-primary)_18%,transparent)] sm:mx-0">
-            <Sparkles className="h-6 w-6 text-[var(--ff-primary)]" />
-          </div>
-          <div className="flex-1 space-y-4 text-center sm:text-left">
-            <div>
-              <h2 className="text-lg font-bold tracking-tight">
-                Magiczny Import historii
-              </h2>
-              <p className="mt-2 text-[14px] leading-relaxed text-[color-mix(in_srgb,var(--ff-on-surface-variant)_58%,transparent)]">
-                Pobierz faktury z KSeF w wybranym zakresie i uzupełnij kartotekę
-                kontrahentów oraz produktów bez ręcznego przepisywania.
-              </p>
-            </div>
-            {hasCredentials ? (
-              <Link
-                href={`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`}
-                className={cn(buttonVariants({ variant: 'glass-primary', size: 'lg' }), 'w-full sm:w-auto')}
-              >
-                <Sparkles className="mr-2 h-4 w-4 shrink-0" />
-                Rozpocznij Magiczny Import
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {hasCredentials ? (
+          <Link
+            href={`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`}
+            className={ACCOUNT_CARD}
+          >
+            <MagicImportCardBody ready />
+            <span className="text-primary inline-flex items-center gap-1.5 text-sm font-medium">
+              Rozpocznij Magiczny Import
+              <RiArrowRightLine className="size-4" aria-hidden />
+            </span>
+          </Link>
+        ) : (
+          <div className={cn(ACCOUNT_CARD, 'hover:bg-background cursor-default dark:hover:bg-input/30')}>
+            <MagicImportCardBody ready={false} />
+            <p className="text-muted-foreground text-sm">
+              Aby uruchomić import, najpierw wgraj certyfikat KSeF w{' '}
+              <Link href="/settings/ksef" className="text-primary font-medium underline underline-offset-2">
+                ustawieniach KSeF
               </Link>
-            ) : (
-              <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 p-4 text-left text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_75%,transparent)]">
-                Aby uruchomić import, najpierw wgraj certyfikat KSeF w{' '}
-                <Link
-                  href="/settings/ksef"
-                  className="font-semibold text-[var(--ff-primary)] underline underline-offset-2"
-                >
-                  ustawieniach KSeF
-                </Link>
-                .
-              </div>
-            )}
+              .
+            </p>
           </div>
-        </div>
+        )}
       </div>
 
       {tenant?.nip ? (
-        <p className="text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_50%,transparent)]">
-          Aktywna organizacja: <span className="font-medium">{tenant.name}</span>{' '}
+        <p className="text-muted-foreground text-sm">
+          Aktywna organizacja: <span className="text-foreground font-medium">{tenant.name}</span>{' '}
           · NIP <span className="font-mono">{tenant.nip}</span>
         </p>
       ) : null}

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 
+import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout';
 import { ImportSourceSelector } from '@/components/onboarding/import-source-selector';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
@@ -41,21 +42,17 @@ export default async function ImportSourcePage() {
 
   const hasCertificate = !!tenant.has_ksef_credentials;
 
+  // Plan Finora P15 (E10b): układ logowania Finory zamiast szkła.
   return (
-    <div className="ff-dashboard relative flex min-h-screen items-center justify-center overflow-hidden p-4 text-[var(--ff-on-surface)]">
-      <div className="ff-mesh-gradient" aria-hidden />
-      <div className="ff-orb-tr" aria-hidden />
-      <div className="ff-orb-bl" aria-hidden />
-
-      <div className="relative z-[1] w-full max-w-3xl">
-        <div className="ff-glass-pane rounded-3xl p-8 lg:p-12">
-          <ImportSourceSelector
-            tenantId={tenantId}
-            tenantName={tenant.name ?? ''}
-            hasCertificate={hasCertificate}
-          />
-        </div>
-      </div>
-    </div>
+    <AuthSplitLayout
+      panelTitle="Przenieś historię faktur"
+      panelText="Pobierzemy faktury z KSeF albo z pliku z poprzedniego programu. Możesz też zacząć od zera i wrócić do importu później."
+    >
+      <ImportSourceSelector
+        tenantId={tenantId}
+        tenantName={tenant.name ?? ''}
+        hasCertificate={hasCertificate}
+      />
+    </AuthSplitLayout>
   );
 }

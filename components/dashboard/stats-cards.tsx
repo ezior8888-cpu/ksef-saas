@@ -13,6 +13,8 @@ export type StatItem = {
   value: string
   icon: ComponentType<{ className?: string }>
   valueClassName?: string
+  /** Pełna wartość w `title`, gdy `value` jest skrótem (plan Finora §7.1). */
+  valueTitle?: string
   /** Podpis pod etykietą: źródło liczby albo zastrzeżenie. */
   note?: ReactNode
 }
@@ -63,7 +65,10 @@ const StatsCards = ({ stats, iconPosition = 'left', footer, className }: StatsCa
                         </div>
                       )}
                       <div className='min-w-0'>
-                        <h4 className={cn('text-foreground text-2xl font-medium tabular-nums', stat.valueClassName)}>
+                        <h4
+                          className={cn('text-foreground text-2xl font-medium tabular-nums', stat.valueClassName)}
+                          title={stat.valueTitle}
+                        >
                           {stat.value}
                         </h4>
                         <p className='text-muted-foreground text-sm'>{stat.label}</p>

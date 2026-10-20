@@ -384,7 +384,7 @@ export async function triggerCoPilotNowAction(
   if (!settings?.accountant_email?.trim()) {
     return {
       success: false,
-      error: 'Skonfiguruj księgowego w Ustawienia → Co-Pilot',
+      error: 'Skonfiguruj księgową w Ustawienia → Księgowa',
     };
   }
 

@@ -1,15 +1,12 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  CashFlowDashboard,
-  type CashFlowInvoiceRow,
-} from '@/components/expenses/cash-flow-dashboard';
+import { KpirFinanceCard } from '@/components/przeplywy/finora/chart-finance';
+import { getCashFlowData } from '@/lib/dashboard/cash-flow';
 import { getCosts, sumCostsByMonth } from '@/lib/dashboard/costs';
 import { getSalesSeries } from '@/lib/dashboard/monthly-figures';
 import { buildMonthReport } from '@/lib/dashboard/pulpit-report';
 import { formatPlMoney } from '@/lib/format/pl';
-import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
 import type { PageContext } from '@/lib/supabase/page-context';
 
 /**
@@ -148,14 +145,14 @@ function expense(id: string, fields: Row): Row {
   };
 }
 
-/** Kwota w kafelku „Dochód miesiąca” z wyrenderowanych `/przeplywy`. */
+/** Kwota „Zysk” karty „Ten miesiąc” z wyrenderowanych `/przeplywy` (dawniej kafelek „Dochód miesiąca”). */
 function cashFlowProfitLabel(html: string): string {
-  const match = /Dochód miesiąca<\/span><\/div><p[^>]*>([^<]+)<\/p>/.exec(html);
-  if (!match) throw new Error('Brak kafelka „Dochód miesiąca” w znaczniku');
+  const match = /data-figure="profit"[^>]*>([^<]+)</.exec(html);
+  if (!match) throw new Error('Brak kwoty „Zysk” w znaczniku karty Przepływów');
   return match[1]!;
 }
 
-describe('„Zysk” na Pulpicie = „Dochód miesiąca” na /przeplywy', () => {
+describe('„Zysk” na Pulpicie = „Zysk” miesiąca na /przeplywy (dawny „Dochód miesiąca”)', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
@@ -215,36 +212,17 @@ describe('„Zysk” na Pulpicie = „Dochód miesiąca” na /przeplywy', () =>
       sumCostsByMonth(costs, series.months.map((m) => m.key)),
     );
 
-    // /przeplywy: wiersze jak w `app/(dashboard)/przeplywy/page.tsx`.
-    const invoices = (tables.invoices ?? []).filter((r) =>
-      r.direction === 'outgoing' && r.ksef_status === 'accepted' && r.ksef_environment === 'test');
-    const settled = await fetchSettledAdvancesNet(
-      supabase, TENANT, invoices as Array<{ id: string; invoice_kind: string; advance_invoice_ids: string[] | null }>,
-    );
-    const invoiceRows = invoices.map((inv) => ({
-      issue_date: String(inv.issue_date),
-      net_total: Number(inv.net_total),
-      gross_total: Number(inv.gross_total),
-      invoice_kind: inv.invoice_kind as CashFlowInvoiceRow['invoice_kind'],
-      settled_advances_net: settled.get(String(inv.id)) ?? null,
-    }));
-    const expenseRows = (tables.expenses ?? [])
-      .filter((r) => r.is_deductible === true)
-      .map((r) => ({
-        issue_date: String(r.issue_date),
-        net_amount: Number(r.net_amount),
-        gross_amount: Number(r.gross_amount),
-        vat_amount: Number(r.vat_amount),
-        vat_deductible_amount: Number(r.vat_deductible_amount),
-        document_type: String(r.document_type),
-        kpir_column: 'col_13' as const,
-      }));
+    // /przeplywy: odczyt strony (od E5 w `getCashFlowData`) i jej karta „Ten miesiąc”.
+    const cashFlow = await getCashFlowData(supabase, TENANT, NOW);
     const html = renderToStaticMarkup(
-      <CashFlowDashboard
-        invoices={invoiceRows}
-        expenses={expenseRows}
-        pendingReviewCount={0}
-        dataFrom="2027-01-01"
+      <KpirFinanceCard
+        months={cashFlow.months}
+        revenue={cashFlow.revenue}
+        costs={cashFlow.costs}
+        profit={cashFlow.profit}
+        report={cashFlow.report}
+        revenueChangePct={cashFlow.revenueChangePct}
+        costsHint="none"
       />,
     );
 
@@ -252,6 +230,8 @@ describe('„Zysk” na Pulpicie = „Dochód miesiąca” na /przeplywy', () =>
     expect(report.revenue).toBe(21234.56);
     expect(report.costs).toBe(623.1);
     expect(report.profit).toBe(20611.46);
-    expect(cashFlowProfitLabel(html)).toBe(formatPlMoney(report.profit));
+    // Średnia też ta sama: /przeplywy liczy ją z 11 pełnych miesięcy jak Pulpit.
+    expect(cashFlow.report).toEqual(report);
+    expect(cashFlowProfitLabel(html)).toBe(`${formatPlMoney(report.profit)} zł`);
   });
 });

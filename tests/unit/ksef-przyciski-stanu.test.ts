@@ -425,7 +425,8 @@ describe('automaticResendExpected — jedna definicja automatu dla zdania i znac
 
   it('strażnik: listy faktur (bez kodu błędu) zostają przy „Błąd”', () => {
     const html = renderToStaticMarkup(StatusBadge({ status: 'failed' }));
-    expect(html).toContain('</span>Błąd</span>');
+    // Plakietka Finory (E3b) nie ma już kropki przed etykietą — wciąż cała etykieta to samo „Błąd”.
+    expect(html).toMatch(/>Błąd<\/span>/);
   });
 });
 
