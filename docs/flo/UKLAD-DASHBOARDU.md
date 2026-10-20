@@ -213,8 +213,13 @@ lib/dashboard/receivables-aging.ts           należności według terminu
 lib/dashboard/recent-invoices.ts             ostatnie faktury
 lib/dashboard/pulpit-report.ts               karta „Ten miesiąc”
 lib/dashboard/vat-limit.ts                   limit zwolnienia z VAT (na lib/flo/functions/vat-limit.ts)
-components/dashboard/vat-summary-card.tsx    przeniesione na /przeplywy
-components/dashboard/sales-chart-card.tsx    przeniesione na /przeplywy
+app/(dashboard)/przeplywy/page.tsx           Przepływy = Cash Flow Finory (E5)
+components/przeplywy/                        karty Przepływów i ich ładowarki (E5;
+                                             dawne vat-summary-card, sales-chart-card
+                                             i monthly-figures-card usunięte)
+lib/dashboard/cash-flow.ts                   liczby /przeplywy „jak w KPiR”
+lib/dashboard/inflows.ts                     wpływy według oznaczonych wpłat
+lib/dashboard/cash-movements.ts              agregaty kart Przepływów
 
 --- poniżej wszystko należy do Masła ---
 app/(dashboard)/dashboard/_components/flo-card.tsx
@@ -319,7 +324,8 @@ Plan: `docs/koordynacja/PLAN-FINORA.md`, P1 i §2.4.
 - **`ff-flo-legacy`** obejmuje sam slot FLO (korzeń każdej z trzech gałęzi),
   nie siatkę kart. Karty stoją na presecie Finory.
 - **Szyna** (`aside` w `FloScreen`) niesie tylko baner certyfikatu.
-  `MonthlyFiguresCard` zniknął z Pulpitu (zostaje na `/przeplywy` do E5).
+  `MonthlyFiguresCard` zniknął z Pulpitu, a w E5 także z `/przeplywy` (jego
+  liczby są w karcie „Podsumowanie podatku VAT”).
   Reguła chowająca szeroki baner `.ff-shell-banner` od `lg` zostaje.
 - **Awaria agenta:** tekst „Liczby miesiąca są w kartach poniżej” (od `lg`)
   albo „… w zakładce „Miesiąc”” (telefon) zamiast „Liczby miesiąca obok są

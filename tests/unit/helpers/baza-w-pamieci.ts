@@ -5,7 +5,7 @@
  * przez import czyta potem eksport — bez ręcznego przepisywania.
  *
  * Obsługa: select (kolumny, count/head), insert (wiersz albo tablica, z
- * `.select()` zwraca wstawione), update, delete, eq/neq/in/is/not/gte/lte/gt,
+ * `.select()` zwraca wstawione), update, delete, eq/neq/in/is/not/gte/lte/gt/lt,
  * `or` dla kontroli środowiska z data-fetchera, order, limit, range, single,
  * maybeSingle. Kolumny JSON jak w PostgREST: `alias:kolumna->klucz` w select
  * (pełny wiersz zostaje, alias dochodzi) i `kolumna->klucz` w filtrach.
@@ -108,6 +108,7 @@ export function memoryClient(tables: MemoryTables, options: { failInsertInto?: r
       gte: (k: string, v: unknown) => { predicates.push((r) => String(r[k]) >= String(v)); return q; },
       lte: (k: string, v: unknown) => { predicates.push((r) => String(r[k]) <= String(v)); return q; },
       gt: (k: string, v: unknown) => { predicates.push((r) => String(r[k]) > String(v)); return q; },
+      lt: (k: string, v: unknown) => { predicates.push((r) => String(r[k]) < String(v)); return q; },
       or: (expr: string) => {
         // Kontrola proweniencji data-fetchera: przyjęte bez środowiska albo z innego.
         const m = /^ksef_environment\.is\.null,ksef_environment\.neq\.(test|demo|production)$/.exec(expr);

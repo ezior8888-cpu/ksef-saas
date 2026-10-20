@@ -129,9 +129,10 @@ describe('getCosts — jedna droga kosztów Pulpitu', () => {
       cost: 123,
       outflow: 123,
       vatDeductible: 0,
-      // Plan Finora P10 (E7): pola analizy kosztów z tego samego wiersza.
+      // Plan Finora P10 (E7) i P2 (E5): pola z tego samego wiersza.
       categoryLabel: null,
       vat: 23,
+      documentNumber: null,
       isReviewed: true,
     });
   });
@@ -273,7 +274,7 @@ describe('getCosts — jedna droga kosztów Pulpitu', () => {
 describe('sumCostsByMonth', () => {
   const entry = (issueDate: string, cost: number): CostEntry => ({
     id: issueDate, issueDate, sellerNip: null, sellerName: null, cost, outflow: cost, vatDeductible: 0,
-    categoryLabel: null, vat: 0, isReviewed: true,
+    categoryLabel: null, vat: 0, documentNumber: null, isReviewed: true,
   });
 
   it('sumuje per klucz RRRR-MM w kolejności kluczy, z zerem dla pustego miesiąca', () => {
