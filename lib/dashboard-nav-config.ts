@@ -9,7 +9,9 @@ import {
   RiFileAddLine,
   RiFileList3Line,
   RiInboxArchiveLine,
+  RiLineChartLine,
   RiMoreLine,
+  RiPieChart2Line,
   RiReceiptLine,
   RiSettings3Line,
   RiUpload2Line,
@@ -34,8 +36,8 @@ export interface DashboardNavSection {
 
 /**
  * Sekcje menu wg planu Finora §4 — tylko trasy, które istnieją. Trasy
- * z kolejnych etapów (faktury cykliczne, analizy, bank) dochodzą razem
- * ze stronami.
+ * z kolejnych etapów (faktury cykliczne, bank) dochodzą razem ze stronami;
+ * analizy doszły w E7.
  */
 export const dashboardNavSections: DashboardNavSection[] = [
   {
@@ -65,6 +67,24 @@ export const dashboardNavSections: DashboardNavSection[] = [
     items: [
       { href: "/expenses", label: "Wydatki", icon: RiReceiptLine },
       { href: "/inbox", label: "Skrzynka KSeF", icon: RiInboxArchiveLine },
+    ],
+  },
+  {
+    // Plan Finora E7 (P10, P11): ciężkie agregaty — bez prefetchu (§4).
+    title: "Analizy",
+    items: [
+      {
+        href: "/analizy/sprzedaz",
+        label: "Analiza sprzedaży",
+        icon: RiLineChartLine,
+        prefetch: false,
+      },
+      {
+        href: "/analizy/koszty",
+        label: "Analiza kosztów",
+        icon: RiPieChart2Line,
+        prefetch: false,
+      },
     ],
   },
   {

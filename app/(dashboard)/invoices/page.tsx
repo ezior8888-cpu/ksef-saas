@@ -24,7 +24,6 @@ import {
 } from '@/lib/invoices/list-row-facts';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { getPageContext } from '@/lib/supabase/page-context';
-import { BatchPdfDownload } from '@/components/invoices/batch-pdf-download';
 import type { InvoiceFactsById, InvoiceRow } from '@/components/invoices/invoice-row-types';
 import { InvoiceStatTiles } from './_components/invoice-stat-tiles';
 import { InvoicesPagination } from './_components/invoices-pagination';
@@ -130,62 +129,67 @@ export default async function InvoicesPage({
   }
   const factsById: InvoiceFactsById = Object.fromEntries(facts);
 
+  // Układ `invoices-list/index.tsx` Finory: kafle, potem JEDNA karta z paskiem
+  // narzędzi, tabelą (od `lg`; niżej karty wierszy, §7.2) i stopką z paginacją.
+  // Strona nie ma widocznego nagłówka, jak w szablonie — tytuł dla czytników ekranu.
   return (
-    <div className="space-y-6 pb-10">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Faktury wystawione</h1>
-          <p className="text-muted-foreground text-sm">
-            Faktury sprzedażowe — szkice, wysłane i przyjęte w KSeF
-          </p>
-        </div>
-        <BatchPdfDownload />
-      </div>
+    <div className="space-y-6">
+      <h1 className="sr-only">Faktury wystawione</h1>
 
       <InvoiceStatTiles supabase={supabase} tenantId={tenantId} />
 
-      <Card className="gap-0 py-0 shadow-none">
-        <InvoicesToolbar params={params} filtered={filtered} />
-      </Card>
+      <Card>
+        <div className="w-full">
+          <div className="border-b">
+            <InvoicesToolbar params={params} filtered={filtered} />
 
-      {paymentFilterError ? (
-        <Alert variant="destructive">
-          <AlertTitle>Filtr płatności jest chwilowo niedostępny</AlertTitle>
-          <AlertDescription>
-            <p>
-              Filtr „{INVOICE_PAYMENT_FILTERS[params.payment].label}” wymaga ustawionego środowiska KSeF
-              w konfiguracji serwera, a go brakuje. Pozostałe filtry działają; zgłoś to w pomocy FaktWay.
-            </p>
-            <Link href={invoiceListHref(params, { payment: 'wszystkie' })} className="font-medium underline">
-              Pokaż faktury bez filtra płatności
-            </Link>
-          </AlertDescription>
-        </Alert>
-      ) : error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Nie udało się pobrać faktur: {error.message}</AlertTitle>
-        </Alert>
-      ) : (
-        <>
-          {factsError ? (
-            <Alert>
-              <AlertTitle>Nie udało się policzyć płatności</AlertTitle>
-              <AlertDescription>
-                Kolumny „Płatność”, „Do zapłaty” i akcja „Korekta” są chwilowo ukryte: {factsError}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          <InvoicesPullToRefresh
-            tenantId={tenantId}
-            initialInvoices={rows}
-            facts={factsById}
-            today={today}
-            filtered={filtered}
-            summary={total === 0 ? undefined : 'Sortowanie wg daty utworzenia'}
-          />
-          {total > 0 ? <InvoicesPagination params={params} total={total} /> : null}
-        </>
-      )}
+            {paymentFilterError ? (
+              <div className="px-4 pb-4">
+                <Alert variant="destructive">
+                  <AlertTitle>Filtr płatności jest chwilowo niedostępny</AlertTitle>
+                  <AlertDescription>
+                    <p>
+                      Filtr „{INVOICE_PAYMENT_FILTERS[params.payment].label}” wymaga ustawionego środowiska KSeF
+                      w konfiguracji serwera, a go brakuje. Pozostałe filtry działają; zgłoś to w pomocy FaktWay.
+                    </p>
+                    <Link href={invoiceListHref(params, { payment: 'wszystkie' })} className="font-medium underline">
+                      Pokaż faktury bez filtra płatności
+                    </Link>
+                  </AlertDescription>
+                </Alert>
+              </div>
+            ) : error ? (
+              <div className="px-4 pb-4">
+                <Alert variant="destructive">
+                  <AlertTitle>Nie udało się pobrać faktur: {error.message}</AlertTitle>
+                </Alert>
+              </div>
+            ) : (
+              <>
+                {factsError ? (
+                  <div className="px-4 pb-4">
+                    <Alert>
+                      <AlertTitle>Nie udało się policzyć płatności</AlertTitle>
+                      <AlertDescription>
+                        Kolumny „Płatność”, „Do zapłaty” i akcja „Korekta” są chwilowo ukryte: {factsError}
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                ) : null}
+                <InvoicesPullToRefresh
+                  tenantId={tenantId}
+                  initialInvoices={rows}
+                  facts={factsById}
+                  today={today}
+                  filtered={filtered}
+                  summary={total === 0 ? undefined : 'Sortowanie wg daty utworzenia'}
+                />
+              </>
+            )}
+          </div>
+          {!paymentFilterError && !error && total > 0 ? <InvoicesPagination params={params} total={total} /> : null}
+        </div>
+      </Card>
     </div>
   );
 }

@@ -22,32 +22,29 @@ const STATUS_CONFIG: Record<
   active: {
     label: 'Czynny VAT',
     icon: CheckCircle2,
+    // Kolory statusów Finory (`INVOICE_STATUS_STYLES`, plakietka „Paid”).
     className:
-      'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
+      'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400',
   },
   exempt: {
     label: 'Zwolniony VAT',
     icon: CheckCircle2,
-    className:
-      'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
+    className: 'bg-primary/10 text-primary',
   },
   inactive: {
     label: 'Wykreślony',
     icon: XCircle,
-    className:
-      'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20',
+    className: 'bg-destructive/10 text-destructive',
   },
   unknown: {
     label: 'Niezweryfikowany',
     icon: HelpCircle,
-    className:
-      'bg-foreground/5 text-muted-foreground border-glass-border',
+    className: 'bg-muted text-muted-foreground',
   },
   pending: {
     label: 'Sprawdzanie...',
     icon: Loader2,
-    className:
-      'bg-foreground/5 text-muted-foreground border-glass-border',
+    className: 'bg-muted text-muted-foreground',
   },
 };
 
@@ -75,12 +72,12 @@ export function VatStatusBadge({
   const isWarning = Boolean(warning) && status === 'active';
 
   const finalClassName = isWarning
-    ? 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20'
+    ? 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400'
     : config.className;
 
   const sizeClass =
     size === 'sm'
-      ? 'px-2.5 py-1 text-xs gap-1.5'
+      ? 'px-2 py-0.5 text-xs gap-1'
       : 'px-3 py-1.5 text-sm gap-2';
 
   const iconSize = size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5';
@@ -92,7 +89,7 @@ export function VatStatusBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full border font-medium backdrop-blur-glass-sm',
+        'inline-flex w-fit shrink-0 items-center rounded-none font-medium whitespace-nowrap',
         finalClassName,
         sizeClass,
       )}

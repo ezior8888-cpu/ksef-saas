@@ -4,9 +4,10 @@ import { useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Loader2, RotateCcw, Send, Settings } from 'lucide-react';
+import { RiArrowGoBackLine, RiLoader4Line, RiSettings3Line, RiUploadCloud2Line } from '@remixicon/react';
 
 import { Button, buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { failedInvoiceButtons, resetDoneMessage } from '@/lib/invoices/ksef-send-policy';
 import { resendInvoiceAction, resetInvoiceToDraftAction } from './actions-detail';
@@ -79,26 +80,28 @@ export function FailedInvoiceActions({
     });
   };
 
+  // Prawa kolumna podglądu (Finora `invoice-actions.tsx`): opis, pod nim przyciski jeden pod
+  // drugim na całą szerokość (kolejność przycisków bez zmian).
   return (
-    <div className="w-full flex flex-col items-end gap-2">
-      <p className="text-right text-sm text-[var(--ff-text-muted)]">{plan.info}</p>
+    <div className="w-full space-y-4">
+      <p className="text-muted-foreground text-sm">{plan.info}</p>
       {(plan.resend || plan.reset || plan.settings) && (
-        <div className="flex flex-wrap gap-2 justify-end">
+        <div className="space-y-4">
           {plan.settings && (
-            <Link href="/settings/ksef" className={buttonVariants({ variant: 'outline' })}>
-              <Settings className="h-4 w-4 mr-2" />
+            <Link href="/settings/ksef" className={cn(buttonVariants({ variant: 'outline' }), 'w-full')}>
+              <RiSettings3Line />
               Ustawienia KSeF
             </Link>
           )}
           {plan.reset && (
-            <Button variant="outline" onClick={handleReset} disabled={busy}>
-              {isResetting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+            <Button variant="outline" className="w-full" onClick={handleReset} disabled={busy}>
+              {isResetting ? <RiLoader4Line className="animate-spin" /> : <RiArrowGoBackLine />}
               Wróć do szkicu
             </Button>
           )}
           {plan.resend && (
-            <Button onClick={handleResend} disabled={busy}>
-              {isResending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+            <Button className="w-full" onClick={handleResend} disabled={busy}>
+              {isResending ? <RiLoader4Line className="animate-spin" /> : <RiUploadCloud2Line />}
               Wyślij ponownie
             </Button>
           )}

@@ -1,17 +1,24 @@
 'use client';
 
+// Plan Finora P15 (E10b): wybór źródła importu na prymitywach Finory (karta
+// z ramką, `Button`, `Badge`, ikony Remix) zamiast szkła i zieleni. Logika bez
+// zmian: Magiczny import tylko z certyfikatem (BUG-009), import z pliku przez
+// `FileImportDialog`, „Pomiń” przez `skipMagicImportAction`. Ten sam
+// komponent pokazuje okno `PostRegisterImportModal` na Pulpicie.
+
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import {
-  ArrowRight,
-  ChevronRight,
-  FileSpreadsheet,
-  FileText,
-  Loader2,
-  ShieldCheck,
-  Sparkles,
-} from 'lucide-react';
+  RiArrowRightLine,
+  RiArrowRightSLine,
+  RiFileExcel2Line,
+  RiFileTextLine,
+  RiLoader4Line,
+  RiShieldCheckLine,
+  RiSparkling2Line,
+} from '@remixicon/react';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 import {
@@ -38,6 +45,14 @@ const FILE_IMPORT_OPTIONS: readonly {
   { id: 'jpk_fa', label: 'Inny program', sub: 'Plik JPK_FA (uniwersalny)' },
 ] as const;
 
+function SparkleBadge() {
+  return (
+    <div className="flex size-10 shrink-0 items-center justify-center bg-primary/10 text-primary">
+      <RiSparkling2Line className="size-5" />
+    </div>
+  );
+}
+
 export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: Props) {
   const [importType, setImportType] = useState<FileImportSource | null>(null);
   const [isSkipping, startSkip] = useTransition();
@@ -53,10 +68,10 @@ export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: P
   return (
     <div className="space-y-6" data-tenant-id={tenantId}>
       <div>
-        <h1 className="text-3xl font-display font-semibold tracking-tighter-display">
+        <h1 className="mb-2 text-2xl font-semibold">
           {firstName ? `Witaj, ${firstName}!` : 'Witaj!'}
         </h1>
-        <p className="mt-2 text-muted-foreground">
+        <p className="text-muted-foreground">
           {hasCertificate
             ? 'Skąd przenosisz dane? Zaimportujemy historię w 60 sekund.'
             : 'Konto firmy gotowe. Zostało jeszcze jedno połączenie z KSeF.'}
@@ -67,13 +82,11 @@ export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: P
           Bez certyfikatu pokazujemy jasny komunikat „najpierw wgraj certyfikat",
           żeby nie kusić niedziałającym przyciskiem zaraz po rejestracji. */}
       {!hasCertificate ? (
-        <div className="rounded-3xl border border-emerald-500/25 bg-emerald-500/[0.06] p-6">
+        <div className="border border-primary/30 bg-card p-4">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15">
-              <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
+            <SparkleBadge />
             <div className="min-w-0 flex-1">
-              <h3 className="font-display text-lg font-semibold tracking-tighter-text">
+              <h3 className="text-base font-semibold">
                 Przeniesiemy Twoje dane z KSeF
               </h3>
               <p className="mb-4 mt-1.5 text-sm leading-relaxed text-muted-foreground">
@@ -82,14 +95,11 @@ export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: P
                 wgraj certyfikat KSeF swojej firmy — bez niego nie mamy dostępu do
                 Twojej historii.
               </p>
-              <Link
-                href="/settings/ksef"
-                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
-              >
-                <ShieldCheck className="h-4 w-4" />
+              <Button render={<Link href="/settings/ksef" />} nativeButton={false}>
+                <RiShieldCheckLine />
                 Wgraj certyfikat KSeF
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+                <RiArrowRightLine />
+              </Button>
             </div>
           </div>
         </div>
@@ -101,27 +111,23 @@ export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: P
               `/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`,
             )
           }
-          className="group w-full rounded-3xl border border-emerald-500/25 bg-emerald-500/[0.06] p-6 text-left transition-all duration-200 ease-apple hover:border-emerald-500/40 hover:bg-emerald-500/[0.1] active:scale-[0.99]"
+          className="group w-full border border-primary/30 bg-card p-4 text-left transition-colors hover:bg-muted"
         >
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15">
-              <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
+            <SparkleBadge />
             <div className="min-w-0 flex-1">
               <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                <h3 className="font-display text-lg font-semibold tracking-tighter-text">
+                <h3 className="text-base font-semibold">
                   Magiczny Import z KSeF
                 </h3>
-                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                  ZALECANE
-                </span>
+                <Badge>ZALECANE</Badge>
               </div>
               <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
                 Pobieramy 6 miesięcy Twojej historii faktur prosto z KSeF.
                 Auto-buduje katalog kontrahentów i produktów.
               </p>
-              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground transition-all group-hover:gap-2">
-                Rozpocznij <ArrowRight className="h-4 w-4" />
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-primary transition-all group-hover:gap-2">
+                Rozpocznij <RiArrowRightLine className="size-4" />
               </span>
             </div>
           </div>
@@ -129,32 +135,32 @@ export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: P
       )}
 
       <div className="space-y-3">
-        <p className="px-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Lub przenieś z innego programu
         </p>
 
-        <div className="overflow-hidden rounded-3xl border border-glass-border bg-foreground/[0.02]">
+        <div className="border bg-card">
           {FILE_IMPORT_OPTIONS.map((opt, idx, arr) => (
             <button
               key={opt.id}
               type="button"
               onClick={() => setImportType(opt.id)}
-              className={`flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-foreground/5 ${
-                idx !== arr.length - 1 ? 'border-b border-glass-border/50' : ''
+              className={`flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-muted ${
+                idx !== arr.length - 1 ? 'border-b' : ''
               }`}
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground/5">
+              <div className="flex size-9 shrink-0 items-center justify-center bg-muted">
                 {opt.id === 'jpk_fa' ? (
-                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <RiFileTextLine className="size-4 text-muted-foreground" />
                 ) : (
-                  <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                  <RiFileExcel2Line className="size-4 text-muted-foreground" />
                 )}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{opt.label}</p>
                 <p className="text-xs text-muted-foreground">{opt.sub}</p>
               </div>
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <RiArrowRightSLine className="size-4 shrink-0 text-muted-foreground" />
             </button>
           ))}
         </div>
@@ -170,7 +176,7 @@ export function ImportSourceSelector({ tenantId, tenantName, hasCertificate }: P
         >
           {isSkipping ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <RiLoader4Line className="animate-spin" />
               Otwieram aplikację...
             </>
           ) : (

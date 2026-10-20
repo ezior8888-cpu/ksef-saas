@@ -1,16 +1,25 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Camera, Image as ImageIcon, Loader2, X } from 'lucide-react';
+import { RiCameraLine, RiImageLine, RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import {
   getOcrJobStatusAction,
   uploadExpensePhotoAction,
 } from '@/app/actions/expenses';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { MOBILE_MEDIA } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 type CaptureState =
@@ -25,6 +34,9 @@ export function CaptureButton({
   triggerClassName?: string;
 } = {}) {
   const router = useRouter();
+  // Strona arkusza ustalana przy otwarciu (telefon: od dołu, jak wcześniej;
+  // od `lg`: z prawej, jak arkusz „Add Transaction” Finory).
+  const [sheetSide, setSheetSide] = useState<'bottom' | 'right'>('right');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const [showSheet, setShowSheet] = useState(false);
@@ -129,25 +141,20 @@ export function CaptureButton({
   return (
     <>
       <Button
-        variant="outline"
-        size="lg"
-        onClick={() => setShowSheet(true)}
+        onClick={() => {
+          setSheetSide(window.matchMedia?.(MOBILE_MEDIA).matches ? 'bottom' : 'right');
+          setShowSheet(true);
+        }}
         disabled={state.kind === 'uploading' || state.kind === 'processing'}
-        className={cn(
-          'ff-glass-pane ff-glass-pane-hover border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--ff-primary)_8%,transparent)] hover:text-[var(--ff-primary)]',
-          triggerClassName,
-        )}
+        className={triggerClassName}
       >
         {state.kind === 'uploading' || state.kind === 'processing' ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <RiLoader4Line className="animate-spin" />
             {state.kind === 'uploading' ? 'Wgrywanie...' : 'Rozpoznaję...'}
           </>
         ) : (
-          <>
-            <Camera className="mr-2 h-4 w-4" />
-            Dodaj wydatek
-          </>
+          '+ Dodaj wydatek'
         )}
       </Button>
 
@@ -175,82 +182,70 @@ export function CaptureButton({
         }}
       />
 
-      <AnimatePresence>
-        {showSheet && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowSheet(false)}
-              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+      {/* Finora: „+ Add Transaction” otwiera arkusz (create-transaction-sheet,
+          `SheetContent className='sm:max-w-md'`). U nas arkusz ma dwa wyjścia:
+          aparat i plik; na telefonie wysuwa się od dołu, jak wcześniej. */}
+      <Sheet open={showSheet} onOpenChange={setShowSheet}>
+        <SheetContent
+          side={sheetSide}
+          className={cn('sm:max-w-md', sheetSide === 'bottom' && 'gap-0 p-0 pb-[var(--ff-safe-b)]')}
+        >
+          <SheetHeader>
+            <SheetTitle>Dodaj wydatek</SheetTitle>
+            <SheetDescription>Zdjęcie paragonu albo faktury — dane odczytamy sami.</SheetDescription>
+          </SheetHeader>
+          <div className="flex flex-col gap-3 px-4">
+            <CaptureOption
+              icon={<RiCameraLine />}
+              title="Zrób zdjęcie"
+              description="Na telefonie otwiera od razu aparat tylny"
+              onClick={() => fileInputRef.current?.click()}
+              highlighted
             />
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 z-50 p-4 pb-[calc(1rem+var(--ff-bottom-nav-h)+var(--ff-safe-b))] lg:bottom-8 lg:left-1/2 lg:max-w-md lg:-translate-x-1/2 lg:rounded-[var(--ff-radius-lg)] lg:pb-4"
-            >
-              <div className="ff-glass-pane space-y-3 rounded-[var(--ff-radius-lg)] p-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold tracking-tight text-[var(--ff-on-surface)]">
-                    Dodaj wydatek
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowSheet(false)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_6%,transparent)] text-[var(--ff-on-surface)] transition-colors hover:bg-white/10"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="ff-glass-pane ff-glass-pane-hover flex w-full items-center gap-3 rounded-[var(--ff-radius-lg)] border border-white/10 p-4 text-left transition-transform active:scale-[0.99]"
-                >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-primary)_22%,transparent)] text-[var(--ff-primary)]">
-                    <Camera className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-[var(--ff-on-surface)]">
-                      Zrób zdjęcie
-                    </p>
-                    <p className="text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-                      Na telefonie otwiera od razu aparat tylny
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => galleryInputRef.current?.click()}
-                  className="ff-glass-pane ff-glass-pane-hover flex w-full items-center gap-3 rounded-[var(--ff-radius-lg)] border border-white/10 p-4 text-left transition-transform active:scale-[0.99]"
-                >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_8%,transparent)] text-[var(--ff-on-surface)]">
-                    <ImageIcon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-[var(--ff-on-surface)]">
-                      Wybierz z galerii
-                    </p>
-                    <p className="text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-                      Zdjęcie lub PDF z plików
-                    </p>
-                  </div>
-                </button>
-
-                <p className="pt-2 text-center text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_50%,transparent)]">
-                  Akceptujemy: paragon, faktura VAT, faktura uproszczona. Max 10
-                  MB.
-                </p>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+            <CaptureOption
+              icon={<RiImageLine />}
+              title="Wybierz z galerii"
+              description="Zdjęcie lub PDF z plików"
+              onClick={() => galleryInputRef.current?.click()}
+            />
+          </div>
+          <SheetFooter>
+            <p className="text-muted-foreground text-center text-xs">
+              Akceptujemy: paragon, faktura VAT, faktura uproszczona. Max 10 MB.
+            </p>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </>
+  );
+}
+
+function CaptureOption({
+  icon,
+  title,
+  description,
+  onClick,
+  highlighted = false,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+  highlighted?: boolean;
+}) {
+  return (
+    <Button variant="outline" onClick={onClick} className="h-auto w-full justify-start gap-3 p-4 text-left whitespace-normal">
+      <Avatar className="size-10 after:border-0">
+        <AvatarFallback
+          className={cn('[&>svg]:size-5', highlighted ? 'bg-primary/10 text-primary dark:bg-primary/25' : 'bg-muted text-foreground')}
+        >
+          {icon}
+        </AvatarFallback>
+      </Avatar>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-foreground text-sm font-medium">{title}</span>
+        <span className="text-muted-foreground text-xs font-normal">{description}</span>
+      </span>
+    </Button>
   );
 }

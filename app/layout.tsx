@@ -33,8 +33,9 @@ const fraunces = Fraunces({
 // na liczby, NIP-y, numery faktur i daty — dzięki stałej szerokości znaku
 // kwoty w kolumnach tabel wyrównują się do przecinka. `latin-ext` jest
 // KRYTYCZNE dla polskich znaków (ą, ć, ę, ł, ń, ó, ś, ź, ż). Outfit jest
-// fontem zmiennym, więc bez listy wag. Landing, logowanie i marketing
-// (`.zova`) zostają na Geist — `styles/zova.css` ustawia go jawnie.
+// fontem zmiennym, więc bez listy wag. Landing i marketing (`.zova`) zostają
+// na Geist — `styles/zova.css` ustawia go jawnie. Logowanie od E10b (P15)
+// stoi na układzie Finory, więc też na Outfit.
 const outfit = Outfit({
   variable: '--font-outfit',
   subsets: ['latin', 'latin-ext'],

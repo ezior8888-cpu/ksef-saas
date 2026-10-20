@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 
+import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout';
 import { ImportProgressView } from '@/components/onboarding/import-progress-view';
 import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
@@ -18,11 +19,13 @@ export default async function ProgressPage({ params }: Props) {
 
   if (!job) redirect('/dashboard');
 
+  // Plan Finora P15 (E10b): układ logowania Finory zamiast pustej ramki.
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        <ImportProgressView initialJob={job} />
-      </div>
-    </div>
+    <AuthSplitLayout
+      panelTitle="Importujemy Twoje dane"
+      panelText="Postęp odświeża się sam. Możesz zamknąć stronę — skończymy w tle i wyślemy e‑mail, gdy import będzie gotowy."
+    >
+      <ImportProgressView initialJob={job} />
+    </AuthSplitLayout>
   );
 }

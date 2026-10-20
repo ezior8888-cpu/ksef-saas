@@ -67,6 +67,14 @@ const ROUTE_HELP: RouteHelp[] = [
     slugs: ['pierwsze-kroki-w-faktway', 'ksiega-przychodow-i-rozchodow'],
   },
   {
+    prefix: '/analizy/koszty',
+    slugs: ['kategoryzacja-kosztow', 'ksiega-przychodow-i-rozchodow'],
+  },
+  {
+    prefix: '/analizy/sprzedaz',
+    slugs: ['statusy-faktury-i-upo', 'pierwsze-kroki-w-faktway'],
+  },
+  {
     prefix: '/import-danych',
     slugs: ['magic-import-z-innych-programow'],
   },

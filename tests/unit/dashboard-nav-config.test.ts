@@ -93,6 +93,15 @@ describe('struktura menu (plan Finora §4)', () => {
           ['Skrzynka KSeF', '/inbox'],
         ],
       },
+      // Plan Finora E7: sekcja „Analizy” dochodzi razem ze stronami P10/P11
+      // (zasada wpinania §4) — świadoma zmiana oczekiwanej struktury menu.
+      {
+        title: 'Analizy',
+        items: [
+          ['Analiza sprzedaży', '/analizy/sprzedaz'],
+          ['Analiza kosztów', '/analizy/koszty'],
+        ],
+      },
       {
         title: 'Księgowość',
         items: [
@@ -149,6 +158,7 @@ describe('struktura menu (plan Finora §4)', () => {
     expect(more.map((s) => s.title)).toEqual([
       'Sprzedaż',
       'Koszty',
+      'Analizy',
       'Księgowość',
     ]);
     expect(more[0].items.map((i) => i.href)).toEqual([
@@ -167,5 +177,19 @@ describe('struktura menu (plan Finora §4)', () => {
     }
     expect(hrefs).toContain('/invoices');
     expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+
+  it('/analizy/* bez prefetchu (ciężkie agregaty, plan Finora §4)', () => {
+    const analizy = dashboardNavItems.filter((i) => i.href.startsWith('/analizy/'));
+    expect(analizy.map((i) => i.href)).toEqual(['/analizy/sprzedaz', '/analizy/koszty']);
+    for (const item of analizy) expect(item.prefetch, item.href).toBe(false);
+    const hrefs = getDashboardPrefetchHrefs();
+    expect(hrefs.filter((h) => h.startsWith('/analizy'))).toEqual([]);
+  });
+
+  it('/analizy/sprzedaz i /analizy/koszty aktywne po regule ogólnej, bez przecieku między sobą', () => {
+    expect(isActiveNavPath('/analizy/sprzedaz', '/analizy/sprzedaz')).toBe(true);
+    expect(isActiveNavPath('/analizy/koszty', '/analizy/sprzedaz')).toBe(false);
+    expect(isActiveNavPath('/analizy/sprzedazx', '/analizy/sprzedaz')).toBe(false);
   });
 });

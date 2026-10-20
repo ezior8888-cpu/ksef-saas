@@ -1,13 +1,24 @@
 import Link from 'next/link';
 
 import { CaptureButton } from '@/components/expenses/capture-button';
-import { ExpensesList } from '@/components/expenses/expenses-list';
-import { monthLabel, monthRange, parseExpenseMonth, shiftMonth } from '@/lib/expenses/month';
+import { ExpenseStatsCards } from '@/components/expenses/finora/expense-stat-cells';
+import { ExpensesTable } from '@/components/expenses/finora/expenses-table';
+import MonthSelector from '@/components/expenses/finora/month-selector';
+import { Alert, AlertTitle } from '@/components/ui/alert';
+import { buttonVariants } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { monthRange, parseExpenseMonth } from '@/lib/expenses/month';
 import { getPageContext } from '@/lib/supabase/page-context';
-import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Wydatki (plan Finora P8 ← Finora `/transactions`: `TransactionsView` =
+ * kafle + karta z tabelą, `space-y-6`). Nagłówek z wyborem miesiąca jak
+ * w Finora Monthly Analytics. Lista i jej zapytanie bez zmian (F-087: miesiąc
+ * od–do albo wszystkie „Do opisania”); kafle liczą własne zapytania (§2.4
+ * pkt 12) w osobnych granicach błędu.
+ */
 export default async function ExpensesPage({
   searchParams,
 }: {
@@ -39,74 +50,60 @@ export default async function ExpensesPage({
   const { data: expenses, error } = await expensesQuery;
 
   return (
-    <div className="space-y-8 pb-24 text-[var(--ff-on-surface)] lg:pb-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-6 pb-24 lg:pb-10">
+      <div className="flex justify-between gap-3 max-sm:flex-col sm:items-center">
         <div>
-          <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-            Wydatki
-          </h1>
-          <p className="text-sm text-[var(--ff-text-muted)]">
+          <h1 className="text-2xl font-semibold">Wydatki</h1>
+          <p className="text-muted-foreground text-sm">
             Faktury kosztowe i paragony — automatycznie kategoryzowane do KPiR
           </p>
-          <div className="ff-glass-pane inline-flex rounded-full p-1">
+        </div>
+        <div className="flex flex-wrap items-center gap-2 max-sm:self-end">
+          <nav aria-label="Widok listy wydatków" className="flex">
             <Link
               href="/expenses"
-              className={cn(
-                'rounded-full px-4 py-2 text-sm font-bold transition-colors',
-                !unreviewedOnly
-                  ? 'bg-[color-mix(in_srgb,var(--ff-on-surface)_12%,transparent)] text-[var(--ff-on-surface)]'
-                  : 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_65%,transparent)] hover:text-[var(--ff-on-surface)]',
-              )}
+              aria-current={!unreviewedOnly ? 'page' : undefined}
+              className={buttonVariants({ variant: !unreviewedOnly ? 'default' : 'outline' })}
             >
               Miesiąc
             </Link>
             <Link
               href="/expenses?filter=unreviewed"
-              className={cn(
-                'rounded-full px-4 py-2 text-sm font-bold transition-colors',
-                unreviewedOnly
-                  ? 'bg-[color-mix(in_srgb,var(--ff-on-surface)_12%,transparent)] text-[var(--ff-on-surface)]'
-                  : 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_65%,transparent)] hover:text-[var(--ff-on-surface)]',
-              )}
+              aria-current={unreviewedOnly ? 'page' : undefined}
+              className={buttonVariants({ variant: unreviewedOnly ? 'default' : 'outline' })}
             >
-              Do akceptacji
+              Do opisania
             </Link>
-          </div>
-        </div>
-        <div className="hidden lg:block">
-          <CaptureButton />
+          </nav>
+          {!unreviewedOnly ? (
+            <MonthSelector month={month} currentMonth={currentMonth} basePath="/expenses" />
+          ) : null}
         </div>
       </div>
 
-      {!unreviewedOnly && (
-        <nav className="flex items-center justify-between gap-3 text-sm" aria-label="Miesiąc wydatków">
-          <Link className="font-semibold text-[var(--ff-primary)]" href={`/expenses?miesiac=${shiftMonth(month, -1)}`}>
-            ← {monthLabel(shiftMonth(month, -1))}
-          </Link>
-          <span className="font-bold capitalize">{monthLabel(month)}</span>
-          {month < currentMonth ? (
-            <Link className="font-semibold text-[var(--ff-primary)]" href={`/expenses?miesiac=${shiftMonth(month, 1)}`}>
-              {monthLabel(shiftMonth(month, 1))} →
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
-      )}
+      <ExpenseStatsCards supabase={supabase} tenantId={tenantId} month={month} />
 
       {error ? (
-        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] border border-red-400/25 bg-[color-mix(in_srgb,#f87171_10%,transparent)] p-4 text-sm text-red-200">
-          Nie udało się pobrać wydatków: {error.message}
-        </div>
+        <>
+          <Alert variant="destructive">
+            <AlertTitle>Nie udało się pobrać wydatków: {error.message}</AlertTitle>
+          </Alert>
+          {/* Od `lg` przycisk stoi w pasku tabeli; bez tabeli dodawanie zostaje tu. */}
+          <div className="flex justify-end max-lg:hidden">
+            <CaptureButton />
+          </div>
+        </>
       ) : (
-        <ExpensesList
-          initialExpenses={expenses ?? []}
-          listVariant={unreviewedOnly ? 'unreviewed' : 'month'}
-        />
+        <Card>
+          <ExpensesTable
+            expenses={expenses ?? []}
+            listVariant={unreviewedOnly ? 'unreviewed' : 'month'}
+          />
+        </Card>
       )}
 
       <div className="fixed bottom-[calc(1.5rem+var(--ff-bottom-nav-h)+var(--ff-safe-b))] right-6 z-30 lg:hidden">
-        <CaptureButton />
+        <CaptureButton triggerClassName="h-11 px-4 shadow-lg" />
       </div>
     </div>
   );

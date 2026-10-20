@@ -4,25 +4,29 @@ import { useState, useTransition } from 'react';
 
 import { useRouter } from 'next/navigation';
 import {
-  Calendar,
-  CheckCircle2,
-  FileText,
-  Loader2,
-  Mail,
-  Save,
-  Send,
-  X,
-} from 'lucide-react';
+  RiCloseLine,
+  RiFileTextLine,
+  RiLoader4Line,
+  RiMailLine,
+  RiSendPlaneLine,
+} from '@remixicon/react';
 import { toast } from 'sonner';
 
 import {
   triggerCoPilotNowAction,
   updateAccountantSettingsAction,
 } from '@/app/actions/exports';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Switch } from '@/components/ui/switch';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import { isExportFormatSuspended } from '@/lib/exports/suspended-formats';
+import { plural } from '@/lib/i18n/plural';
+import { cn } from '@/lib/utils';
 import type { Tables } from '@/types/database';
 
 type SettingsRow = Tables<'accountant_settings'>;
@@ -213,153 +217,137 @@ export function CoPilotSettingsForm({
     }));
   };
 
+  // Wygląd z Finory: przełącznik jak `security-preferences-card.tsx`, pola
+  // jak `change-password-card.tsx`, wybór formatów jak karty wyboru
+  // z `two-factor-setup-dialog.tsx` (z `Checkbox` zamiast `RadioGroupItem`,
+  // bo formatów może być kilka), lista paczek jak `sessions-card.tsx`;
+  // sekcje rozdzielone `Separator`, przyciski pod spodem.
   return (
-    <div className="space-y-8 pb-24">
+    <FieldGroup>
+      <Field orientation="horizontal" className="items-center!">
+        <FieldContent>
+          <FieldLabel htmlFor="co-pilot-enabled">
+            {settings.co_pilot_enabled ? 'Co-Pilot aktywny' : 'Co-Pilot wyłączony'}
+          </FieldLabel>
+          <FieldDescription>
+            {settings.co_pilot_enabled
+              ? `Paczka wysyłana automatycznie ${settings.send_day_of_month}. dnia każdego miesiąca`
+              : 'Włącz aby zacząć automatyczne wysyłki'}
+          </FieldDescription>
+          <FieldDescription>
+            Automatycznie wysyłamy paczkę dokumentów księgowych do Twojego biura
+            rachunkowego
+          </FieldDescription>
+        </FieldContent>
+        <Switch
+          id="co-pilot-enabled"
+          checked={settings.co_pilot_enabled}
+          onCheckedChange={(v) => setSettings((s) => ({ ...s, co_pilot_enabled: v }))}
+          disabled={saveDisabled}
+        />
+      </Field>
+
+      <Separator />
+
       <div>
-        <h2 className="text-4xl font-display font-semibold tracking-tighter-display">
-          Co-Pilot Księgowego
-        </h2>
-        <p className="mt-2 text-muted-foreground">
-          Automatycznie wysyłamy paczkę dokumentów księgowych do Twojego biura
-          rachunkowego
-        </p>
+        <FieldLabel>Dane księgowego</FieldLabel>
+        <FieldDescription>Na ten adres lecą wszystkie paczki</FieldDescription>
       </div>
 
-      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-display font-semibold tracking-tighter-text">
-              {settings.co_pilot_enabled
-                ? 'Co-Pilot aktywny'
-                : 'Co-Pilot wyłączony'}
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              {settings.co_pilot_enabled
-                ? `Paczka wysyłana automatycznie ${settings.send_day_of_month}. dnia każdego miesiąca`
-                : 'Włącz aby zacząć automatyczne wysyłki'}
-            </p>
-          </div>
-          <GlassToggle
-            checked={settings.co_pilot_enabled}
-            onChange={(v) => setSettings((s) => ({ ...s, co_pilot_enabled: v }))}
-            disabled={saveDisabled}
-          />
-        </div>
-      </section>
-
-      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-5">
-        <div>
-          <h3 className="text-lg font-display font-semibold tracking-tighter-text">
-            Dane księgowego
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-              Imię i nazwisko
-            </Label>
-            <Input
-              value={settings.accountant_name}
-              disabled={saveDisabled}
-              onChange={(e) =>
-                setSettings({ ...settings, accountant_name: e.target.value })
-              }
-              placeholder="Anna Kowalska"
-            />
-          </div>
-          <div>
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-              Nazwa biura (opcjonalnie)
-            </Label>
-            <Input
-              value={settings.accountant_company}
-              disabled={saveDisabled}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  accountant_company: e.target.value,
-                })
-              }
-              placeholder="Biuro Rachunkowe Kowalska"
-            />
-          </div>
-        </div>
-
-        <div>
-          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-            Email księgowego
-          </Label>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <Field>
+          <FieldLabel htmlFor="co-pilot-accountant-name">Imię i nazwisko</FieldLabel>
           <Input
-            type="email"
-            autoComplete="email"
-            value={settings.accountant_email}
+            id="co-pilot-accountant-name"
+            value={settings.accountant_name}
             disabled={saveDisabled}
             onChange={(e) =>
-              setSettings({ ...settings, accountant_email: e.target.value })
+              setSettings({ ...settings, accountant_name: e.target.value })
             }
-            placeholder="anna@biuro.pl"
+            placeholder="Anna Kowalska"
           />
-          <p className="text-xs text-muted-foreground mt-1">
-            Na ten adres lecą wszystkie paczki
-          </p>
-        </div>
-      </section>
-
-      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-5">
-        <div>
-          <h3 className="text-lg font-display font-semibold tracking-tighter-text">
-            Formaty plików
-          </h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Wybierz formaty zgodne z programem Twojego księgowego
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {SELECTABLE_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              disabled={saveDisabled}
-              onClick={() => toggleFormat(opt.value)}
-              className={`text-left rounded-2xl border p-4 transition-all duration-200 ease-apple active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${
-                settings.preferred_formats.includes(opt.value)
-                  ? 'bg-foreground/5 border-foreground/30'
-                  : 'bg-[var(--ff-surface-container-low)] border-[var(--ff-glass-border)] hover:bg-[var(--ff-surface-hover)]'
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <div className="h-9 w-9 rounded-xl bg-foreground/5 flex items-center justify-center shrink-0">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm">{opt.label}</p>
-                  <p className="text-xs text-muted-foreground">{opt.desc}</p>
-                </div>
-                {settings.preferred_formats.includes(opt.value) ? (
-                  <CheckCircle2 className="h-4 w-4 text-foreground shrink-0" />
-                ) : null}
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-5">
-        <div>
-          <h3 className="text-lg font-display font-semibold tracking-tighter-text">
-            Harmonogram
-          </h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Kiedy wysyłać paczkę z poprzedniego miesiąca
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-          <Label className="text-sm">Wysyłaj</Label>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="co-pilot-accountant-company">Nazwa biura (opcjonalnie)</FieldLabel>
           <Input
+            id="co-pilot-accountant-company"
+            value={settings.accountant_company}
+            disabled={saveDisabled}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                accountant_company: e.target.value,
+              })
+            }
+            placeholder="Biuro Rachunkowe Kowalska"
+          />
+        </Field>
+      </div>
+
+      <Field>
+        <FieldLabel htmlFor="co-pilot-accountant-email">Email księgowego</FieldLabel>
+        <Input
+          id="co-pilot-accountant-email"
+          type="email"
+          autoComplete="email"
+          value={settings.accountant_email}
+          disabled={saveDisabled}
+          onChange={(e) =>
+            setSettings({ ...settings, accountant_email: e.target.value })
+          }
+          placeholder="anna@biuro.pl"
+        />
+      </Field>
+
+      <Separator />
+
+      <div>
+        <FieldLabel>Formaty plików</FieldLabel>
+        <FieldDescription>Wybierz formaty zgodne z programem Twojego księgowego</FieldDescription>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        {SELECTABLE_OPTIONS.map((opt) => {
+          const selected = settings.preferred_formats.includes(opt.value);
+          const id = `co-pilot-format-${opt.value}`;
+          return (
+            <div
+              key={opt.value}
+              className={cn(
+                'border-input relative flex w-full gap-3 rounded-lg border p-3',
+                selected && 'border-primary/50 bg-primary/10',
+              )}
+            >
+              <Checkbox
+                id={id}
+                checked={selected}
+                disabled={saveDisabled}
+                onCheckedChange={() => toggleFormat(opt.value)}
+                className="mt-0.5"
+              />
+              <div className="grid grow gap-1">
+                <FieldLabel htmlFor={id} className="gap-2 text-sm after:absolute after:inset-0">
+                  <RiFileTextLine className="size-5" aria-hidden />
+                  {opt.label}
+                </FieldLabel>
+                <p className="text-muted-foreground text-xs">{opt.desc}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <Separator />
+
+      <Field orientation="responsive">
+        <FieldContent>
+          <FieldLabel htmlFor="co-pilot-send-day">Harmonogram</FieldLabel>
+          <FieldDescription>Kiedy wysyłać paczkę z poprzedniego miesiąca</FieldDescription>
+        </FieldContent>
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+          <span className="text-muted-foreground text-sm">Wysyłaj</span>
+          <Input
+            id="co-pilot-send-day"
             type="number"
             min={1}
             max={28}
@@ -374,125 +362,108 @@ export function CoPilotSettingsForm({
             }}
             className="w-20 text-center"
           />
-          <Label className="text-sm whitespace-nowrap">
-            dnia każdego miesiąca o 8:00
-          </Label>
+          <span className="text-muted-foreground text-sm whitespace-nowrap">dnia każdego miesiąca o 8:00</span>
         </div>
+      </Field>
 
-        <div className="rounded-2xl bg-foreground/5 p-4 text-xs text-muted-foreground leading-relaxed">
+      <Alert role="note">
+        <AlertDescription>
           <strong>Przykład:</strong> jeśli wybierzesz 5. dzień, to{' '}
           <strong>5 maja</strong> wyślemy paczkę za <strong>kwiecień</strong>.{' '}
           Domyślnie ustawione na 5 — daje Ci to bufor na ostatnie korekty na koniec miesiąca.
-        </div>
-      </section>
+        </AlertDescription>
+      </Alert>
 
-      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-4">
-        <div>
-          <h3 className="text-lg font-display font-semibold tracking-tighter-text">
-            Co dołączać do paczki
-          </h3>
-        </div>
+      <Separator />
 
-        <CheckboxRow
-          label="Faktury wystawione (sprzedażowe)"
-          desc="Twoja sprzedaż — faktury które wystawiasz klientom"
-          checked={settings.include_issued_invoices}
-          disabled={saveDisabled}
-          onChange={(v) =>
-            setSettings({ ...settings, include_issued_invoices: v })
-          }
-        />
+      <div>
+        <FieldLabel>Co dołączać do paczki</FieldLabel>
+      </div>
 
-        <CheckboxRow
-          label="Faktury otrzymane (zakupowe)"
-          desc="Faktury kosztowe pobrane z inboxa KSeF"
-          checked={settings.include_received_invoices}
-          disabled={saveDisabled}
-          onChange={(v) =>
-            setSettings({ ...settings, include_received_invoices: v })
-          }
-        />
+      <CheckboxRow
+        id="co-pilot-include-issued"
+        label="Faktury wystawione (sprzedażowe)"
+        desc="Twoja sprzedaż — faktury które wystawiasz klientom"
+        checked={settings.include_issued_invoices}
+        disabled={saveDisabled}
+        onChange={(v) =>
+          setSettings({ ...settings, include_issued_invoices: v })
+        }
+      />
 
-        <CheckboxRow
-          label="Faktury korygujące"
-          desc="Korekty wystawione i otrzymane w okresie"
-          checked={settings.include_corrections}
-          disabled={saveDisabled}
-          onChange={(v) => setSettings({ ...settings, include_corrections: v })}
-        />
-      </section>
+      <CheckboxRow
+        id="co-pilot-include-received"
+        label="Faktury otrzymane (zakupowe)"
+        desc="Faktury kosztowe pobrane z inboxa KSeF"
+        checked={settings.include_received_invoices}
+        disabled={saveDisabled}
+        onChange={(v) =>
+          setSettings({ ...settings, include_received_invoices: v })
+        }
+      />
 
-      <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-4">
-        <div>
-          <h3 className="text-lg font-display font-semibold tracking-tighter-text">
-            Kopia do innych
-          </h3>
-          <p className="text-sm text-muted-foreground mt-1">
+      <CheckboxRow
+        id="co-pilot-include-corrections"
+        label="Faktury korygujące"
+        desc="Korekty wystawione i otrzymane w okresie"
+        checked={settings.include_corrections}
+        disabled={saveDisabled}
+        onChange={(v) => setSettings({ ...settings, include_corrections: v })}
+      />
+
+      <Separator />
+
+      <Field>
+        <FieldContent>
+          <FieldLabel htmlFor="co-pilot-cc">Kopia do innych</FieldLabel>
+          <FieldDescription>
             Dodatkowe adresy które dostają paczkę (np. Twój własny email do
             archiwum)
-          </p>
-        </div>
-
+          </FieldDescription>
+        </FieldContent>
         <CcEmailsInput
           emails={settings.cc_emails}
           disabled={saveDisabled}
           onChange={(emails) => setSettings({ ...settings, cc_emails: emails })}
         />
-      </section>
+      </Field>
 
       {recentJobs.length > 0 ? (
-        <section className="rounded-3xl ff-glass-pane p-7 lg:p-8 space-y-4">
-          <div>
-            <h3 className="text-lg font-display font-semibold tracking-tighter-text">
-              Ostatnie paczki
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Historia 5 ostatnich automatycznych wysyłek
-            </p>
-          </div>
+        <>
+          <Separator />
+          <div className="flex flex-col gap-4">
+            <div>
+              <FieldLabel>Ostatnie paczki</FieldLabel>
+              <FieldDescription>Historia 5 ostatnich automatycznych wysyłek</FieldDescription>
+            </div>
 
-          <div className="space-y-2">
-            {recentJobs.map((job) => (
-              <RecentJobRow key={job.id} job={job} />
-            ))}
+            <div className="flex flex-col gap-3">
+              {recentJobs.map((job) => (
+                <RecentJobRow key={job.id} job={job} />
+              ))}
+            </div>
           </div>
-        </section>
+        </>
       ) : null}
 
-      <div className="ff-sticky-actions border-t border-[var(--ff-glass-border)] bg-[var(--ff-surface-container-low)]">
-        <div className="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-3">
-          <Button
-            variant="glass"
-            size="lg"
-            type="button"
-            onClick={handleTriggerNow}
-            disabled={triggerDisabled}
-          >
-            {isTriggering ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4 mr-2" />
-            )}
-            Wyślij teraz (za poprzedni miesiąc)
-          </Button>
+      <Separator />
 
-          <Button
-            variant="glass-primary"
-            size="lg"
-            type="button"
-            onClick={handleSave}
-            disabled={saveDisabled}
-          >
-            {isSaving ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4 mr-2" />
-            )}
-            Zapisz ustawienia
-          </Button>
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="button" onClick={handleSave} disabled={saveDisabled}>
+          {isSaving ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
+          Zapisz ustawienia
+        </Button>
+        <Button
+          variant="outline"
+          type="button"
+          onClick={handleTriggerNow}
+          disabled={triggerDisabled}
+        >
+          {isTriggering ? <RiLoader4Line className="animate-spin" aria-hidden /> : <RiSendPlaneLine aria-hidden />}
+          Wyślij teraz (za poprzedni miesiąc)
+        </Button>
       </div>
-    </div>
+    </FieldGroup>
   );
 }
 
@@ -500,42 +471,15 @@ export function CoPilotSettingsForm({
 // Sub-components
 // ============================================================================
 
-function GlassToggle({
-  checked,
-  onChange,
-  disabled,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      aria-pressed={checked}
-      aria-label={checked ? 'Wyłącz Co-Pilot' : 'Włącz Co-Pilot'}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 disabled:opacity-50 ${
-        checked ? 'bg-foreground' : 'bg-foreground/15'
-      }`}
-    >
-      <span
-        className={`inline-block h-5 w-5 rounded-full bg-background transition-transform shadow-sm ${
-          checked ? 'translate-x-5' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
-  );
-}
-
 function CheckboxRow({
+  id,
   label,
   desc,
   checked,
   onChange,
   disabled,
 }: {
+  id: string;
   label: string;
   desc: string;
   checked: boolean;
@@ -543,28 +487,18 @@ function CheckboxRow({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className="w-full flex items-start gap-3 p-3 rounded-2xl hover:bg-foreground/2 transition-colors text-left disabled:opacity-50 disabled:pointer-events-none"
-    >
-      <div
-        className={`h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
-          checked
-            ? 'bg-foreground border-foreground'
-            : 'border-foreground/20 bg-transparent'
-        }`}
-      >
-        {checked ? (
-          <CheckCircle2 className="h-3 w-3 text-background" aria-hidden />
-        ) : null}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium">{label}</p>
-        <p className="text-xs text-muted-foreground">{desc}</p>
-      </div>
-    </button>
+    <Field orientation="horizontal">
+      <Checkbox
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(v) => onChange(v)}
+      />
+      <FieldContent>
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
+        <FieldDescription>{desc}</FieldDescription>
+      </FieldContent>
+    </Field>
   );
 }
 
@@ -599,9 +533,10 @@ function CcEmailsInput({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <div className="flex gap-2">
         <Input
+          id="co-pilot-cc"
           type="email"
           value={input}
           disabled={disabled}
@@ -615,8 +550,7 @@ function CcEmailsInput({
           placeholder="dodaj@email.pl i naciśnij Enter"
         />
         <Button
-          variant="glass"
-          size="lg"
+          variant="outline"
           type="button"
           onClick={handleAdd}
           disabled={disabled || !input.trim()}
@@ -628,22 +562,19 @@ function CcEmailsInput({
       {emails.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {emails.map((email) => (
-            <span
-              key={email}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-foreground/5 border border-[var(--ff-glass-border)]"
-            >
-              <Mail className="h-3 w-3 shrink-0" aria-hidden />
+            <Badge key={email} variant="secondary" className="gap-1.5">
+              <RiMailLine aria-hidden />
               {email}
               <button
                 type="button"
                 aria-label={`Usuń ${email}`}
                 onClick={() => handleRemove(email)}
                 disabled={disabled}
-                className="ml-1 text-muted-foreground hover:text-foreground disabled:pointer-events-none"
+                className="text-muted-foreground hover:text-foreground ml-1 disabled:pointer-events-none"
               >
-                <X className="h-3 w-3" />
+                <RiCloseLine className="size-3" aria-hidden />
               </button>
-            </span>
+            </Badge>
           ))}
         </div>
       ) : null}
@@ -651,39 +582,24 @@ function CcEmailsInput({
   );
 }
 
+const BADGE_OK = 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400';
+const BADGE_ERROR = 'bg-red-600/10 text-red-600 dark:bg-red-400/10 dark:text-red-400';
+const BADGE_WARN = 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400';
+
 function RecentJobRow({ job }: { job: ExportJobPreviewRow }) {
   const statusDefaults = {
-    completed: {
-      label: 'Wysłane',
-      className:
-        'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
-    },
-    failed: {
-      label: 'Błąd',
-      className:
-        'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20',
-    },
-    generating: {
-      label: 'Generowanie...',
-      className:
-        'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20',
-    },
-    pending: {
-      label: 'Oczekuje',
-      className: 'bg-foreground/5 text-muted-foreground border-[var(--ff-glass-border)]',
-    },
-    expired: {
-      label: 'Wygasłe',
-      className: 'bg-foreground/5 text-muted-foreground border-[var(--ff-glass-border)]',
-    },
+    completed: { label: 'Wysłane', className: BADGE_OK },
+    failed: { label: 'Błąd', className: BADGE_ERROR },
+    generating: { label: 'Generowanie...', className: BADGE_WARN },
+    pending: { label: 'Oczekuje', className: undefined },
+    expired: { label: 'Wygasłe', className: undefined },
   } as const;
 
-  const cfg =
-    statusDefaults[job.status as keyof typeof statusDefaults] ??
-    ({
+  const cfg: { label: string; className: string | undefined } =
+    statusDefaults[job.status as keyof typeof statusDefaults] ?? {
       label: job.status,
-      className: 'bg-foreground/5 text-muted-foreground border-[var(--ff-glass-border)]',
-    } as const);
+      className: undefined,
+    };
 
   const formatLabel =
     FORMAT_OPTIONS.find((o) => o.value === job.format)?.label ??
@@ -695,26 +611,24 @@ function RecentJobRow({ job }: { job: ExportJobPreviewRow }) {
     : null;
 
   return (
-    <div className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-foreground/2 border border-[var(--ff-glass-border)]/50">
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className="h-9 w-9 rounded-xl bg-foreground/5 flex items-center justify-center shrink-0">
-          <FileText className="h-4 w-4 text-muted-foreground" aria-hidden />
+    <div className="flex items-center justify-between gap-3 border p-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="bg-muted flex size-10 shrink-0 items-center justify-center">
+          <RiFileTextLine className="text-muted-foreground size-5" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm truncate">
+          <p className="truncate text-sm font-medium">
             {formatLabel} • {periodLabel}
           </p>
-          <p className="text-xs text-muted-foreground">
-            {job.invoices_count} faktur
+          <p className="text-muted-foreground text-xs">
+            {job.invoices_count} {plural(job.invoices_count ?? 0, ['faktura', 'faktury', 'faktur'])}
             {emailed ? ` • wysłano ${emailed}` : ''}
           </p>
         </div>
       </div>
-      <span
-        className={`inline-flex shrink-0 items-center px-2.5 py-1 rounded-full border text-xs font-medium ${cfg.className}`}
-      >
+      <Badge variant={cfg.className ? 'default' : 'secondary'} className={cfg.className}>
         {cfg.label}
-      </span>
+      </Badge>
     </div>
   );
 }

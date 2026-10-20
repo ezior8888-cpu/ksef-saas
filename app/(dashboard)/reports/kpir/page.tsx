@@ -1,28 +1,16 @@
 import { KpirView } from '@/components/expenses/kpir-view';
-import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
-import { assertKsefExpensesReadyForPln } from '@/lib/expenses/ksef-currency-review';
-import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { getKpirData } from '@/lib/reports/kpir-data';
 import { getPageContext } from '@/lib/supabase/page-context';
-import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
-import { assertAcceptedInvoiceEnvironmentComplete } from '@/lib/ksef/accounting-provenance';
-import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
-import { readCompletePages } from '@/lib/accounting/read-complete-pages';
-import { todayInWarsaw } from '@/lib/format/warsaw-date';
 
 export const dynamic = 'force-dynamic';
 
-function clampMonth(m: number): number {
-  if (!Number.isFinite(m)) return 1;
-  return Math.min(12, Math.max(1, Math.floor(m)));
-}
-
-function clampYear(y: number, fallback: number): number {
-  if (!Number.isFinite(y)) return fallback;
-  const yi = Math.floor(y);
-  if (yi < 2000 || yi > 2100) return fallback;
-  return yi;
-}
-
+/**
+ * KPiR (P13, PLAN-FINORA §5): tabela w układzie Transactions Finory. Dane
+ * czyta `getKpirData` (`lib/reports/kpir-data.ts`) — logika bez zmian.
+ * Waluty nie do potwierdzenia wstrzymują raport (baner zamiast kwot), a błąd
+ * odczytu zaliczek ROZ idzie na baner nad tabelą.
+ */
 export default async function KpirPage({
   searchParams,
 }: {
@@ -30,112 +18,27 @@ export default async function KpirPage({
 }) {
   const sp = await searchParams;
   const { supabase, tenantId } = await getPageContext();
-  const environment = requireConfiguredKsefEnvironment();
-
-  // Domyślny okres to miesiąc „dziś” w Polsce (plan Finora §2.4 pkt 10):
-  // serwer chodzi w UTC, więc 1. dnia miesiąca tuż po północy pola daty
-  // w strefie procesu dawały jeszcze poprzedni miesiąc.
-  const today = todayInWarsaw();
-  const nowYear = Number(today.slice(0, 4));
-  const month = clampMonth(Number(sp.month ?? Number(today.slice(5, 7))));
-  const year = clampYear(Number(sp.year ?? nowYear), nowYear);
-
-  // Granice z arytmetyki UTC: lokalna północ przez `toISOString()` cofała
-  // je o dzień w każdej strefie na wschód od Greenwich.
-  const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
-  const periodEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
-
-  await assertAcceptedInvoiceEnvironmentComplete(supabase, {
-    tenantId, periodStart, periodEnd, direction: 'outgoing', environment,
-  });
-
-  const expenses = await readCompletePages('expenses', (from, to) => supabase
-    .from('expenses')
-    .select('*', { count: 'exact' })
-    .eq('tenant_id', tenantId)
-    .eq('is_deductible', true)
-    .gte('issue_date', periodStart)
-    .lte('issue_date', periodEnd)
-    .order('id', { ascending: true })
-    .range(from, to));
-  const visibleExpenses = await filterExpensesForKsefEnvironment(
-    supabase, tenantId, environment, expenses,
-  );
-  visibleExpenses.sort((a, b) =>
-    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
-
-  // C-11: koszt KSeF w walucie obcej wchodzi do KPiR dopiero z przeglądem
-  // i śladem kursu; bez tego raport się zatrzymuje, zamiast liczyć EUR jak zł.
-  let currencyError: string | null = null;
-  try {
-    await assertKsefExpensesReadyForPln(visibleExpenses, async (ids) => {
-      const { data, error } = await supabase
-        .from('invoices')
-        .select('id, currency')
-        .eq('tenant_id', tenantId)
-        .in('id', ids);
-      if (error) throw new Error('Nie można sprawdzić walut faktur KSeF');
-      return new Map((data ?? []).map((row) => [row.id as string, row.currency as string | null]));
-    });
-  } catch (error) {
-    currencyError = error instanceof Error ? error.message : 'Nie można potwierdzić walut kosztów KSeF';
-  }
-
-  const invoices = await readCompletePages('invoices', (from, to) => supabase
-    .from('invoices')
-    .select(
-      'id, internal_number, issue_date, sale_date, gross_total, net_total, buyer_data, invoice_kind, advance_invoice_ids, currency',
-      { count: 'exact' },
-    )
-    .eq('tenant_id', tenantId)
-    .eq('direction', 'outgoing')
-    .eq('ksef_status', 'accepted')
-    .eq('ksef_environment', environment)
-    .gte('issue_date', periodStart)
-    .lte('issue_date', periodEnd)
-    .order('id', { ascending: true })
-    .range(from, to));
-  invoices.sort((a, b) =>
-    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
-
-  let outgoingCurrencyError: string | null = null;
-  try {
-    assertOutgoingInvoicesInPln(invoices);
-  } catch (error) {
-    outgoingCurrencyError = error instanceof Error ? error.message : 'Nie można potwierdzić walut sprzedaży';
-  }
-  const currencyBlocked = currencyError ?? outgoingCurrencyError;
-
-  // ROZ niesie pełną wartość zamówienia — przychód liczy tylko resztę ponad
-  // zaliczki, które KPiR już ma (`kpirRevenueNet`). Bez tej sumy przychód
-  // z ROZ byłby zawyżony — błąd idzie na baner nad tabelą.
-  let settledError: string | null = null;
-  let settled = new Map<string, number>();
-  if (!currencyBlocked) {
-    try {
-      settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices);
-    } catch (e) {
-      settledError = e instanceof Error ? e.message : 'Nie można odczytać zaliczek';
-    }
-  }
-  const invoiceRows = invoices.map((inv) => ({
-    ...inv,
-    settled_advances_net: settled.get(inv.id) ?? null,
-  }));
+  const data = await getKpirData(supabase, tenantId, sp);
+  const banner = data.currencyBlocked ?? data.settledError;
 
   return (
-    <div className="space-y-6 pb-10 text-[var(--ff-on-surface)]">
-      {currencyBlocked ?? settledError ? (
-        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] border border-red-400/25 bg-[color-mix(in_srgb,#f87171_10%,transparent)] p-4 text-sm text-red-200">
-          {currencyBlocked ?? settledError}
-        </div>
+    <div className="space-y-6 pb-10">
+      {banner ? (
+        <Alert variant="destructive">
+          <AlertTitle>{banner}</AlertTitle>
+          <AlertDescription>
+            {data.currencyBlocked
+              ? 'Kwot KPiR za ten miesiąc nie pokazujemy, dopóki dokumenty nie mają potwierdzonej waluty PLN.'
+              : 'Przychód z faktur rozliczeniowych może być zawyżony — odśwież stronę za chwilę.'}
+          </AlertDescription>
+        </Alert>
       ) : null}
-      {!currencyBlocked ? (
+      {!data.currencyBlocked ? (
         <KpirView
-          month={month}
-          year={year}
-          expenses={visibleExpenses}
-          invoices={invoiceRows}
+          month={data.month}
+          year={data.year}
+          expenses={data.expenses}
+          invoices={data.invoices}
         />
       ) : null}
     </div>
