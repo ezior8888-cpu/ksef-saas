@@ -94,12 +94,15 @@ function firstValidationMessage(errors: FieldErrors<InvoiceFormValues>): string 
 const labelClass = 'mb-2';
 
 /**
- * Tailwind `xl` — od tej szerokości pozycje idą wierszami siatki (Finora:
+ * Od tej szerokości pozycje idą wierszami siatki (Finora:
  * `invoice-line-items.tsx`), poniżej kartami. Do P5 próg był `lg`, ale od
  * `lg` obok dokumentu stoi kolumna akcji 18rem i wiersz z siedmioma polami
- * nie mieścił się w karcie (przewijałby się w bok).
+ * nie mieścił się w karcie. Przegląd P5 policzył też `xl` (1280 px): przy
+ * rozwiniętym pasku bocznym na treść karty zostaje ok. 585 px, a wiersz
+ * `LINE_GRID` z odstępami ma ok. 619 px — przewijał się w bok. Przy 1360 px
+ * (laptopy 1366) zostaje ok. 660 px.
  */
-const LINES_LAYOUT_MEDIA = '(min-width: 1280px)';
+const LINES_LAYOUT_MEDIA = '(min-width: 1360px)';
 
 /** Kolumny wiersza pozycji: Nazwa · J.m. · Ilość · Cena netto · VAT · Brutto · usuń. */
 const LINE_GRID =
@@ -792,8 +795,9 @@ export function InvoiceForm({
               ) : null}
               {buyerKind === 'pl' ? (
                 <div className="space-y-2">
-                  <Label className={labelClass}>NIP nabywcy</Label>
+                  <Label htmlFor="buyer-nip" className={labelClass}>NIP nabywcy</Label>
                   <BuyerLookup
+                    inputId="buyer-nip"
                     nip={buyerNipWatch ?? ''}
                     onNipChange={(digits) => {
                       form.setValue('buyerNip', digits, { shouldDirty: true });
@@ -828,7 +832,7 @@ export function InvoiceForm({
               ) : null}
               {buyerKind === 'consumer' ? (
                 <div className="space-y-2">
-                  <Label className={labelClass}>Typ identyfikatora</Label>
+                  <Label htmlFor="buyer-id-type" className={labelClass}>Typ identyfikatora</Label>
                   <Select
                     value={buyerConsumerIdType ?? 'pesel'}
                     items={BUYER_ID_TYPE_ITEMS}
@@ -844,7 +848,7 @@ export function InvoiceForm({
                       void form.trigger(['buyerConsumerIdType', 'buyerPesel', 'buyerIdDocument']);
                     }}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger id="buyer-id-type" className="w-full">
                       <SelectValue placeholder="Wybierz typ" />
                     </SelectTrigger>
                     <SelectContent>
@@ -865,8 +869,9 @@ export function InvoiceForm({
               ) : null}
               {buyerKind === 'consumer' && buyerConsumerIdType === 'pesel' ? (
                 <div>
-                  <Label className={labelClass}>PESEL</Label>
+                  <Label htmlFor="buyer-pesel" className={labelClass}>PESEL</Label>
                   <Input
+                    id="buyer-pesel"
                     inputMode="numeric"
                     autoComplete="off"
                     placeholder="11 cyfr"
@@ -883,8 +888,9 @@ export function InvoiceForm({
               {buyerKind === 'consumer' &&
               (buyerConsumerIdType === 'id_card' || buyerConsumerIdType === 'passport') ? (
                 <div>
-                  <Label className={labelClass}>Numer dokumentu</Label>
+                  <Label htmlFor="buyer-id-document" className={labelClass}>Numer dokumentu</Label>
                   <Input
+                    id="buyer-id-document"
                     autoComplete="off"
                     placeholder={
                       buyerConsumerIdType === 'id_card' ? 'Seria i numer dowodu' : 'Numer paszportu'
@@ -901,20 +907,21 @@ export function InvoiceForm({
               ) : null}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <div className="sm:col-span-2 xl:col-span-1">
-                  <Label className={labelClass}>Nazwa firmy</Label>
-                  <Input {...form.register('buyerName')} />
+                  <Label htmlFor="buyer-name" className={labelClass}>Nazwa firmy</Label>
+                  <Input id="buyer-name" {...form.register('buyerName')} />
                 </div>
                 <div>
-                  <Label className={labelClass}>Adres (linia 1)</Label>
-                  <Input {...form.register('buyerAddressLine1')} />
+                  <Label htmlFor="buyer-address-1" className={labelClass}>Adres (linia 1)</Label>
+                  <Input id="buyer-address-1" {...form.register('buyerAddressLine1')} />
                 </div>
                 <div>
-                  <Label className={labelClass}>Adres (linia 2)</Label>
-                  <Input {...form.register('buyerAddressLine2')} />
+                  <Label htmlFor="buyer-address-2" className={labelClass}>Adres (linia 2)</Label>
+                  <Input id="buyer-address-2" {...form.register('buyerAddressLine2')} />
                 </div>
                 <div className="sm:col-span-2 xl:col-span-1">
-                  <Label className={labelClass}>Email (opcjonalnie)</Label>
+                  <Label htmlFor="buyer-email" className={labelClass}>Email (opcjonalnie)</Label>
                   <Input
+                    id="buyer-email"
                     type="email"
                     inputMode="email"
                     autoComplete="email"
@@ -927,7 +934,7 @@ export function InvoiceForm({
             {/* PŁATNOŚĆ (Finora: „Bill To:”) — termin jest w nagłówku, jak „Date Due”. */}
             <DocumentSection title="Płatność" testId="sekcja-platnosc" description="Sposób zapłaty i rachunek">
               <div>
-                <Label className={labelClass}>Metoda płatności</Label>
+                <Label htmlFor="payment-method" className={labelClass}>Metoda płatności</Label>
                 <Select
                   value={paymentMethod}
                   items={PAYMENT_METHOD_ITEMS}
@@ -939,7 +946,7 @@ export function InvoiceForm({
                     )
                   }}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="payment-method" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -952,8 +959,9 @@ export function InvoiceForm({
                 </Select>
               </div>
               <div>
-                <Label className={labelClass}>Numer rachunku (dla przelewu)</Label>
+                <Label htmlFor="bank-account" className={labelClass}>Numer rachunku (dla przelewu)</Label>
                 <Input
+                  id="bank-account"
                   {...form.register('bankAccount')}
                   placeholder="12 3456 7890 ..."
                 />
@@ -979,7 +987,7 @@ export function InvoiceForm({
           <Separator />
 
           {/* POZYCJE (Finora: `invoice-line-items.tsx`) — wiersze siatki vs karty
-              wg `linesDesktopLayout` (1280 px, Tailwind `xl`). */}
+              wg `linesDesktopLayout` (od 1360 px, `LINES_LAYOUT_MEDIA`). */}
           <DocumentSection title="Pozycje" testId="sekcja-pozycje" description="Towary i usługi na fakturze">
             {/* Tylko jeden wariant layoutu naraz — patrz `linesDesktopLayout` powyżej. */}
             {linesDesktopLayout ? (
@@ -1105,8 +1113,9 @@ export function InvoiceForm({
                       </div>
 
                       <div>
-                        <Label className={labelClass}>Nazwa pozycji</Label>
+                        <Label htmlFor={`line-${index}-name`} className={labelClass}>Nazwa pozycji</Label>
                         <Input
+                          id={`line-${index}-name`}
                           placeholder="np. Usługa programistyczna"
                           {...form.register(`lines.${index}.name`)}
                         />
@@ -1114,8 +1123,9 @@ export function InvoiceForm({
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <Label className={labelClass}>Ilość</Label>
+                          <Label htmlFor={`line-${index}-quantity`} className={labelClass}>Ilość</Label>
                           <Input
+                            id={`line-${index}-quantity`}
                             type="number"
                             step="0.0001"
                             inputMode="decimal"
@@ -1126,8 +1136,9 @@ export function InvoiceForm({
                           />
                         </div>
                         <div>
-                          <Label className={labelClass}>Jednostka</Label>
+                          <Label htmlFor={`line-${index}-unit`} className={labelClass}>Jednostka</Label>
                           <Input
+                            id={`line-${index}-unit`}
                             placeholder="szt."
                             {...form.register(`lines.${index}.unit`)}
                           />
@@ -1136,8 +1147,9 @@ export function InvoiceForm({
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <Label className={labelClass}>Cena netto (zł)</Label>
+                          <Label htmlFor={`line-${index}-unit-price`} className={labelClass}>Cena netto (zł)</Label>
                           <Input
+                            id={`line-${index}-unit-price`}
                             type="number"
                             step="0.01"
                             inputMode="decimal"

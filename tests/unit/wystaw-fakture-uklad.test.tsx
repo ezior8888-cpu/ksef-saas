@@ -22,9 +22,10 @@ import { AdvanceInvoiceForm } from '@/components/invoices/advance-form';
 import { FinalInvoiceForm } from '@/components/invoices/final-form';
 import { CorrectionPageFrame } from '@/components/invoices/finora/correction-page-frame';
 import { InvoiceCreateActions } from '@/components/invoices/finora/invoice-create-actions';
-import { formatIsoDatePl } from '@/components/invoices/finora/invoice-document';
+import { DocumentHeaderRow, formatIsoDatePl } from '@/components/invoices/finora/invoice-document';
 import { InvoiceForm } from '@/components/invoices/invoice-form';
 import { InvoiceTypeSelector } from '@/components/invoices/invoice-type-selector';
+import { tekstBezZnacznikow } from './helpers/tekst-html';
 
 /**
  * P5 planu Finora: oprawa „Wystaw fakturę” (`invoices-create` Finory) dla
@@ -187,7 +188,10 @@ describe('P5: faktura zaliczkowa', () => {
 
   it('prawa kolumna i pasek', () => {
     expect(html).toMatch(/data-testid="akcje-formularza"/);
-    expect(html).toContain('Wystaw i wyślij do KSeF');
+    // Karta akcji (od lg) i pasek na telefonie mówią to samo: wysyłamy ZALICZKĘ
+    // (przegląd P5: na komputerze znikało słowo „zaliczkę”).
+    const karta = html.slice(html.indexOf('data-testid="akcje-formularza"'));
+    expect(karta.slice(0, karta.indexOf('</button>'))).toContain('Wystaw i wyślij zaliczkę do KSeF');
     expect(html).toContain('Wyślij zaliczkę do KSeF');
     expect(html).toMatch(/ff-sticky-actions pointer-events-none lg:hidden/);
     bezZakazanych(html);
@@ -281,5 +285,52 @@ describe('formatIsoDatePl', () => {
     ['nie-data', 'nie-data'],
   ])('%s → %s', (iso, out) => {
     expect(formatIsoDatePl(iso)).toBe(out);
+  });
+});
+
+/**
+ * Przegląd P5 (WCAG 1.3.1 / 4.1.2): każda etykieta pola wskazuje istniejącą
+ * kontrolkę — `for` z pasującym `id` — albo ją owija (radio, checkbox).
+ * Bez tego czytnik ekranu czyta pole bez nazwy, a klik w etykietę nic nie robi.
+ */
+function etykietyBezPola(html: string): string[] {
+  const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+  const bez: string[] = [];
+  for (const m of html.matchAll(/<label([^>]*)>([\s\S]*?)<\/label>/g)) {
+    const [, attrs, inner] = m;
+    if (/<(input|select|textarea|button)\b/.test(inner)) continue;
+    const target = attrs.match(/\sfor="([^"]+)"/)?.[1];
+    if (!target || !ids.has(target)) bez.push(tekstBezZnacznikow(inner).trim());
+  }
+  return bez;
+}
+
+describe('P5 po przeglądzie: etykiety pól powiązane z kontrolkami', () => {
+  it('faktura zwykła', () => {
+    expect(etykietyBezPola(renderToStaticMarkup(
+      <InvoiceForm seller={seller} suggestedNumber="FV/10/2026/007" />,
+    ))).toEqual([]);
+  });
+
+  it('faktura zaliczkowa', () => {
+    expect(etykietyBezPola(renderToStaticMarkup(<AdvanceInvoiceForm initialSeller={seller} />))).toEqual([]);
+  });
+
+  it('faktura rozliczająca', () => {
+    expect(etykietyBezPola(renderToStaticMarkup(
+      <FinalInvoiceForm initialSeller={seller} advanceInvoices={[]} />,
+    ))).toEqual([]);
+  });
+});
+
+describe('P5 po przeglądzie: wiersz nagłówka dokumentu na telefonie', () => {
+  it('etykieta nad polem poniżej sm, obok od sm (375 px: pole daty nie wychodzi poza kartę)', () => {
+    const html = renderToStaticMarkup(
+      <DocumentHeaderRow label="Data sprzedaży / dostawy" htmlFor="x">
+        <input id="x" />
+      </DocumentHeaderRow>,
+    );
+    expect(html).toMatch(/class="flex flex-col gap-1\.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"/);
+    expect(html).toMatch(/<div class="w-full sm:w-44 sm:flex-none"><input id="x"\/><\/div>/);
   });
 });

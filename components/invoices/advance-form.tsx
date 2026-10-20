@@ -257,15 +257,17 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
               />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <div className="sm:col-span-2 xl:col-span-1">
-                  <Label className={labelClass}>Nazwa podmiotu</Label>
+                  <Label htmlFor="advance-buyer-name" className={labelClass}>Nazwa podmiotu</Label>
                   <Input
+                    id="advance-buyer-name"
                     value={currentBuyer().name}
                     onChange={(e) => patchBuyer({ name: e.target.value })}
                   />
                 </div>
                 <div>
-                  <Label className={labelClass}>Adres — linia 1</Label>
+                  <Label htmlFor="advance-buyer-address-1" className={labelClass}>Adres — linia 1</Label>
                   <Input
+                    id="advance-buyer-address-1"
                     value={currentBuyer().address.addressLine1}
                     onChange={(e) =>
                       patchBuyer({
@@ -275,8 +277,9 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
                   />
                 </div>
                 <div>
-                  <Label className={labelClass}>Adres — linia 2</Label>
+                  <Label htmlFor="advance-buyer-address-2" className={labelClass}>Adres — linia 2</Label>
                   <Input
+                    id="advance-buyer-address-2"
                     value={currentBuyer().address.addressLine2}
                     onChange={(e) =>
                       patchBuyer({
@@ -293,7 +296,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
 
             <DocumentSection title="Płatność" testId="sekcja-platnosc" description="Sposób zapłaty i rachunek">
               <div>
-                <Label className={labelClass}>Metoda</Label>
+                <Label htmlFor="advance-payment-method" className={labelClass}>Metoda</Label>
                 <Select
                   value={paymentMethodWatch}
                   items={PAYMENT_METHOD_ITEMS}
@@ -302,7 +305,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
                     form.setValue('paymentMethod', v as AdvanceFormIn['paymentMethod'])
                   }}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="advance-payment-method" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -315,8 +318,8 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
                 </Select>
               </div>
               <div>
-                <Label className={labelClass}>Numer rachunku (26 cyfr, opcja)</Label>
-                <Input {...form.register('bankAccount')} />
+                <Label htmlFor="advance-bank-account" className={labelClass}>Numer rachunku (26 cyfr, opcja)</Label>
+                <Input id="advance-bank-account" {...form.register('bankAccount')} />
                 {form.formState.errors.bankAccount ? (
                   <p className={errorClass}>{String(form.formState.errors.bankAccount.message)}</p>
                 ) : null}
@@ -391,7 +394,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
                 ) : null}
               </div>
               <div>
-                <Label className={labelClass}>Stawka VAT zaliczki</Label>
+                <Label htmlFor="advance-vat-rate" className={labelClass}>Stawka VAT zaliczki</Label>
                 <Select
                   value={vatWatch}
                   items={VAT_RATE_ITEMS}
@@ -402,7 +405,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
                     })
                   }}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="advance-vat-rate" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -459,6 +462,7 @@ export function AdvanceInvoiceForm({ initialSeller }: AdvanceInvoiceFormProps) {
           sending={sending}
           saving={saving}
           disabled={busy}
+          sendLabel="Wystaw i wyślij zaliczkę do KSeF"
         />
       </InvoiceCreateGrid>
 
