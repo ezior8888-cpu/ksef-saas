@@ -11,6 +11,7 @@ import type { PageContext } from '@/lib/supabase/page-context';
 import { memoryClient } from './helpers/baza-w-pamieci';
 import { kpirCostAmount, nonDeductedVat } from '@/lib/categorization/kpir-cost';
 import { formatPlMoney } from '@/lib/format/pl';
+import { kpirTotals } from '@/lib/reports/kpir-data';
 
 /**
  * Koszt w KPiR = netto + VAT, którego NIE WOLNO odliczyć (art. 23 ust. 1
@@ -87,6 +88,20 @@ describe('KPiR w aplikacji', () => {
   it('suma kosztów liczy VAT bez odliczenia we wszystkich kolumnach', () => {
     expect(html).toContain(formatPlMoney(2557.3));
     expect(html).not.toContain(formatPlMoney(2210)); // same netto
+  });
+
+  it('kpirTotals (sumy, z których liczy widok): każda kolumna z VAT bez odliczenia', () => {
+    const sumy = kpirTotals([
+      paragon, faktura,
+      { ...bezOdliczenia, kpir_column: 'col_10' },
+      { ...polowa, kpir_column: 'col_11' },
+      wydatek({ kpir_column: 'col_12', document_type: 'receipt', net_amount: 100, vat_amount: 23 }),
+      wydatek({ kpir_column: 'col_15', document_type: 'receipt', net_amount: 10, vat_amount: 2.3 }),
+    ], []);
+    expect(sumy).toMatchObject({ col_10: 246, col_11: 446, col_12: 123, col_13: 1730 });
+    expect(sumy.col_15).toBeCloseTo(12.3, 10);
+    expect(sumy.totalExpenses).toBeCloseTo(2557.3, 10);
+    expect(sumy.totalExpenses).not.toBeCloseTo(2210, 2);
   });
 
   it('wiersz paragonu pokazuje koszt i ile w nim VAT bez odliczenia', () => {

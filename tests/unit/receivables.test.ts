@@ -322,6 +322,17 @@ describe('getReceivables — po terminie liczone z daty w Europe/Warsaw', () => 
     expect(r.byInvoice[0]).toMatchObject({ internalNumber: b.internal_number, buyerName: 'Nabywca 2' });
   });
 
+  it('byInvoice niesie NIP nabywcy: buyer_nip, a bez niego buyer_data.nip (P13, kontrahenci)', async () => {
+    const a = invoice({ buyer_nip: ' 1234567890 ' });
+    const b = invoice({ buyer_nip: null, buyer_data: { name: 'B', nip: '5260001246' } });
+    const c = invoice({ buyer_nip: '', buyer_data: { name: 'Konsument' } });
+    const r = await run([a, b, c]).result;
+    const nips = new Map(r.byInvoice.map((x) => [x.id, x.buyerNip]));
+    expect(nips.get(a.id as string)).toBe('1234567890');
+    expect(nips.get(b.id as string)).toBe('5260001246');
+    expect(nips.get(c.id as string)).toBeNull();
+  });
+
   it('przejście przez zmianę czasu: 26.10 → 25.10 to 1 dzień', async () => {
     const r = await run([invoice({ payment_due_date: '2026-10-25' })], new Date('2026-10-26T12:00:00Z')).result;
     expect(r.byInvoice[0]!.daysOverdue).toBe(1);

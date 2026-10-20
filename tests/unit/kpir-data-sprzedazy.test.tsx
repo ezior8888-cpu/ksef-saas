@@ -13,6 +13,7 @@ import { KpirView, type KpirInvoiceRow } from '@/components/expenses/kpir-view';
 import { earlierSaleRemark, kpirSaleEventDate } from '@/lib/categorization/kpir-revenue';
 import type { JpkInvoice } from '@/lib/exports/jpk-fa-generator';
 import { generateKpirXlsx } from '@/lib/exports/kpir-generator';
+import { getKpirData } from '@/lib/reports/kpir-data';
 
 /**
  * KPiR: kol. 2 to data zdarzenia gospodarczego — przy sprzedaży dzień
@@ -137,6 +138,11 @@ describe('strona KPiR — podpięcie', () => {
 
   beforeEach(() => {
     mocks.db.mockReset().mockImplementation(database);
+  });
+
+  it('getKpirData pobiera datę sprzedaży (bez niej nie ma kol. 2 ani uwagi)', async () => {
+    const data = await getKpirData(mocks.db(), 'firma-a', { month: '9', year: '2026' });
+    expect(data.invoices[0]).toMatchObject({ internal_number: 'FV/1', sale_date: '2026-08-31', issue_date: '2026-09-03' });
   });
 
   it('strona pobiera datę sprzedaży i pokazuje uwagę', async () => {

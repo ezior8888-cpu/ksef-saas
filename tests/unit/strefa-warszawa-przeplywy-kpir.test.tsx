@@ -18,6 +18,7 @@ import KpirPage from '@/app/(dashboard)/reports/kpir/page';
 import { KpirFinanceCard } from '@/components/przeplywy/finora/chart-finance';
 import { getCashFlowData } from '@/lib/dashboard/cash-flow';
 import { estimateIncomeTaxThisYear } from '@/lib/dashboard/tax-estimate';
+import { resolveKpirPeriod } from '@/lib/reports/kpir-data';
 import type { PageContext } from '@/lib/supabase/page-context';
 import { memoryClient } from './helpers/baza-w-pamieci';
 
@@ -140,6 +141,16 @@ describe('KPiR — domyślny miesiąc w Europe/Warsaw', () => {
     expect(result.month).toBe(1);
     expect(result.year).toBe(2027);
     expect(result.period).toMatchObject({ periodStart: '2027-01-01', periodEnd: '2027-01-31' });
+  });
+
+  it('resolveKpirPeriod (odczyt KPiR wyjęty ze strony): ta sama reguła dnia w Polsce', () => {
+    expect(resolveKpirPeriod({}, new Date(PIERWSZY_LISTOPADA_0030)))
+      .toEqual({ month: 11, year: 2026, periodStart: '2026-11-01', periodEnd: '2026-11-30' });
+    expect(resolveKpirPeriod({}, new Date(NOWY_ROK_0030)))
+      .toEqual({ month: 1, year: 2027, periodStart: '2027-01-01', periodEnd: '2027-01-31' });
+    runInZone('Europe/Warsaw');
+    expect(resolveKpirPeriod({ month: '3', year: '2026' }, new Date('2026-03-15T12:00:00Z')))
+      .toMatchObject({ periodStart: '2026-03-01', periodEnd: '2026-03-31' });
   });
 
   it('granice okresu nie cofają się o dzień, gdy proces chodzi w strefie polskiej', async () => {
