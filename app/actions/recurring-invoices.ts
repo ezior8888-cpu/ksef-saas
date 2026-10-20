@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { logAudit } from '@/lib/audit/log';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
-import { recurringDb } from '@/lib/invoices/recurring/db';
+import { recurringDb, toRecurringRow } from '@/lib/invoices/recurring/db';
 import { getRecurringInvoice, readCoveredThrough } from '@/lib/invoices/recurring/queries';
 import { catchUpRunDate, editedRunDate, firstRunDateAfter } from '@/lib/invoices/recurring/schedule';
 import { templateRejection } from '@/lib/invoices/recurring/template';
@@ -181,7 +181,7 @@ export async function createRecurringInvoiceAction(
     },
   });
   revalidate();
-  return { success: true, recurringInvoice: data };
+  return { success: true, recurringInvoice: toRecurringRow(data) };
 }
 
 /**
@@ -288,7 +288,7 @@ export async function updateRecurringInvoiceAction(
     },
   });
   revalidate();
-  return { success: true, recurringInvoice: data };
+  return { success: true, recurringInvoice: toRecurringRow(data) };
 }
 
 /** Wstrzymanie: pozycja zostaje, nie przypomina i nie da się z niej wystawić faktury. */
@@ -341,7 +341,7 @@ async function setActive(id: string, active: boolean): Promise<RecurringInvoiceA
     metadata: { fromNextRunDate: current.next_run_date, toNextRunDate: data.next_run_date },
   });
   revalidate();
-  return { success: true, recurringInvoice: data };
+  return { success: true, recurringInvoice: toRecurringRow(data) };
 }
 
 /**

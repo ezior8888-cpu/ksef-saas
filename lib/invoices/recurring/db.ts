@@ -1,111 +1,61 @@
 /**
- * Klient Supabase z typami tabeli `recurring_invoices` i dwóch nowych kolumn
- * `invoices` (migracja 00154).
+ * Klient Supabase z typami bazy dla faktur cyklicznych (migracja 00154).
  *
- * Typy bazy nie znają jeszcze tabeli z migracji 00154 — po wgraniu
- * wygenerować typy z produkcji (AGENTS.md, „Typy bazy”) i usunąć rzutowanie.
- * To JEDYNE miejsce z rzutowaniem dla faktur cyklicznych; `queries.ts`,
- * `issue.ts` i akcje biorą klienta przez `recurringDb`.
- *
- * Po co, skoro klienci z `lib/supabase/server.ts` są dziś nieotypowani
- * (wiersze `any`): żeby odczyty pozycji cyklicznych miały typy kolumn
- * z migracji, a literówka w nazwie kolumny była błędem kompilacji, nie
- * pustym wynikiem na produkcji. Typ to `Database` z `types/database.ts`
- * rozszerzony o 00154; po wygenerowaniu typów `RecurringDatabase` zastępuje
- * samo `Database`, a ten plik można skasować.
- *
- * Rzutowanie nie zmienia zachowania: to ten sam obiekt klienta (sesja z RLS
- * albo klucz serwisowy — taki, jaki przyszedł).
+ * Od 20.10.2026 `types/database.ts` (wygenerowany z produkcji po wgraniu
+ * 00154) zna tabelę `recurring_invoices` i kolumny `invoices.recurring_*`,
+ * więc rozszerzenie typów i rzutowanie przez `unknown` zniknęły. Zostaje
+ * jedno miejsce, które klienta nieotypowanego (`lib/supabase/server.ts`
+ * daje dziś wiersze `any`, testy podają atrapę) traktuje jak otypowanego
+ * `Database` — żeby literówka w nazwie kolumny była błędem kompilacji, nie
+ * pustym wynikiem na produkcji. To ten sam obiekt klienta (sesja z RLS albo
+ * klucz serwisowy — taki, jaki przyszedł).
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '@/types/database';
-import type { RecurringFrequency } from '@/types/recurring-invoice';
-
-type PublicSchema = Database['public'];
-type InvoicesTable = PublicSchema['Tables']['invoices'];
-
-// Aliasy `type`, nie `interface`: supabase-js wymaga od wierszy
-// `Record<string, unknown>`, a interfejs nie ma niejawnej sygnatury indeksu.
+import { RECURRING_FREQUENCIES, type RecurringFrequency, type RecurringInvoiceRow } from '@/types/recurring-invoice';
 
 /** Kolumny dodane do `invoices` w 00154. */
-export type InvoiceRecurringColumns = {
-  recurring_invoice_id: string | null;
-  recurring_period: string | null;
-};
+export type InvoiceRecurringColumns = Pick<
+  Database['public']['Tables']['invoices']['Row'],
+  'recurring_invoice_id' | 'recurring_period'
+>;
 
-type RecurringInvoicesTable = {
-  Row: {
-    id: string;
-    tenant_id: string;
-    template_invoice_id: string;
-    name: string;
-    frequency: RecurringFrequency;
-    day_of_month: number;
-    next_run_date: string;
-    active: boolean;
-    created_by: string | null;
-    created_at: string;
-    updated_at: string;
-  };
-  Insert: {
-    id?: string;
-    tenant_id: string;
-    template_invoice_id: string;
-    name: string;
-    frequency: RecurringFrequency;
-    day_of_month: number;
-    next_run_date: string;
-    active?: boolean;
-    created_by?: string | null;
-    created_at?: string;
-    updated_at?: string;
-  };
-  Update: {
-    id?: string;
-    tenant_id?: string;
-    template_invoice_id?: string;
-    name?: string;
-    frequency?: RecurringFrequency;
-    day_of_month?: number;
-    next_run_date?: string;
-    active?: boolean;
-    created_by?: string | null;
-    created_at?: string;
-    updated_at?: string;
-  };
-  Relationships: [];
-};
+export type RecurringClient = SupabaseClient<Database>;
 
-/** Spłaszczenie przecięcia — kontrola nadmiarowych pól supabase-js nie radzi sobie z `A & B`. */
-type Flat<T> = { [K in keyof T]: T[K] };
+/** Ten sam klient, otypowany `Database` (sesja, `createClient`, klucz serwisowy, atrapa w testach). */
+export function recurringDb(supabase: SupabaseClient<Database> | SupabaseClient): RecurringClient {
+  return supabase as RecurringClient;
+}
 
-type RecurringTables = Omit<PublicSchema['Tables'], 'invoices'> & {
-  invoices: {
-    Row: Flat<InvoicesTable['Row'] & InvoiceRecurringColumns>;
-    Insert: Flat<InvoicesTable['Insert'] & Partial<InvoiceRecurringColumns>>;
-    Update: Flat<InvoicesTable['Update'] & Partial<InvoiceRecurringColumns>>;
-    Relationships: InvoicesTable['Relationships'];
-  };
-  recurring_invoices: RecurringInvoicesTable;
-};
+/** Wiersz `recurring_invoices` tak, jak go zwraca baza (`frequency` jako tekst). */
+export type RecurringInvoiceDbRow = Database['public']['Tables']['recurring_invoices']['Row'];
 
-/** `Database` rozszerzony o 00154 — do usunięcia razem z plikiem po wygenerowaniu typów. */
-export type RecurringDatabase = Omit<Database, 'public'> & {
-  public: Omit<PublicSchema, 'Tables'> & { Tables: RecurringTables };
-};
-
-export type RecurringClient = SupabaseClient<RecurringDatabase>;
-
-/** Wiersz INSERT do `invoices` z kolumnami cyklicznymi (00154). */
-export type InvoiceInsertWithRecurring = RecurringTables['invoices']['Insert'];
+function isRecurringFrequency(value: string): value is RecurringFrequency {
+  return (RECURRING_FREQUENCIES as readonly string[]).includes(value);
+}
 
 /**
- * Ten sam klient z typami 00154. Przyjmuje klienta otypowanego `Database`
- * (sesja, `createClient`) albo nieotypowanego (testy, klucz serwisowy).
+ * Wiersz z bazy → typ domenowy. `frequency` zawęża CHECK z 00154
+ * (`monthly` / `quarterly` / `yearly`), więc inna wartość to błąd schematu,
+ * nie danych klienta — rzucamy, zamiast liczyć harmonogram z nieznanej
+ * częstotliwości.
  */
-export function recurringDb(supabase: SupabaseClient<Database> | SupabaseClient): RecurringClient {
-  // Typy bazy nie znają jeszcze tabeli z migracji 00154 — po wgraniu
-  // wygenerować typy z produkcji i usunąć rzutowanie.
-  return supabase as unknown as RecurringClient;
+export function toRecurringRow(raw: RecurringInvoiceDbRow): RecurringInvoiceRow {
+  if (!isRecurringFrequency(raw.frequency)) {
+    throw new Error(`Nieznana częstotliwość faktury cyklicznej: ${raw.frequency}`);
+  }
+  return {
+    id: raw.id,
+    tenant_id: raw.tenant_id,
+    template_invoice_id: raw.template_invoice_id,
+    name: raw.name,
+    frequency: raw.frequency,
+    day_of_month: Number(raw.day_of_month),
+    next_run_date: raw.next_run_date,
+    active: raw.active,
+    created_by: raw.created_by,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
+  };
 }
