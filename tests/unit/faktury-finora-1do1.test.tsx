@@ -54,6 +54,7 @@ import {
 } from '@/app/(dashboard)/invoices/_components/invoice-stat-tiles';
 import { InvoicesTable } from '@/app/(dashboard)/invoices/_components/invoices-table';
 import { InvoicesToolbar } from '@/app/(dashboard)/invoices/_components/invoices-toolbar';
+import InvoiceNotFound from '@/app/(dashboard)/invoices/[id]/not-found';
 import { EmailInvoiceButton } from '@/components/invoices/email-invoice-button';
 import type { InvoiceRow } from '@/components/invoices/invoice-row-types';
 import { StatusBadge } from '@/components/invoices/status-badge';
@@ -68,6 +69,15 @@ const tile = { supabase: {} as never, tenantId: 'ten-1' };
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe('podgląd: brak faktury (Finora „Invoice Not Found”)', () => {
+  it('Empty z tytułem, opisem i linkiem do listy, w panelu', () => {
+    const html = renderToStaticMarkup(<InvoiceNotFound />);
+    expect(html).toContain('data-slot="empty"');
+    expect(html).toContain('Nie znaleziono faktury');
+    expect(html).toMatch(/<a[^>]*href="\/invoices"[^>]*>Wróć do listy faktur<\/a>/);
+  });
 });
 
 describe('formatInvoiceDate (§7.1: DD.MM.RRRR)', () => {
