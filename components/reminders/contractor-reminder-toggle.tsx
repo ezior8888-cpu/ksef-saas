@@ -2,15 +2,21 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { BellOff, Bell, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+
 import { toggleContractorRemindersAction } from '@/app/actions/reminders';
+import { Switch } from '@/components/contractors/finora/switch';
 
 interface Props {
   contractorId: string;
   excluded: boolean;
 }
 
+/**
+ * Przełącznik przypomnień kontrahenta (P13: „Przypomnienia (przełącznik)”).
+ * Włączony = przypomnienia idą; wyłączony = kontrahent wykluczony
+ * (`reminder_excluded`). Akcja i komunikaty bez zmian.
+ */
 export function ContractorReminderToggle({ contractorId, excluded }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -40,21 +46,15 @@ export function ContractorReminderToggle({ contractorId, excluded }: Props) {
     });
   };
 
+  const label = localExcluded ? 'Przypomnienia wyłączone' : 'Przypomnienia włączone';
+
   return (
-    <button
-      type="button"
-      onClick={handleToggle}
+    <Switch
+      checked={!localExcluded}
+      onCheckedChange={handleToggle}
       disabled={isPending}
-      className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-      title={localExcluded ? 'Przypomnienia wyłączone' : 'Przypomnienia włączone'}
-    >
-      {isPending ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : localExcluded ? (
-        <BellOff className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
-      ) : (
-        <Bell className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-      )}
-    </button>
+      aria-label={label}
+      title={label}
+    />
   );
 }
