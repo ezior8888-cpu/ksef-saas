@@ -94,12 +94,12 @@ export default async function OnboardingPage(props: OnboardingPageProps) {
             <BrandWordmark variant="app" href="/" />
           </div>
           <h1 className="mb-3 text-center text-3xl font-semibold tracking-tight">
-            {showActiveOrgBanner ? 'Dodaj kolejną organizację' : 'Witaj w FaktFlow'}
+            {showActiveOrgBanner ? 'Dodaj kolejną organizację' : 'Witaj w FaktWay'}
           </h1>
           <p className="mb-8 leading-relaxed text-muted-foreground">
             Wybierz, jak chcesz zacząć: załóż nową organizację, akceptuj
             zaproszenie albo poproś o dostęp do firmy, która już używa
-            FaktFlow.
+            FaktWay.
           </p>
           <OnboardingForm initialInviteToken={sp.invite} />
         </div>

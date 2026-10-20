@@ -12,7 +12,7 @@ import { Container, Icon, SectionHeading } from './ui';
 // z lib/billing/pricing.ts.
 const PLANS = [
   {
-    name: 'FaktFlow',
+    name: 'FaktWay',
     body: 'Jeden plan dla firm i księgowych. Wszystkie funkcje od pierwszego dnia.',
     price: PRICE_GROSS,
     suffix: '/mies. z VAT',

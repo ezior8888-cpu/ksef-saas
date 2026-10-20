@@ -184,7 +184,7 @@ export function KsefDuplicateDecision({ invoiceId, view }: Props) {
           if (!isOpen && !pending) setChoice(null);
         }}
       >
-        {/* Skutki są listą pod tytułem — bez osobnego opisu (radix: aria-describedby jawnie puste). */}
+        {/* Skutki są listą pod tytułem — bez osobnego opisu (Base UI: brak opisu nie wymaga aria-describedby). */}
         <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
           {choice !== null && (
             <>

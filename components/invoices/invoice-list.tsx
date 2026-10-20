@@ -1,16 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { FileText, ArrowRight, PlusCircle, Upload } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { FileText, PlusCircle, Upload } from 'lucide-react';
 
+import { InvoicesTable } from '@/app/(dashboard)/invoices/_components/invoices-table';
 import { createClient } from '@/lib/supabase/client';
+import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { StatusBadge } from './status-badge';
+import { SelectedPdfDownload } from './batch-pdf-download';
 import { SwipeableInvoiceRow } from './swipeable-invoice-row';
 
-import type { InvoiceRow } from './invoice-row-types';
-import { formatPlMoney } from '@/lib/format/pl';
+import { PAYMENT_FACT_FIELDS, type InvoiceFactsById, type InvoiceRow } from './invoice-row-types';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
 
 export type { InvoiceRow } from './invoice-row-types';
 
@@ -23,8 +25,18 @@ export type { InvoiceRow } from './invoice-row-types';
  *   - UPDATE: mergujemy pola z `payload.new`.
  *   - DELETE: usuwamy wiersz.
  *
- * Nie pollujemy — po `queued` / `sending` / `accepted` job Inngest aktualizuje
+ * Nie pollujemy — po `queued` / `sending` / `accepted` job w tle (pg-boss) aktualizuje
  * `ksef_status` w DB; Supabase pushuje zdarzenie przez WebSocket w <1s.
+ *
+ * Stan płatności („Opłacona”, „Po terminie”, „Do zapłaty”) jest wyliczany przy
+ * renderze z faktów serwera i dat wiersza, nie przechowywany. Zmiana kolumny,
+ * od której zależą fakty serwera (`PAYMENT_FACT_FIELDS`), odświeża stronę
+ * (`router.refresh()`), żeby fakty przeliczył serwer.
+ *
+ * Nowy snapshot z serwera (`initialInvoices` — po `router.refresh()`, zmianie
+ * strony albo filtra) zastępuje stan lokalny, ale lista NIE jest remontowana:
+ * zaznaczenie wierszy zostaje (przycięte do wierszy, które nadal są), a
+ * otwarte okna dialogowe wierszy nie znikają w trakcie pracy użytkownika.
  *
  * RLS na `invoices` zapewnia że klient nie dostanie zdarzeń dla obcych
  * tenantów (policy `invoices_select_own_tenant` + `tenant_id = get_current_tenant_id()`).
@@ -38,9 +50,16 @@ export function InvoiceList({
   initialInvoices,
   filtered = false,
   summary,
+  facts = {},
+  today,
 }: {
   tenantId: string;
+  /** Snapshot z serwera; nowa referencja (po `router.refresh()`) zastępuje stan lokalny. */
   initialInvoices: InvoiceRow[];
+  /** Fakty wierszy z `loadInvoiceListRowFacts` (id → fakty); brak = „—” w kolumnach płatności. */
+  facts?: InvoiceFactsById;
+  /** Dziś w Europe/Warsaw (RRRR-MM-DD) z serwera; domyślnie liczone przy renderze. */
+  today?: string;
   /**
    * Lista zawężona filtrem albo dalszą stroną (F-086): nowe faktury z Realtime
    * nie są wtedy doklejane (mogą nie pasować do filtra), a pusty wynik to
@@ -50,7 +69,44 @@ export function InvoiceList({
   /** Opis zakresu pozycji z serwera (np. „1–50 z 230”). */
   summary?: string;
 }) {
+  const router = useRouter();
   const [invoices, setInvoices] = useState<InvoiceRow[]>(initialInvoices);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  // Synchronizacja ze snapshotem serwera bez remontu (wzorzec „stan z poprzednich
+  // propsów”: ustawiamy w trakcie renderu, więc nie ma klatki ze starymi danymi).
+  const [syncedFrom, setSyncedFrom] = useState(initialInvoices);
+  if (syncedFrom !== initialInvoices) {
+    setSyncedFrom(initialInvoices);
+    setInvoices(initialInvoices);
+    const present = new Set(initialInvoices.map((inv) => inv.id));
+    setSelected((prev) => {
+      const kept = [...prev].filter((id) => present.has(id));
+      return kept.length === prev.size ? prev : new Set(kept);
+    });
+  }
+  const invoicesRef = useRef(invoices);
+  useEffect(() => {
+    invoicesRef.current = invoices;
+  }, [invoices]);
+  const dayToday = today ?? todayInWarsaw();
+
+  const toggleRow = useCallback((id: string, checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+  const toggleAll = useCallback(
+    (checked: boolean) => setSelected(checked ? new Set(invoicesRef.current.map((inv) => inv.id)) : new Set()),
+    [],
+  );
+  // Zaznaczenie tylko wierszy, które nadal są na liście (Realtime potrafi je usunąć).
+  const selectedIds = useMemo(
+    () => invoices.filter((inv) => selected.has(inv.id)).map((inv) => inv.id),
+    [invoices, selected],
+  );
 
   useEffect(() => {
     const supabase = createClient();
@@ -69,6 +125,13 @@ export function InvoiceList({
         },
         (payload) => {
           const next = payload.new as Partial<InvoiceRow> & { id: string };
+          const current = invoicesRef.current.find((inv) => inv.id === next.id);
+          if (
+            current &&
+            PAYMENT_FACT_FIELDS.some((field) => field in next && String(next[field] ?? '') !== String(current[field] ?? ''))
+          ) {
+            router.refresh();
+          }
           setInvoices((prev) =>
             prev.map((inv) => (inv.id === next.id ? { ...inv, ...next } : inv))
           );
@@ -111,7 +174,7 @@ export function InvoiceList({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tenantId, filtered]);
+  }, [tenantId, filtered, router]);
 
   if (invoices.length === 0 && filtered) {
     return (
@@ -151,91 +214,37 @@ export function InvoiceList({
     );
   }
 
+  const selectedSet = new Set(selectedIds);
+
   return (
     <>
-      {/* MOBILE: lista kart ze swipe */}
+      {/* TELEFON (< lg): lista kart ze swipe */}
       <div className="lg:hidden space-y-2">
         {invoices.map((inv) => (
-          <SwipeableInvoiceRow key={inv.id} invoice={inv} />
+          <SwipeableInvoiceRow key={inv.id} invoice={inv} facts={facts[inv.id]} today={dayToday} />
         ))}
       </div>
 
-      {/* DESKTOP: tabela — ten sam układ co /inbox */}
-      <div className="ff-glass-pane hidden overflow-hidden rounded-[var(--ff-radius-lg)] lg:block">
-        <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
-          <h2 className="text-[15px] font-semibold text-[var(--ff-text-strong)]">Lista faktur wystawionych</h2>
-          <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
-            {summary ?? `${invoices.length} pozycji • sortowanie wg daty utworzenia`}
-          </p>
+      {/* KOMPUTER (lg+): data-table Finory na ui/table */}
+      <Card className="hidden gap-0 py-0 shadow-none lg:block">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+          <div>
+            <h2 className="text-sm font-medium">Lista faktur wystawionych</h2>
+            <p className="text-muted-foreground mt-0.5 text-xs">
+              {summary ?? `${invoices.length} pozycji • sortowanie wg daty utworzenia`}
+            </p>
+          </div>
+          <SelectedPdfDownload ids={selectedIds} />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] text-left text-[14px]">
-            <thead>
-              <tr className="border-b border-[var(--ff-border)]">
-                <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                  Numer
-                </th>
-                <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                  Data
-                </th>
-                <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                  Nabywca
-                </th>
-                <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                  Kwota brutto
-                </th>
-                <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                  Status KSeF
-                </th>
-                <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                  Numer KSeF
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv) => (
-                <tr
-                  key={inv.id}
-                  className="border-b border-[var(--ff-row-divider)] transition-colors last:border-0 hover:bg-[var(--ff-row-hover)]"
-                >
-                  <td className="px-6 py-4 sm:px-8">
-                    <Link
-                      href={`/invoices/${inv.id}`}
-                      className="font-mono text-[13px] font-semibold text-[var(--ff-on-surface)] transition-colors hover:text-[var(--ff-primary)]"
-                    >
-                      {inv.internal_number ?? '(bez numeru)'}
-                    </Link>
-                  </td>
-                  <td className="px-6 py-4 text-[13px] tabular-nums text-[color-mix(in_srgb,var(--ff-on-surface-variant)_65%,transparent)] sm:px-8">
-                    {inv.issue_date ?? '—'}
-                  </td>
-                  <td className="px-6 py-4 sm:px-8">
-                    <div className="font-semibold text-[var(--ff-on-surface)]">
-                      {inv.buyer_data?.name ?? '—'}
-                    </div>
-                    {inv.buyer_data?.nip ? (
-                      <div className="mt-0.5 font-mono text-[11px] text-[var(--ff-text-dim)]">
-                        {inv.buyer_data.nip}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td className="px-6 py-4 text-right text-[13px] font-semibold tabular-nums text-[var(--ff-on-surface)] sm:px-8">
-                    {inv.gross_total != null
-                      ? `${formatPlMoney(Number(inv.gross_total))} PLN`
-                      : '—'}
-                  </td>
-                  <td className="px-6 py-4 sm:px-8">
-                    <StatusBadge status={inv.ksef_status} />
-                  </td>
-                  <td className="px-6 py-4 font-mono text-[13px] text-[var(--ff-text-soft)]">
-                    {inv.ksef_number ?? '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <InvoicesTable
+          invoices={invoices}
+          facts={facts}
+          today={dayToday}
+          selectedIds={selectedSet}
+          onToggleRow={toggleRow}
+          onToggleAll={toggleAll}
+        />
+      </Card>
     </>
   );
 }

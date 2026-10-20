@@ -1,7 +1,8 @@
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 import { Sparkles } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -62,14 +63,13 @@ export default async function ImportDanychPage() {
               </p>
             </div>
             {hasCredentials ? (
-              <Button asChild variant="glass-primary" size="lg" className="w-full sm:w-auto">
-                <Link
-                  href={`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`}
-                >
-                  <Sparkles className="mr-2 h-4 w-4 shrink-0" />
-                  Rozpocznij Magiczny Import
-                </Link>
-              </Button>
+              <Link
+                href={`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`}
+                className={cn(buttonVariants({ variant: 'glass-primary', size: 'lg' }), 'w-full sm:w-auto')}
+              >
+                <Sparkles className="mr-2 h-4 w-4 shrink-0" />
+                Rozpocznij Magiczny Import
+              </Link>
             ) : (
               <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 p-4 text-left text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_75%,transparent)]">
                 Aby uruchomić import, najpierw wgraj certyfikat KSeF w{' '}

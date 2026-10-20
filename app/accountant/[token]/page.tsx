@@ -82,7 +82,7 @@ export default async function AccountantPortalPage({
         />
 
         <div className="text-center pt-4 pb-2">
-          <p className="text-xs text-muted-foreground">Powered by KSeF SaaS</p>
+          <p className="text-xs text-muted-foreground">Powered by FaktWay</p>
         </div>
       </div>
     </div>

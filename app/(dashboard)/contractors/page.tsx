@@ -5,7 +5,7 @@ import { BulkValidateButton } from '@/components/validation/bulk-validate-button
 import { VatStatusBadge } from '@/components/validation/vat-status-badge';
 import { ContractorReminderToggle } from '@/components/reminders/contractor-reminder-toggle';
 import { ContractorRowActions } from '@/components/contractors/contractor-row-actions';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { contractorSearchFilter } from '@/lib/contractors/edit';
 import { sanitizeSearch } from '@/lib/invoices/list-query';
@@ -60,9 +60,9 @@ export default async function ContractorsPage({
         <div className="flex gap-2">
           <Button type="submit" variant="glass-primary">Szukaj</Button>
           {q && (
-            <Button asChild variant="outline">
-              <Link href="/contractors">Wyczyść</Link>
-            </Button>
+            <Link href="/contractors" className={buttonVariants({ variant: 'outline' })}>
+              Wyczyść
+            </Link>
           )}
         </div>
       </form>

@@ -26,7 +26,7 @@ export interface Settings {
   sender_name: string | null;
   /**
    * Dawne „Adres From”. Nie trafia już do „Od:” (Resend wysyła tylko z domen
-   * FaktFlow) — służy jako Reply-To, gdy `reply_to_email` jest pusty. Pola nie
+   * FaktWay) — służy jako Reply-To, gdy `reply_to_email` jest pusty. Pola nie
    * ma w formularzu; kolumna zostaje, bo część kont ma ją wypełnioną.
    */
   sender_email: string | null;
@@ -337,7 +337,7 @@ export function ReminderSettingsForm({
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Nazwa pojawi się w stopce emaila i jako „Od:”. Wysyłamy z adresu
-            FaktFlow w imieniu Twojej firmy — odpowiedzi klientów trafią na
+            FaktWay w imieniu Twojej firmy — odpowiedzi klientów trafią na
             adres poniżej.
           </p>
         </div>

@@ -19,7 +19,7 @@ import type { DuplicateDecisionView } from '@/lib/ksef/duplicate-decision';
  *    „📧📞 Jan K” (10 jednostek, 8 znaków) przechodziła w przeglądarce
  *    i padała w bazie z tekstem resetu szkicu.
  *
- * Prawdziwe: `OperatorDuplicateDecision`, checkbox (radix), teksty operatora.
+ * Prawdziwe: `OperatorDuplicateDecision`, checkbox, teksty operatora.
  * Zastąpione: akcja serwerowa, `next/navigation`, `sonner` i dialog (bez portalu).
  */
 
@@ -93,7 +93,7 @@ function view(patch: Partial<DecidableView> = {}): DecidableView {
       { label: 'Nabywca', ksef: 'Nabywca testowy', ours: 'Nabywca testowy', same: true },
       { label: 'NIP nabywcy', ksef: '1234567890', ours: '9876543210', same: false },
       { label: 'Kwota brutto', ksef: '123.00 PLN', ours: '123.00 PLN', same: true },
-      { label: 'Program', ksef: 'Inny Program 1.0', ours: 'FaktFlow', same: null },
+      { label: 'Program', ksef: 'Inny Program 1.0', ours: 'FaktWay', same: null },
     ],
     sameContent: null,
     needsConfirmation: { same_sale: true, other_sale: false },
@@ -114,7 +114,7 @@ function b2cView(): DecidableView {
       { label: 'Nabywca', ksef: 'Jan Konsument', ours: 'Jan Konsument', same: true },
       { label: 'NIP nabywcy', ksef: null, ours: null, same: null },
       { label: 'Kwota brutto', ksef: '123.00 PLN', ours: '123.00 PLN', same: true },
-      { label: 'Program', ksef: 'Inny Program 1.0', ours: 'FaktFlow', same: null },
+      { label: 'Program', ksef: 'Inny Program 1.0', ours: 'FaktWay', same: null },
     ],
     needsConfirmation: { same_sale: true, other_sale: true },
     markedDifference: false,

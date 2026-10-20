@@ -10,10 +10,17 @@
 > [`docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`](docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md),
 > zrób TYLKO wskazaną sesję według „Protokołu naprawy błędu” niżej, a na
 > końcu dopisz wiersz w dzienniku sesji (sekcja 9) z numerem PR.
+>
+> **„Kontynuuj plan Finora”** (nowy wygląd aplikacji na szablonie Finora):
+> przeczytaj [`docs/koordynacja/PLAN-FINORA.md`](docs/koordynacja/PLAN-FINORA.md),
+> zrób checklistę startową (sekcja 0) i pracuj od „Następny krok”
+> w dzienniku (sekcja 12).
 
 ## Projekt
 
 Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (Krajowy System e-Faktur, Polska). Multi-tenant, solo-founder MVP, target: mikroprzedsiębiorcy i księgowi.
+
+**Nazwa produktu: FaktWay** (od 17.10.2026; wcześniej FaktFlow, robocza „KSeF SaaS”). W tekstach dla klienta pisz tylko „FaktWay” — pilnuje tego `tests/unit/nazwa-produktu.test.ts`. Domeny `faktflow.pl`, adresy e-mail, zmienne `FAKTFLOW_*` i identyfikatory techniczne zostają (plan Finora, D8).
 
 ## Stack (NIEZMIENNY)
 

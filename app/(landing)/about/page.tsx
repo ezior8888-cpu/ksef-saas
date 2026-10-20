@@ -14,9 +14,9 @@ import { SUPPORT_EMAIL } from '@/lib/site';
 import { Container } from '../_components/ui';
 
 export const metadata: Metadata = {
-  title: 'O nas | FaktFlow',
+  title: 'O nas | FaktWay',
   description:
-    'Kto stoi za FaktFlow, w co wierzymy i dla kogo robimy program do faktur w KSeF.',
+    'Kto stoi za FaktWay, w co wierzymy i dla kogo robimy program do faktur w KSeF.',
 };
 
 /**
@@ -111,7 +111,7 @@ export default function AboutPage() {
                     Bartosz Gierszewski
                   </span>
                   <span className="z-body text-[var(--z-muted)]">
-                    Założyciel FaktFlow
+                    Założyciel FaktWay
                   </span>
                 </div>
               </div>
@@ -137,7 +137,7 @@ export default function AboutPage() {
         <Container className="flex flex-col gap-16">
           <div className="flex max-w-[550px] flex-col gap-5">
             <h2 className="z-h2 w-full">
-              <MaskRevealWords text="Ludzie za FaktFlow" />
+              <MaskRevealWords text="Ludzie za FaktWay" />
             </h2>
             <MaskReveal delay={0.15}>
               <p className="z-lead text-[var(--z-muted)]">
@@ -165,7 +165,7 @@ export default function AboutPage() {
                   <p className="z-body text-[var(--z-muted)]">
                     Lubisz upraszczać skomplikowane rzeczy? Napisz do nas —
                     nie prowadzimy teraz rekrutacji, ale chętnie poznamy
-                    ludzi, którzy chcą współtworzyć FaktFlow.
+                    ludzi, którzy chcą współtworzyć FaktWay.
                   </p>
                 </div>
                 {/* Dawniej „Zobacz oferty na LinkedIn” → linkedin.com (strona

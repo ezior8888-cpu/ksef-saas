@@ -118,6 +118,21 @@ const BUYER_KINDS: ReadonlyArray<{ kind: BuyerKind; id: string; label: string; h
 
 const errorTextClass = 'mt-1.5 flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400';
 
+// E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
+const PAYMENT_METHOD_ITEMS = [
+  { value: 'transfer', label: 'Przelew' },
+  { value: 'cash', label: 'Gotówka' },
+  { value: 'card', label: 'Karta' },
+  { value: 'other', label: 'Inna' },
+] as const
+
+const EU_COUNTRY_ITEMS = EU_BUYER_COUNTRIES.map((k) => ({ value: k.code, label: k.name }))
+
+const BUYER_ID_TYPE_ITEMS = (['pesel', 'id_card', 'passport', 'no_id'] as const).map((k) => ({
+  value: k,
+  label: BUYER_ID_TYPE_LABELS[k],
+}))
+
 function euCountryName(code: string): string | undefined {
   return EU_BUYER_COUNTRIES.find((k) => k.code === code)?.name;
 }
@@ -696,12 +711,14 @@ export function InvoiceForm({
               </Label>
               <Select
                 value={buyerCountryCode}
-                onValueChange={(v) =>
+                items={EU_COUNTRY_ITEMS}
+                onValueChange={(v) => {
+                  if (v == null) return
                   form.setValue('buyerCountryCode', v, {
                     shouldDirty: true,
                     shouldValidate: wyslanoRaz,
                   })
-                }
+                }}
               >
                 <SelectTrigger
                   id="buyer-country"
@@ -711,9 +728,9 @@ export function InvoiceForm({
                   <SelectValue placeholder="Wybierz kraj UE" />
                 </SelectTrigger>
                 <SelectContent>
-                  {EU_BUYER_COUNTRIES.map((k) => (
-                    <SelectItem key={k.code} value={k.code}>
-                      {k.name}
+                  {EU_COUNTRY_ITEMS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -772,7 +789,9 @@ export function InvoiceForm({
             <Label className={labelClass}>Typ identyfikatora</Label>
             <Select
               value={buyerConsumerIdType ?? 'pesel'}
+              items={BUYER_ID_TYPE_ITEMS}
               onValueChange={(v) => {
+                if (v == null) return
                 form.setValue(
                   'buyerConsumerIdType',
                   v as InvoiceFormValues['buyerConsumerIdType'],
@@ -787,9 +806,9 @@ export function InvoiceForm({
                 <SelectValue placeholder="Wybierz typ" />
               </SelectTrigger>
               <SelectContent>
-                {(['pesel', 'id_card', 'passport', 'no_id'] as const).map((k) => (
-                  <SelectItem key={k} value={k}>
-                    {BUYER_ID_TYPE_LABELS[k]}
+                {BUYER_ID_TYPE_ITEMS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1162,21 +1181,24 @@ export function InvoiceForm({
             <Label className={labelClass}>Metoda płatności</Label>
             <Select
               value={paymentMethod}
-              onValueChange={(v) =>
+              items={PAYMENT_METHOD_ITEMS}
+              onValueChange={(v) => {
+                if (v == null) return
                 form.setValue(
                   'paymentMethod',
                   v as InvoiceFormValues['paymentMethod']
                 )
-              }
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="transfer">Przelew</SelectItem>
-                <SelectItem value="cash">Gotówka</SelectItem>
-                <SelectItem value="card">Karta</SelectItem>
-                <SelectItem value="other">Inna</SelectItem>
+                {PAYMENT_METHOD_ITEMS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

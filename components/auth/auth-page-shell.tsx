@@ -57,7 +57,7 @@ export function AuthPageShell({ children }: AuthPageShellProps) {
             <Link href="/" className="mb-8 inline-flex items-center">
               <Image
                 src={LOGO}
-                alt="FaktFlow"
+                alt="FaktWay"
                 width={32}
                 height={32}
                 priority

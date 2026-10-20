@@ -117,7 +117,7 @@ export function Hero() {
 
         {/* „Zrzut pulpitu” usunięty 15.10.2026: był to panel inwestycyjny
             z szablonu (Apple, Google, Meta, $150,000) podpisany „Pulpit
-            FaktFlow”. Wraca tylko prawdziwy zrzut panelu FaktFlow. */}
+            FaktFlow”. Wraca tylko prawdziwy zrzut panelu FaktWay. */}
       </div>
     </header>
   );

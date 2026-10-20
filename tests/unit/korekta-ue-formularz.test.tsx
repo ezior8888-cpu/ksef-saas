@@ -147,15 +147,22 @@ function setValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
 }
 
 async function chooseAmountChange(el: HTMLElement) {
-  // Radix Select trzyma w formularzu ukryty natywny <select> (autofill) —
-  // jego zmiana przełącza wartość tak samo jak wybór z listy.
-  const native = [...el.querySelectorAll<HTMLSelectElement>('select[aria-hidden="true"]')].find((s) =>
-    optionValues(s).includes('amount_change'),
+  // E1: Base UI Select — otwieramy listę prawdziwym triggerem (mousedown) i klikamy opcję.
+  const trigger = [...el.querySelectorAll<HTMLElement>('[role="combobox"]')].find((t) =>
+    /Korekta|Typ/.test(t.textContent ?? ''),
   );
-  expect(native).toBeDefined();
+  expect(trigger).toBeDefined();
   await act(async () => {
-    native!.value = 'amount_change';
-    native!.dispatchEvent(new Event('change', { bubbles: true }));
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      trigger!.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0 }))
+    }
+  });
+  const option = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (o) => o.textContent?.trim().startsWith('Korekta kwotowa'),
+  );
+  expect(option).toBeDefined();
+  await act(async () => {
+    option!.click()
   });
 }
 

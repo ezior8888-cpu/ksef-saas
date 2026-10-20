@@ -100,7 +100,7 @@ import {
  * Odpowiedź 440 „duplikat”, której NIE da się przypisać do naszej wcześniejszej
  * wysyłki tej faktury (inny numer sesji albo brak historii). KSeF wykrywa
  * duplikat po numerze faktury sprzedawcy, a ten numer mógł zostać użyty poza
- * FaktFlow — przypięcie cudzego numeru KSeF byłoby błędnym zapisem prawnym.
+ * FaktWay — przypięcie cudzego numeru KSeF byłoby błędnym zapisem prawnym.
  * Stan neutralny „do uzgodnienia” (jak wstrzymana ROZ), bez komunikatu
  * „odrzucona”. Znacznik w treści błędu, bo przechodzi przez oba backendy jobów.
  */
@@ -770,7 +770,7 @@ export async function onSubmitInvoiceExhausted(
  * D-A4-2: komunikat dla klienta przy `ENV_MISMATCH` — gdzie zlecono wysyłkę,
  * jakie środowisko jest teraz i co zrobić. Bez dowodu kontaktu: szkic
  * i decyzja klienta. Z dowodem (wcześniejsza próba mogła dotrzeć do KSeF):
- * nie wystawiać ponownie — szkic zablokowany, sprawdza pomoc FaktFlow (decyzja 07.10.2026).
+ * nie wystawiać ponownie — szkic zablokowany, sprawdza pomoc FaktWay (decyzja 07.10.2026).
  */
 function envMismatchMessage(
   eventEnvironment: string,
@@ -779,9 +779,9 @@ function envMismatchMessage(
 ): string {
   const what = configuredEnvironment
     ? `Tej wysyłki nie wykonaliśmy: zlecono ją w środowisku KSeF „${eventEnvironment}”, a obecne to „${configuredEnvironment}”.`
-    : `Tej wysyłki nie wykonaliśmy: środowisko KSeF po stronie FaktFlow nie jest poprawnie ustawione (zlecenie: „${eventEnvironment}”). Zajmujemy się tym.`;
+    : `Tej wysyłki nie wykonaliśmy: środowisko KSeF po stronie FaktWay nie jest poprawnie ustawione (zlecenie: „${eventEnvironment}”). Zajmujemy się tym.`;
   if (contacted) {
-    return `${what} Wcześniejsza próba wysyłki tej faktury mogła dotrzeć do KSeF — nie wystawiaj jej ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`;
+    return `${what} Wcześniejsza próba wysyłki tej faktury mogła dotrzeć do KSeF — nie wystawiaj jej ponownie i napisz do pomocy FaktWay (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`;
   }
   return configuredEnvironment
     ? `${what} Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku.`
@@ -1251,10 +1251,10 @@ export async function runSubmitInvoice(
     // tej firmy o tym numerze; rozstrzygamy, czyja to treść:
     //   1. sesja oryginału jest w historii tej faktury i ma ten sam skrót → nasza;
     //   2. pobieramy oryginał i porównujemy z naszymi plikami: identyczny → nasza
-    //      (`accepted` z numerem oryginału); z FaktFlow albo ta sama treść
+    //      (`accepted` z numerem oryginału); z FaktWay albo ta sama treść
     //      z innego programu → operator; inny program, inna treść →
     //      KSEF_NUMBER_TAKEN (klient wystawia z nowym numerem);
-    //   3. numer KSeF oryginału ma inna faktura sprzedaży firmy w FaktFlow (Y) →
+    //   3. numer KSeF oryginału ma inna faktura sprzedaży firmy w FaktWay (Y) →
     //      bez przyjęcia numeru, `known-number` z danymi pobranego oryginału
     //      (D-A4-1b-3 PR B: decyzja klienta przy braku własnej historii).
     // Wpis naszej próby dostaje znacznik 440 (numer i sesja oryginału) i zostaje
@@ -1512,7 +1512,7 @@ export async function runSubmitInvoice(
             alertOperator('archive-conflict');
             throw verdict(
               SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE,
-              `KSeF ma już fakturę o tym numerze (numer KSeF ${original}), a w archiwum FaktFlow jest pod tym numerem inny plik — ` +
+              `KSeF ma już fakturę o tym numerze (numer KSeF ${original}), a w archiwum FaktWay jest pod tym numerem inny plik — ` +
                 'do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.',
             );
           }
@@ -1543,7 +1543,7 @@ export async function runSubmitInvoice(
             ? knownNumberVerdictMessage(original, known, ownHistory)
             : cmp.verdict === 'operator'
               ? operatorVerdictMessage(original, cmp)
-              : `KSeF ma już fakturę o tym numerze (numer KSeF ${original}) spoza FaktFlow, a historia wysyłki nie ma naszego pliku do porównania treści. Do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.`,
+              : `KSeF ma już fakturę o tym numerze (numer KSeF ${original}) spoza FaktWay, a historia wysyłki nie ma naszego pliku do porównania treści. Do uzgodnienia przez operatora; nie wystawiaj faktury ponownie.`,
         );
       }
       // Oryginał z innego programu o innej treści: numer zajęty. Wszystkie wpisy

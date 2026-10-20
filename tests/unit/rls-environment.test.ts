@@ -53,6 +53,14 @@ describe('separate RLS test configuration', () => {
       'tests/rls-decyzja-duplikatu.test.ts',
       // 00150 (A5): dziennik prób wysyłki — tylko serwis, bez DELETE, nie jest dowodem kontaktu.
       'tests/rls-dziennik-prob-wysylki.test.ts',
+      // 00152: faktura za abonament w obu nazwach produktu (FaktFlow, FaktWay).
+      'tests/rls-faktura-abonamentu-faktway.test.ts',
+      // Plan Finora E3: dzieci faktur (korekta, ROZ) przez prawdziwy PostgREST.
+      'tests/rls-dzieci-faktur.test.ts',
+      // Plan Finora E3 / C1: filtr płatności listy faktur (kilka or()) przez PostgREST.
+      'tests/rls-lista-faktur-platnosc.test.ts',
+      // 00153 (plan Finora E4, limit VAT): GRANT SELECT nowej kolumny tenants, CHECK, izolacja.
+      'tests/rls-data-rozpoczecia.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

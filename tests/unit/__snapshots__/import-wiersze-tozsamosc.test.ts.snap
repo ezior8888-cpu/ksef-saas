@@ -296,7 +296,7 @@ exports[`C0: processImportedInvoices — zapisy do bazy i ostrzeżenia bez zmian
     "invoicesImported": 0,
     "productsCreated": 2,
     "warnings": [
-      "FV/C0/NIEZNANA (KSeF 1234567890-20260910-C00000000008-AF): stawka VAT „nieznana” (pozycja bez stawki w KSeF, której nie da się ustalić z sum faktury) — FaktFlow jej jeszcze nie wykazuje w JPK. Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
+      "FV/C0/NIEZNANA (KSeF 1234567890-20260910-C00000000008-AF): stawka VAT „nieznana” (pozycja bez stawki w KSeF, której nie da się ustalić z sum faktury) — FaktWay jej jeszcze nie wykazuje w JPK. Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
       "Faktura FV/C0/NIEZNANA: nie zapisano oryginału XML (KOD I) — ponów import (xml_documents: db down)",
     ],
   },
@@ -579,7 +579,7 @@ exports[`C0: processImportedInvoices — zapisy do bazy i ostrzeżenia bez zmian
     "invoicesImported": 2,
     "productsCreated": 4,
     "warnings": [
-      "FV/C0/NIEZNANA (KSeF 1234567890-20260910-C00000000008-AF): stawka „nieznana” (pozycja bez stawki w KSeF, której nie da się ustalić z sum faktury) — FaktFlow jej nie rozlicza; faktura jest zapisana z kwotami z KSeF, sprawdź ją z księgową.",
+      "FV/C0/NIEZNANA (KSeF 1234567890-20260910-C00000000008-AF): stawka „nieznana” (pozycja bez stawki w KSeF, której nie da się ustalić z sum faktury) — FaktWay jej nie rozlicza; faktura jest zapisana z kwotami z KSeF, sprawdź ją z księgową.",
     ],
   },
   "writes": [
@@ -2625,7 +2625,7 @@ exports[`C0: processImportedInvoices — zapisy do bazy i ostrzeżenia bez zmian
     "invoicesImported": 1,
     "productsCreated": 1,
     "warnings": [
-      "FK/C0/1 (KSeF 1234567890-20260910-C00000000007-AF): zaimportowana faktura korygująca — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-10 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
+      "FK/C0/1 (KSeF 1234567890-20260910-C00000000007-AF): zaimportowana faktura korygująca — FaktWay nie zna jej powiązań (faktura pierwotna, zaliczki). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-10 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
       "FK/C0/1: invoice_kind ustawiono na „regular” (typ źródłowy „correction” wymaga pól powiązanych nieobecnych w imporcie)",
     ],
   },
@@ -2880,7 +2880,7 @@ exports[`C0: processImportedInvoices — zapisy do bazy i ostrzeżenia bez zmian
     "invoicesImported": 1,
     "productsCreated": 2,
     "warnings": [
-      "FV/C0/NIEZNANA (KSeF 1234567890-20260910-C00000000008-AF): stawka VAT „nieznana” (pozycja bez stawki w KSeF, której nie da się ustalić z sum faktury) — FaktFlow jej jeszcze nie wykazuje w JPK. Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
+      "FV/C0/NIEZNANA (KSeF 1234567890-20260910-C00000000008-AF): stawka VAT „nieznana” (pozycja bez stawki w KSeF, której nie da się ustalić z sum faktury) — FaktWay jej jeszcze nie wykazuje w JPK. Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
     ],
   },
   "writes": [
@@ -3162,7 +3162,7 @@ exports[`C0: processImportedInvoices — zapisy do bazy i ostrzeżenia bez zmian
     "invoicesImported": 2,
     "productsCreated": 4,
     "warnings": [
-      "FV/C0/NIEZNANA: stawka „nieznana” (pozycja bez stawki w KSeF, której nie da się ustalić z sum faktury) nie ma odpowiednika w FaktFlow — szkic zapisany z tą stawką.",
+      "FV/C0/NIEZNANA: stawka „nieznana” (pozycja bez stawki w KSeF, której nie da się ustalić z sum faktury) nie ma odpowiednika w FaktWay — szkic zapisany z tą stawką.",
     ],
   },
   "writes": [
@@ -3645,8 +3645,8 @@ exports[`C0: processImportedInvoices — zapisy do bazy i ostrzeżenia bez zmian
     "invoicesImported": 8,
     "productsCreated": 10,
     "warnings": [
-      "FK/C0/1 (KSeF 1234567890-20260910-C00000000007-AF): zaimportowana faktura korygująca — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-10 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
-      "FV/C0/NIEZNANA (KSeF 1234567890-20260910-C00000000008-AF): stawka VAT „nieznana” (pozycja bez stawki w KSeF, której nie da się ustalić z sum faktury) — FaktFlow jej jeszcze nie wykazuje w JPK. Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
+      "FK/C0/1 (KSeF 1234567890-20260910-C00000000007-AF): zaimportowana faktura korygująca — FaktWay nie zna jej powiązań (faktura pierwotna, zaliczki). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-10 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
+      "FV/C0/NIEZNANA (KSeF 1234567890-20260910-C00000000008-AF): stawka VAT „nieznana” (pozycja bez stawki w KSeF, której nie da się ustalić z sum faktury) — FaktWay jej jeszcze nie wykazuje w JPK. Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
       "FK/C0/1: invoice_kind ustawiono na „regular” (typ źródłowy „correction” wymaga pól powiązanych nieobecnych w imporcie)",
     ],
   },
@@ -6317,7 +6317,7 @@ exports[`C0: przypadki brzegowe wiersza i kolejność kluczy (dodane po sprawdze
     "invoicesImported": 1,
     "productsCreated": 3,
     "warnings": [
-      "FV/C0/P6A (KSeF 1234567890-20260910-C00000000013-AF): oznaczenie, którego FaktFlow nie wykazuje w JPK — faktura do paragonu (FP), oznaczenie GTU w pozycjach (GTU_12); pozycje mają różne daty sprzedaży (P_6A: 2026-09-02, 2026-09-03, 2026-09-04). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
+      "FV/C0/P6A (KSeF 1234567890-20260910-C00000000013-AF): oznaczenie, którego FaktWay nie wykazuje w JPK — faktura do paragonu (FP), oznaczenie GTU w pozycjach (GTU_12); pozycje mają różne daty sprzedaży (P_6A: 2026-09-02, 2026-09-03, 2026-09-04). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
     ],
   },
   "writes": [
@@ -7299,7 +7299,7 @@ exports[`C0: przypadki brzegowe wiersza i kolejność kluczy (dodane po sprawdze
     "invoicesImported": 1,
     "productsCreated": 3,
     "warnings": [
-      "FV/C0/ROZ (KSeF 1234567890-20260910-C00000000011-AF): zaimportowana faktura rozliczeniowa — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
+      "FV/C0/ROZ (KSeF 1234567890-20260910-C00000000011-AF): zaimportowana faktura rozliczeniowa — FaktWay nie zna jej powiązań (faktura pierwotna, zaliczki). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
       "FV/C0/ROZ: invoice_kind ustawiono na „regular” (typ źródłowy „final” wymaga pól powiązanych nieobecnych w imporcie)",
     ],
   },
@@ -7924,7 +7924,7 @@ exports[`C0: przypadki brzegowe wiersza i kolejność kluczy (dodane po sprawdze
     "invoicesImported": 1,
     "productsCreated": 3,
     "warnings": [
-      "FV/C0/P15-ZLE (KSeF 1234567890-20260910-C00000000015-AF): kwot pozycji nie da się wiernie przenieść z pliku KSeF (brutto pozycji 99.99 ≠ P_15 99.90). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową — KPiR i CSV też nie pokażą poprawnych kwot tej faktury, wprowadźcie je ręcznie.",
+      "FV/C0/P15-ZLE (KSeF 1234567890-20260910-C00000000015-AF): kwot pozycji nie da się wiernie przenieść z pliku KSeF (brutto pozycji 99.99 ≠ P_15 99.90). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową — KPiR i CSV też nie pokażą poprawnych kwot tej faktury, wprowadźcie je ręcznie.",
       "FV/C0/P15-ZLE: Możliwa niezgodność kwot nagłówka: netto+VAT=0.00 vs brutto(P_15)=99.90",
     ],
   },
@@ -8251,7 +8251,7 @@ exports[`C0: przypadki brzegowe wiersza i kolejność kluczy (dodane po sprawdze
     "invoicesImported": 1,
     "productsCreated": 3,
     "warnings": [
-      "FV/C0/P14 (KSeF 1234567890-20260910-C00000000016-AF): kwot pozycji nie da się wiernie przenieść z pliku KSeF (stawka 23: brutto pozycji 99.99 ≠ netto 81.29 + VAT 18.71 z nagłówka). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
+      "FV/C0/P14 (KSeF 1234567890-20260910-C00000000016-AF): kwot pozycji nie da się wiernie przenieść z pliku KSeF (stawka 23: brutto pozycji 99.99 ≠ netto 81.29 + VAT 18.71 z nagłówka). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
     ],
   },
   "writes": [
@@ -8576,7 +8576,7 @@ exports[`C0: przypadki brzegowe wiersza i kolejność kluczy (dodane po sprawdze
     "invoicesImported": 1,
     "productsCreated": 3,
     "warnings": [
-      "FV/C0/ZAL (KSeF 1234567890-20260910-C00000000010-AF): zaimportowana faktura zaliczkowa — FaktFlow nie zna jej powiązań (faktura pierwotna, zaliczki). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
+      "FV/C0/ZAL (KSeF 1234567890-20260910-C00000000010-AF): zaimportowana faktura zaliczkowa — FaktWay nie zna jej powiązań (faktura pierwotna, zaliczki). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
       "FV/C0/ZAL: invoice_kind ustawiono na „regular” (typ źródłowy „advance” wymaga pól powiązanych nieobecnych w imporcie)",
     ],
   },
@@ -9172,8 +9172,8 @@ exports[`C0: przypadki brzegowe wiersza i kolejność kluczy (dodane po sprawdze
     "invoicesImported": 2,
     "productsCreated": 3,
     "warnings": [
-      "FV/C0/23 (KSeF 1234567890-20260910-C00000000001-AF): adnotacji z KSeF nie udało się odczytać (P_16 „3”). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
-      "FV/C0/STOPKA (KSeF 1234567890-20260910-C00000000005-AF): netto albo VAT pozycji nie sumuje się do sum faktury z KSeF. Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktFlow, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
+      "FV/C0/23 (KSeF 1234567890-20260910-C00000000001-AF): adnotacji z KSeF nie udało się odczytać (P_16 „3”). Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
+      "FV/C0/STOPKA (KSeF 1234567890-20260910-C00000000005-AF): netto albo VAT pozycji nie sumuje się do sum faktury z KSeF. Faktura jest zapisana, ale JPK_FA i JPK_V7M za 2026-09 nie powstaną w FaktWay, dopóki ta faktura jest w okresie — przygotuj je z księgową (KPiR i CSV działają).",
       "FV/C0/23: brak NIP sprzedawcy w importie — kolumna seller_nip została pusta",
       "FV/C0/STOPKA: brak NIP sprzedawcy w importie — kolumna seller_nip została pusta",
     ],

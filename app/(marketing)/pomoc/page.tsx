@@ -8,7 +8,7 @@ import {
 import { HelpSearch, type HelpSearchItem } from './_components/help-search';
 
 export const metadata: Metadata = {
-  title: 'Centrum pomocy — FaktFlow',
+  title: 'Centrum pomocy — FaktWay',
   description:
     'Poradniki i odpowiedzi na pytania o KSeF, wystawianie faktur, OCR paragonów, KPiR i rozliczenia. Pomoc dla mikrofirm i księgowych.',
 };
@@ -89,7 +89,7 @@ export default function PomocPage() {
         </h2>
         <p className="mt-2 text-sm text-[var(--marketing-muted)]">
           Zaloguj się i kliknij ikonę pomocy w prawym dolnym rogu panelu —
-          asystent AI zna całą dokumentację FaktFlow.
+          asystent AI zna całą dokumentację FaktWay.
         </p>
         <Link
           href="/login"

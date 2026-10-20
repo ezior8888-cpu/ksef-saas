@@ -14,7 +14,7 @@ import type { FakeKsef, MemoryDb, Row } from './helpers/ksef-pelna-sciezka';
  *   - oryginał z innego programu (SystemInfo) → `KSEF_NUMBER_TAKEN`: klient
  *     wraca do szkicu i wystawia z nowym numerem (wpisy duplikatu przestają
  *     być dowodem kontaktu);
- *   - oryginał z FaktFlow o innej treści, numer KSeF znany w innej fakturze,
+ *   - oryginał z FaktWay o innej treści, numer KSeF znany w innej fakturze,
  *     brak uprawnienia do pobrania → operator (`KSEF_DUPLICATE_RECONCILE`);
  *   - chwilowa awaria pobrania → ponowienie samej weryfikacji, bez drugiej wysyłki.
  * Ta sama weryfikacja przy 440 w ścieżce uzgadniania po referencji.
@@ -256,7 +256,7 @@ describe('D-A4-1: cudzy 440 — weryfikacja treści oryginału z KSeF', () => {
   // D-A4-1b-3 PR B (decyzja Bartosza 07.10.2026 (1)): przy znanym numerze runner
   // też pobiera oryginał — klient decyduje, widząc dane K i odnośnik do dokumentu Y.
   // Dlatego `downloads` 0 → 1; kod i numer dokumentu Y w komunikacie zostają.
-  it('numer KSeF oryginału należy do innej faktury tej firmy w FaktFlow → do decyzji klienta, oryginał pobrany', async () => {
+  it('numer KSeF oryginału należy do innej faktury tej firmy w FaktWay → do decyzji klienta, oryginał pobrany', async () => {
     seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: 'K-OBCA', xml: fromOtherProgram(ourXml()) });
     m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_status: 'accepted', ksef_number: 'K-OBCA', internal_number: 'FV/INNA/1' }];
 
@@ -296,7 +296,7 @@ describe('D-A4-1: cudzy 440 — weryfikacja treści oryginału z KSeF', () => {
     expect(classifySendError(error).code).toBe('KSEF_DUPLICATE_RECONCILE');
   });
 
-  it('oryginał z FaktFlow z inną datą wytworzenia (ta sama treść) → operator, nigdy „numer zajęty”', async () => {
+  it('oryginał z FaktWay z inną datą wytworzenia (ta sama treść) → operator, nigdy „numer zajęty”', async () => {
     seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: 'K-STARA', xml: withOtherHeaderDate(ourXml()) });
 
     const error = await failing(runSubmitInvoice(event(), ctx(0)));
@@ -427,7 +427,7 @@ describe('D-A4-1b-3 (A): dane oryginału przy nierozstrzygniętym 440 — zapisa
   const marker = () => submissions().find((r) => r.original_ksef_number === K);
   const archiveKey = `${T}/ksef-import/${K}.xml`;
 
-  it('oryginał z FaktFlow o innej treści → original_check z danymi oryginału, skrótem, archiwum i datą nadania', async () => {
+  it('oryginał z FaktWay o innej treści → original_check z danymi oryginału, skrótem, archiwum i datą nadania', async () => {
     const original = ourXml(150);
     seedKsefInvoice(m.ksef, { session: 'S-STARA', ksefNumber: K, xml: original, acquisitionDate: '2026-09-28T07:15:00.000Z' });
 
@@ -473,7 +473,7 @@ describe('D-A4-1b-3 (A): dane oryginału przy nierozstrzygniętym 440 — zapisa
 
   // D-A4-1b-3 PR B (07.10 (1)): known-number niesie dane oryginału jak no-own-file —
   // pobranie, skrót, podsumowanie, archiwum i `ownHistory` (wcześniej sha256/summary null, bez pobierania).
-  it('numer KSeF ma inna faktura sprzedaży w FaktFlow → reason known-number z odnośnikiem i danymi pobranego oryginału', async () => {
+  it('numer KSeF ma inna faktura sprzedaży w FaktWay → reason known-number z odnośnikiem i danymi pobranego oryginału', async () => {
     seedKsefInvoice(m.ksef, { session: 'S-OBCA', ksefNumber: K, xml: fromOtherProgram(ourXml()) });
     m.mem.db.invoices = [{ id: 'inna', tenant_id: T, direction: 'outgoing', ksef_status: 'accepted', ksef_number: K, internal_number: 'FV/INNA/1' }];
 
@@ -590,11 +590,11 @@ describe('D-A4-1b-3 PR B: znany numer KSeF — oryginał pobrany i opisany (U18)
   const marker = () => submissions().find((r) => r.original_ksef_number === K);
   const archiveKey = `${T}/ksef-import/${K}.xml`;
   /** 2.11.B KNOWN_NUMBER_LAST_ERROR (C16): `ownHistory` false — klient rozstrzyga na karcie faktury. */
-  const KNOWN_NUMBER_LAST_ERROR = `KSeF ma już fakturę o tym numerze (numer KSeF ${K}), a w FaktFlow ten numer KSeF ma dokument FV/INNA/1 — ` +
+  const KNOWN_NUMBER_LAST_ERROR = `KSeF ma już fakturę o tym numerze (numer KSeF ${K}), a w FaktWay ten numer KSeF ma dokument FV/INNA/1 — ` +
     'do rozstrzygnięcia na karcie faktury (ta sama czy inna sprzedaż); nie wystawiaj jej ponownie.';
   /** 2.11.B KNOWN_NUMBER_LAST_ERROR_OWN (C16): `ownHistory` true — klient nie decyduje, więc tekst nie mówi, że sprawa czeka na niego. */
-  const KNOWN_NUMBER_LAST_ERROR_OWN = `KSeF ma już fakturę o tym numerze (numer KSeF ${K}), a w FaktFlow ten numer KSeF ma dokument FV/INNA/1; ` +
-    'faktura w KSeF może być wcześniejszą wysyłką tego dokumentu z FaktFlow — wyjaśnia to pomoc FaktFlow; nie wystawiaj jej ponownie.';
+  const KNOWN_NUMBER_LAST_ERROR_OWN = `KSeF ma już fakturę o tym numerze (numer KSeF ${K}), a w FaktWay ten numer KSeF ma dokument FV/INNA/1; ` +
+    'faktura w KSeF może być wcześniejszą wysyłką tego dokumentu z FaktWay — wyjaśnia to pomoc FaktWay; nie wystawiaj jej ponownie.';
 
   beforeEach(() => {
     m.mem.db.invoices = [{ ...Y }];

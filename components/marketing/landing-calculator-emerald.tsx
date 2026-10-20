@@ -120,7 +120,7 @@ export function LandingCalculatorEmerald() {
 
       <div className="relative z-10 mt-14 flex flex-col items-center justify-between gap-8 border-t border-white/5 pt-10 md:flex-row">
         <p className="max-w-sm text-[11px] italic leading-relaxed text-[var(--ml-on-surface-variant)] opacity-40">
-          Szacunek przy założeniu: 8 min na dokument ręcznie vs 1,5 min z OCR FaktFlow. Twój wynik może być inny.
+          Szacunek przy założeniu: 8 min na dokument ręcznie vs 1,5 min z OCR FaktWay. Twój wynik może być inny.
         </p>
         <Link
           href="/register"

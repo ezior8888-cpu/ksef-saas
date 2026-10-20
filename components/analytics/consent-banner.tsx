@@ -47,7 +47,7 @@ export function ConsentBanner() {
           <p className="font-medium">Analityka i pomoc w rozwoju produktu</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Za Twoją zgodą zbieramy statystyki użycia (PostHog, hostowane w EU),
-            żeby naprawiać błędy i ulepszać FaktFlow. Decyzję zmienisz
+            żeby naprawiać błędy i ulepszać FaktWay. Decyzję zmienisz
             w każdej chwili. Szczegóły:{' '}
             <Link
               href="/legal/cookies"

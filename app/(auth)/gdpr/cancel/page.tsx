@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 import { authAlertErrorClass, authPrimaryButtonClass, authTitleClass } from '@/components/auth/auth-form-styles';
 import { GdprCancelForm } from './cancel-form';
 
@@ -17,7 +18,7 @@ export default async function GdprCancelPage({ searchParams }: {
       {cleanToken ? <GdprCancelForm token={cleanToken} /> : (
         <div className={authAlertErrorClass}>Otwórz pełny link z maila albo zaloguj się i anuluj żądanie w ustawieniach konta.</div>
       )}
-      <Button asChild size="lg" className={authPrimaryButtonClass}><Link href="/login">Przejdź do logowania</Link></Button>
+      <Link href="/login" className={cn(buttonVariants({ size: 'lg' }), authPrimaryButtonClass)}>Przejdź do logowania</Link>
     </div>
   );
 }

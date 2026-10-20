@@ -1,25 +1,32 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
   useMemo,
   useState,
   type PointerEvent as ReactPointerEvent,
-} from 'react';
+} from "react";
 
-import { signOut } from '@/app/(auth)/login/actions';
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
-import { OTWORZ_POMOC } from '@/lib/support/open-support-event';
+import {
+  RiLogoutBoxRLine,
+  RiQuestionLine,
+  type RemixiconComponentType,
+} from "@remixicon/react";
+
+import { signOut } from "@/app/(auth)/login/actions";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { OTWORZ_POMOC } from "@/lib/support/open-support-event";
 import {
   dashboardMobileTabs,
+  dashboardSettingsNavItem,
   getDashboardMoreSections,
   isActiveNavPath,
   type DashboardMobileTab,
-} from '@/lib/dashboard-nav-config';
-import { cn } from '@/lib/utils';
+} from "@/lib/dashboard-nav-config";
+import { cn } from "@/lib/utils";
 
 /**
  * Dolna nawigacja telefonu — pasek z sierpniowej makiety.
@@ -127,10 +134,10 @@ export function BottomNav() {
 
           <div className="mt-1 min-w-0 border-t border-[var(--ff-border)] pt-2">
             <MoreRow
-              href="/settings"
-              label="Ustawienia"
-              icon="settings"
-              active={isActiveNavPath(pathname, '/settings')}
+              href={dashboardSettingsNavItem.href}
+              label={dashboardSettingsNavItem.label}
+              icon={dashboardSettingsNavItem.icon}
+              active={isActiveNavPath(pathname, dashboardSettingsNavItem.href)}
             />
 
             {/* Pomoc jest tu, bo na telefonie pływający bąbelek jest ukryty —
@@ -143,12 +150,7 @@ export function BottomNav() {
               }}
               className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-[var(--ff-text)] transition-colors hover:bg-[var(--ff-row-hover)]"
             >
-              <span
-                aria-hidden
-                className="material-symbols-outlined flex size-5 shrink-0 text-[20px]"
-              >
-                help
-              </span>
+              <RiQuestionLine aria-hidden className="size-5 shrink-0" />
               Pomoc
             </button>
           </div>
@@ -158,17 +160,15 @@ export function BottomNav() {
               rzadką. Przełącznika motywu tu NIE MA celowo: księżyc stoi
               w pasku nagłówka (tak jak w makiecie), a ten sam przełącznik
               w dwóch miejscach to zagadka, nie wygoda. */}
-          <form action={signOut} className="border-t border-[var(--ff-border)] pt-2">
+          <form
+            action={signOut}
+            className="border-t border-[var(--ff-border)] pt-2"
+          >
             <button
               type="submit"
               className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-[var(--ff-text-muted)] transition-colors hover:bg-[var(--ff-row-hover)] hover:text-[var(--ff-text)]"
             >
-              <span
-                aria-hidden
-                className="material-symbols-outlined flex size-5 shrink-0 text-[20px]"
-              >
-                logout
-              </span>
+              <RiLogoutBoxRLine aria-hidden className="size-5 shrink-0" />
               Wyloguj
             </button>
           </form>
@@ -180,7 +180,7 @@ export function BottomNav() {
 
 function shouldHandlePrimaryInAppNav(e: ReactPointerEvent): boolean {
   return (
-    e.pointerType !== 'mouse' ||
+    e.pointerType !== "mouse" ||
     (e.button === 0 && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey)
   );
 }
@@ -206,27 +206,25 @@ function BottomNavSlot({
   // 44 px to minimalny cel dotykowy z wytycznych Apple i Google; slot ma
   // pełną wysokość paska, więc trafienie jest łatwiejsze niż w samą ikonę.
   const slotClass =
-    'flex flex-1 select-none flex-col items-center justify-center gap-1 pt-2 text-[11px] font-medium leading-none transition-colors';
+    "flex flex-1 select-none flex-col items-center justify-center gap-1 pt-2 text-[11px] font-medium leading-none transition-colors";
 
   if (tab.emphasis && tab.href !== null) {
     return (
       <Link
         href={tab.href}
         prefetch
-        aria-current={active ? 'page' : undefined}
+        aria-current={active ? "page" : undefined}
         onPointerDown={(e) => {
           if (!shouldHandlePrimaryInAppNav(e)) return;
           onBeginNav(tab.href!);
         }}
-        className={cn(slotClass, 'text-[var(--ff-accent)]')}
+        className={cn(slotClass, "text-[var(--ff-accent)]")}
       >
         <span
           aria-hidden
-          className="-mt-5 flex size-11 items-center justify-center rounded-full bg-[var(--ff-primary)] text-[var(--ff-on-primary)] shadow-[0_4px_12px_rgba(37,99,235,0.35)] transition-transform active:scale-95"
+          className="-mt-5 flex size-11 items-center justify-center rounded-full bg-[var(--ff-primary)] text-[var(--ff-on-primary)] shadow-md shadow-primary/30 transition-transform active:scale-95"
         >
-          <span className="material-symbols-outlined text-[24px] leading-none">
-            {tab.icon}
-          </span>
+          <tab.icon aria-hidden className="size-6" />
         </span>
         <span className="-mt-3">{tab.label}</span>
       </Link>
@@ -235,19 +233,14 @@ function BottomNavSlot({
 
   const content = (
     <>
-      <span
-        aria-hidden
-        className="material-symbols-outlined text-[22px] leading-none"
-      >
-        {tab.icon}
-      </span>
+      <tab.icon aria-hidden className="size-5" />
       <span>{tab.label}</span>
     </>
   );
 
   const toneClass = active
-    ? 'text-[var(--ff-accent)]'
-    : 'text-[var(--ff-text-muted)]';
+    ? "text-[var(--ff-accent)]"
+    : "text-[var(--ff-text-muted)]";
 
   if (tab.href === null) {
     return (
@@ -255,7 +248,7 @@ function BottomNavSlot({
         type="button"
         onClick={onOpenMore}
         aria-expanded={active}
-        className={cn(slotClass, toneClass, 'pb-[var(--ff-safe-b)]')}
+        className={cn(slotClass, toneClass, "pb-[var(--ff-safe-b)]")}
       >
         {content}
       </button>
@@ -266,13 +259,13 @@ function BottomNavSlot({
     <Link
       href={tab.href}
       prefetch
-      aria-current={active ? 'page' : undefined}
+      aria-current={active ? "page" : undefined}
       onPointerDown={(e) => {
         if (!shouldHandlePrimaryInAppNav(e)) return;
         onBeginNav(tab.href!);
       }}
       onPointerEnter={() => onPrefetch(tab.href!)}
-      className={cn(slotClass, toneClass, 'pb-[var(--ff-safe-b)]')}
+      className={cn(slotClass, toneClass, "pb-[var(--ff-safe-b)]")}
     >
       {content}
     </Link>
@@ -282,12 +275,12 @@ function BottomNavSlot({
 function MoreRow({
   href,
   label,
-  icon,
+  icon: Icon,
   active,
 }: {
   href: string;
   label: string;
-  icon: string;
+  icon: RemixiconComponentType;
   active: boolean;
 }) {
   return (
@@ -295,21 +288,16 @@ function MoreRow({
       href={href}
       prefetch
       className={cn(
-        'flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
+        "flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
         active
-          ? 'ff-sidebar-active text-[var(--ff-accent)]'
-          : 'text-[var(--ff-text)] hover:bg-[var(--ff-row-hover)]',
+          ? "ff-sidebar-active text-[var(--ff-accent)]"
+          : "text-[var(--ff-text)] hover:bg-[var(--ff-row-hover)]",
       )}
     >
-      <span
+      <Icon
         aria-hidden
-        className={cn(
-          'material-symbols-outlined flex size-5 shrink-0 text-[20px]',
-          active && 'text-[var(--ff-accent)]',
-        )}
-      >
-        {icon}
-      </span>
+        className={cn("size-5 shrink-0", active && "text-[var(--ff-accent)]")}
+      />
       {label}
     </Link>
   );

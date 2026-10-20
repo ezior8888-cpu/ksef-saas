@@ -42,7 +42,7 @@ export default async function AccountSettingsPage() {
         } : null} />
       </Card>
 
-      <Card className="p-6 border-destructive/30">
+      <Card className="p-6 ring-destructive/30">
         <h2 className="text-lg font-semibold text-destructive mb-2">
           Usuń organizację (firmę)
         </h2>

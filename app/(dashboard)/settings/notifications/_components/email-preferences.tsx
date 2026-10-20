@@ -47,9 +47,9 @@ const CATEGORIES: CategoryConfig[] = [
     id: 'marketing',
     title: 'Oferty i kampanie',
     description:
-      'Oferty FaktFlow, artykuły z bloga, przypomnienia, gdy dawno nie zaglądałeś. Włączenie oznacza zgodę na takie e-maile; możesz ją wycofać w każdej chwili.',
+      'Oferty FaktWay, artykuły z bloga, przypomnienia, gdy dawno nie zaglądałeś. Włączenie oznacza zgodę na takie e-maile; możesz ją wycofać w każdej chwili.',
     examples:
-      'Np. „Co nowego w FaktFlow w kwietniu", „Wracaj — Twoje konto czeka"',
+      'Np. „Co nowego w FaktWay w kwietniu", „Wracaj — Twoje konto czeka"',
   },
 ];
 

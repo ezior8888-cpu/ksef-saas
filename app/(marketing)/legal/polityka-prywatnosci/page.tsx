@@ -7,7 +7,7 @@ export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: 'Polityka prywatności',
-  description: 'Jak FaktFlow przetwarza dane osobowe: cele, podstawy prawne, odbiorcy, okresy przechowywania i Twoje prawa.',
+  description: 'Jak FaktWay przetwarza dane osobowe: cele, podstawy prawne, odbiorcy, okresy przechowywania i Twoje prawa.',
 };
 
 export default function PrivacyPage() {

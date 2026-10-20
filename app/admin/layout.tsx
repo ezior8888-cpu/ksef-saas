@@ -6,7 +6,7 @@ import { requireAdmin } from '@/lib/auth/admin-guard';
 import { AdminNav } from './_components/admin-nav';
 
 export const metadata: Metadata = {
-  title: 'Admin — FaktFlow',
+  title: 'Admin — FaktWay',
   description: 'Wewnętrzny panel operatora platformy.',
   // Bezwzględny zakaz indeksacji `/admin/*` — strona nie powinna trafić nawet
   // przypadkiem do Google ani archive.org.

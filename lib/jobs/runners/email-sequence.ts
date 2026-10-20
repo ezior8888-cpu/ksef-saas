@@ -79,7 +79,7 @@ function WELCOME_TEMPLATE(name: string) {
   return `
 ${baseStyle}
 <h1>Cześć ${safe},</h1>
-<p>Cieszę się, że jesteś z nami. Jestem Bartek, współzałożyciel FaktFlow.</p>
+<p>Cieszę się, że jesteś z nami. Jestem Bartek, współzałożyciel FaktWay.</p>
 <p>Konto jest bezpłatne. Gdy uruchomisz subskrypcję, pierwsze 30 dni nic nie płacisz — kartę podajesz przy uruchomieniu, a pierwsza płatność przychodzi dopiero po tym okresie.</p>
 <p>Najszybszy sposób żeby zobaczyć wartość:</p>
 <ol>
@@ -90,7 +90,7 @@ ${baseStyle}
 <p>Pytania? Po prostu odpisz na ten email — czytam wszystko.</p>
 <p style="margin-top: 30px;">— Bartek</p>
 <div class="footer">
-  FaktFlow · <a href="${APP_BASE}/legal/regulamin">Regulamin</a> · <a href="${APP_BASE}/legal/polityka-prywatnosci">Polityka prywatności</a>
+  FaktWay · <a href="${APP_BASE}/legal/regulamin">Regulamin</a> · <a href="${APP_BASE}/legal/polityka-prywatnosci">Polityka prywatności</a>
 </div>`;
 }
 
@@ -149,7 +149,7 @@ function DAY_8_STATS_TEMPLATE(name: string, docsCount: number, hoursSaved: strin
   return `
 ${baseStyle}
 <h1>${safe}, w 8 dni…</h1>
-<p>Twoje wyniki w FaktFlow:</p>
+<p>Twoje wyniki w FaktWay:</p>
 <div style="background: #f5f5f5; border-radius: 12px; padding: 20px; margin: 20px 0;">
   <p style="font-size: 36px; margin: 0; font-weight: 700;">${docsCount} dokumentów</p>
   <p style="margin: 5px 0 0 0; color: #666;">faktur i paragonów</p>
@@ -175,7 +175,7 @@ export async function runEmailWelcome(data: Parameters<typeof userRegistered.cre
     await step.run('send-welcome', async () => {
       await sendEmail({
         to: email,
-        subject: 'Witaj w FaktFlow — pierwsze kroki',
+        subject: 'Witaj w FaktWay — pierwsze kroki',
         html: WELCOME_TEMPLATE(firstName),
       });
     });
@@ -297,7 +297,7 @@ export async function runEmailDay8(data: Parameters<typeof emailTrialDay8.create
         to: email,
         // Liczba godzin to szacunek (6,5 min na dokument), nie pomiar — temat
         // nie może podawać jej jako faktu.
-        subject: `${firstName}, Twoje pierwsze 8 dni w FaktFlow`,
+        subject: `${firstName}, Twoje pierwsze 8 dni w FaktWay`,
         html: DAY_8_STATS_TEMPLATE(firstName, totalDocs, hoursSaved),
         ...PRODUCT_EMAIL(userId),
       });

@@ -66,7 +66,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return { title: 'Blog' };
   }
   return {
-    title: `${parsed.title} | KSeF SaaS Blog`,
+    title: `${parsed.title} | FaktWay Blog`,
     description: parsed.description,
   };
 }

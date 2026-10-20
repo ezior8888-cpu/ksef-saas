@@ -7,7 +7,7 @@
  * JPK_FA odmawia, gdy (`jpk-fa-generator.ts`):
  * - w okresie jest faktura korygująca (kwoty korekty w bazie — C-01),
  * - w okresie jest dokument z importu, którego JPK nie wykaże (W9): pozycja
- *   ze stawką spoza FaktFlow albo zaimportowana korekta / zaliczka / ROZ,
+ *   ze stawką spoza FaktWay albo zaimportowana korekta / zaliczka / ROZ,
  * - GUS nie zna adresu firmy z województwem, powiatem i gminą.
  */
 
@@ -36,7 +36,7 @@ interface PeriodInvoice {
   line_amount_problems?: unknown;
   line_amount_totals_unknown?: unknown;
   ksef_line_fields?: unknown;
-  /** C5b: pola `fa3_data` aliasami (bez pozycji — na fakturach FaktFlow `fa3_data` niesie wszystkie). */
+  /** C5b: pola `fa3_data` aliasami (bez pozycji — na fakturach FaktWay `fa3_data` niesie wszystkie). */
   annotations?: unknown;
   annotation_problems?: unknown;
   sale_dates?: unknown;
@@ -58,7 +58,7 @@ interface PeriodLine {
  * odmową co generator (`amountsOf`), więc paczka i plik mówią to samo.
  * Te same faktury co eksport: sprzedaż przyjęta w KSeF, w tym środowisku.
  * Faktury z importu sprawdzane z pozycjami (stawki i suma netto), pozostałe
- * — rodzaj i stawki spoza FaktFlow.
+ * — rodzaj i stawki spoza FaktWay.
  */
 async function unsupportedDocumentReason(
   client: SupabaseClient,
@@ -156,7 +156,7 @@ async function unsupportedDocumentReason(
     }
   }
 
-  // Pozostałe faktury: stawka spoza FaktFlow w którejkolwiek pozycji.
+  // Pozostałe faktury: stawka spoza FaktWay w którejkolwiek pozycji.
   const others = invoices.filter((inv) => inv.origin !== 'ksef_import');
   const byId = new Map(others.map((inv) => [inv.id, inv]));
   const allowed = `(${VAT_RATES.map((r) => `"${r}"`).join(',')})`;

@@ -7,7 +7,7 @@ import { SavingsCalculatorPreview } from '@/components/marketing/savings-calcula
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'Kalkulator oszczędności KSeF SaaS — sprawdź ile zaoszczędzisz',
+  title: 'Kalkulator oszczędności FaktWay — sprawdź ile zaoszczędzisz',
   description:
     'Oblicz ile godzin i pieniędzy zaoszczędzisz z automatyczną kategoryzacją KPiR i OCR faktur. Bezpłatny kalkulator dla mikrofirm i freelancerów.',
 };

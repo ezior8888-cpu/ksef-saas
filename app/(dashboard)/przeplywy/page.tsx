@@ -141,7 +141,7 @@ export default async function PrzeplywyPage() {
         currentSeries={series.currentSeries}
         prevSeries={series.prevSeries}
         currentMonthKey={series.currentMonthKey}
-        year={now.getFullYear()}
+        year={year}
       />
     </div>
   );

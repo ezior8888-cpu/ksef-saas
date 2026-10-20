@@ -21,9 +21,9 @@ export function EmailInvoiceButton({ invoiceId }: { invoiceId: string }) {
 
   if (!open) {
     return (
-      <Button variant="glass" size="lg" onClick={() => setOpen(true)}>
+      <Button variant="outline" onClick={() => setOpen(true)}>
         <Mail className="h-4 w-4 mr-2" />
-        Wyślij mailem
+        Wyślij e-mailem
       </Button>
     );
   }
@@ -55,11 +55,11 @@ export function EmailInvoiceButton({ invoiceId }: { invoiceId: string }) {
         autoFocus
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        placeholder="email nabywcy"
+        placeholder="e-mail nabywcy"
         className="w-56"
-        aria-label="Adres email odbiorcy faktury"
+        aria-label="Adres e-mail odbiorcy faktury"
       />
-      <Button type="submit" size="lg" disabled={isPending}>
+      <Button type="submit" disabled={isPending}>
         {isPending ? (
           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
         ) : (
@@ -69,8 +69,7 @@ export function EmailInvoiceButton({ invoiceId }: { invoiceId: string }) {
       </Button>
       <Button
         type="button"
-        variant="glass"
-        size="lg"
+        variant="outline"
         onClick={() => setOpen(false)}
         disabled={isPending}
       >

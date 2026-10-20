@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Loader2, RotateCcw, Send, Settings } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { failedInvoiceButtons, resetDoneMessage } from '@/lib/invoices/ksef-send-policy';
 import { resendInvoiceAction, resetInvoiceToDraftAction } from './actions-detail';
@@ -85,12 +85,10 @@ export function FailedInvoiceActions({
       {(plan.resend || plan.reset || plan.settings) && (
         <div className="flex flex-wrap gap-2 justify-end">
           {plan.settings && (
-            <Button asChild variant="outline">
-              <Link href="/settings/ksef">
-                <Settings className="h-4 w-4 mr-2" />
-                Ustawienia KSeF
-              </Link>
-            </Button>
+            <Link href="/settings/ksef" className={buttonVariants({ variant: 'outline' })}>
+              <Settings className="h-4 w-4 mr-2" />
+              Ustawienia KSeF
+            </Link>
           )}
           {plan.reset && (
             <Button variant="outline" onClick={handleReset} disabled={busy}>

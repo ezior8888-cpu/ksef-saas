@@ -87,7 +87,7 @@ export async function processImportedInvoices(
   const productsMap = extractUniqueProducts(params.invoices);
   const productsCreated = await upsertProducts(supabase, params.tenantId, productsMap, warnings);
 
-  // W9: dokumenty zapisane, których JPK nie wykaże (stawka spoza FaktFlow,
+  // W9: dokumenty zapisane, których JPK nie wykaże (stawka spoza FaktWay,
   // zaimportowana korekta / zaliczka / ROZ) — na początku listy, bo widok
   // importu pokazuje tylko pierwsze ostrzeżenia.
   const held: string[] = [];
@@ -521,7 +521,7 @@ async function insertInvoices(
           }
         }
         // Ponowienie importu: dokument zapisany wcześniej PRZEZ IMPORT — ostrzeżenie
-        // zostaje. Faktura wystawiona w FaktFlow (korekta, zaliczka z aplikacji)
+        // zostaje. Faktura wystawiona w FaktWay (korekta, zaliczka z aplikacji)
         // ma w bazie właściwy rodzaj i stawki — JPK ją wykaże, bez ostrzeżenia.
         if (source === 'ksef_history' && matches.length === 1 && matches[0]?.origin === 'ksef_import') {
           noteHeld(inv, num, ksefNorm);

@@ -8,7 +8,7 @@ export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: 'Regulamin',
-  description: 'Regulamin świadczenia usług FaktFlow: zakres usług, opłaty, KSeF, odpowiedzialność, reklamacje i odstąpienie od umowy.',
+  description: 'Regulamin świadczenia usług FaktWay: zakres usług, opłaty, KSeF, odpowiedzialność, reklamacje i odstąpienie od umowy.',
 };
 
 export default function TermsPage() {

@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 # ═══════════════════════════════════════════════════════════════
-# FaktFlow — obraz produkcyjny pod Coolify/Hetzner (migracja M5).
+# FaktWay — obraz produkcyjny pod Coolify/Hetzner (migracja M5).
 #
 # Multi-stage: deps → build → runner. Finalny obraz to standalone
 # output Next.js (server.js + traced node_modules) — ~10× mniejszy
 # niż pełny node_modules i bez narzędzi builda w runtime.
 #
 # Build lokalny (test):
-#   docker build -t faktflow --build-arg NEXT_PUBLIC_SUPABASE_URL=... .
+#   docker build -t faktway --build-arg NEXT_PUBLIC_SUPABASE_URL=... .
 # W Coolify: zmienne NEXT_PUBLIC_* oznacz jako "Build Variable" —
 # są WYPIEKANE w bundlu JS podczas builda, nie czytane w runtime.
 # ═══════════════════════════════════════════════════════════════

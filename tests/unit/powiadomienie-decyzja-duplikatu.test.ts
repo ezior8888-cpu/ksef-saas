@@ -157,7 +157,7 @@ const failedEvent = (extra: Partial<FailedEvent> = {}): FailedEvent => ({
   invoiceId: ID,
   tenantId: T,
   environment: 'test',
-  error: `KSeF ma już fakturę o tym numerze (numer KSeF ${K}) spoza FaktFlow, a historia wysyłki nie ma naszego pliku do porównania treści.`,
+  error: `KSeF ma już fakturę o tym numerze (numer KSeF ${K}) spoza FaktWay, a historia wysyłki nie ma naszego pliku do porównania treści.`,
   errorCode: 'KSEF_DUPLICATE_RECONCILE',
   terminal: true,
   manualReconciliationRequired: true,

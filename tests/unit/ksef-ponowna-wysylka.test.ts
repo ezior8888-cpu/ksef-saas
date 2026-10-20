@@ -179,7 +179,7 @@ describe('resendInvoiceAction — ponowna wysyłka przez requeue_ksef_send', () 
 
     // D-A4-1b-3 PR B (zasada z 07.10.2026): klient decyduje sam na karcie faktury,
     // więc tekst nie odsyła do operatora (do PR B: M.reconcile „zajmuje się tym
-    // operator FaktFlow”). Alarm Sentry dla operatora zostaje.
+    // operator FaktWay”). Alarm Sentry dla operatora zostaje.
     const result = await resendInvoiceAction(ID);
     expect(result.success).toBe(false);
     const error = result.success ? '' : result.error;

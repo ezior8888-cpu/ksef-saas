@@ -39,22 +39,22 @@ export function canManageKsefSend(role: string | null | undefined): boolean {
 
 export const KSEF_SEND_MESSAGES = {
   role: 'Ponowną wysyłkę i powrót do szkicu może uruchomić właściciel lub administrator firmy.',
-  direction: 'Ponownie wysłać można tylko fakturę wystawioną w FaktFlow.',
+  direction: 'Ponownie wysłać można tylko fakturę wystawioną w FaktWay.',
   status: 'Ponowną wysyłkę można uruchomić tylko dla faktury z błędem wysyłki.',
   rejected: 'KSeF odrzucił treść tej faktury — wróć do szkicu, popraw i wyślij ponownie.',
   terminal: 'Dokument nie przeszedł kontroli treści — wróć do szkicu i popraw.',
-  reconcile: 'Ta faktura wymaga uzgodnienia z KSeF — zajmuje się tym operator FaktFlow. Nie wysyłaj jej ponownie.',
+  reconcile: 'Ta faktura wymaga uzgodnienia z KSeF — zajmuje się tym operator FaktWay. Nie wysyłaj jej ponownie.',
   hold: 'Wysyłka jest wstrzymana przez operatora. Faktura wyjdzie automatycznie po przywróceniu wysyłki.',
-  korHold: `Wysyłka korekt do KSeF jest wstrzymana przez FaktFlow do czasu poprawki ich kwot — tej korekty teraz nie wyślemy, a po zdjęciu blokady sami jej nie wyślemy. Nie wystawiaj nowej korekty na własną rękę — napisz do pomocy FaktFlow (${SUPPORT_EMAIL}), podając numer korekty. Jeśli żadna próba nie dotarła do KSeF, cofniemy ją do szkicu (wtedy usuń szkic i po zdjęciu blokady wystaw korektę od nowa); jeśli mogła dotrzeć — korekta poczeka na zdjęcie blokady.`,
-  rozHold: `Wysyłka faktur rozliczeniowych do KSeF jest wstrzymana przez FaktFlow do czasu pewnego rozliczania zaliczek — tej faktury teraz nie wyślemy, a po zdjęciu blokady sami jej nie wyślemy. Nie wystawiaj nowej faktury rozliczeniowej na własną rękę — napisz do pomocy FaktFlow (${SUPPORT_EMAIL}), podając numer faktury. Jeśli żadna próba nie dotarła do KSeF, cofniemy ją do szkicu (wtedy usuń szkic i po zdjęciu blokady wystaw fakturę rozliczeniową od nowa); jeśli mogła dotrzeć — faktura poczeka na zdjęcie blokady.`,
+  korHold: `Wysyłka korekt do KSeF jest wstrzymana przez FaktWay do czasu poprawki ich kwot — tej korekty teraz nie wyślemy, a po zdjęciu blokady sami jej nie wyślemy. Nie wystawiaj nowej korekty na własną rękę — napisz do pomocy FaktWay (${SUPPORT_EMAIL}), podając numer korekty. Jeśli żadna próba nie dotarła do KSeF, cofniemy ją do szkicu (wtedy usuń szkic i po zdjęciu blokady wystaw korektę od nowa); jeśli mogła dotrzeć — korekta poczeka na zdjęcie blokady.`,
+  rozHold: `Wysyłka faktur rozliczeniowych do KSeF jest wstrzymana przez FaktWay do czasu pewnego rozliczania zaliczek — tej faktury teraz nie wyślemy, a po zdjęciu blokady sami jej nie wyślemy. Nie wystawiaj nowej faktury rozliczeniowej na własną rękę — napisz do pomocy FaktWay (${SUPPORT_EMAIL}), podając numer faktury. Jeśli żadna próba nie dotarła do KSeF, cofniemy ją do szkicu (wtedy usuń szkic i po zdjęciu blokady wystaw fakturę rozliczeniową od nowa); jeśli mogła dotrzeć — faktura poczeka na zdjęcie blokady.`,
   incomplete: 'Faktura nie ma kompletnych danych do wysyłki — nie wyślemy jej ponownie. Wróć do szkicu, usuń go i wystaw fakturę od nowa.',
-  transient: 'Błąd po stronie KSeF albo FaktFlow — wysyłkę ponowimy automatycznie. Możesz też wysłać teraz.',
-  transientManual: `Błąd po stronie KSeF albo FaktFlow — tej wysyłki nie ponowimy automatycznie. Wyślij ponownie albo wróć do szkicu; jeśli błąd się powtarza, napisz do pomocy FaktFlow (${SUPPORT_EMAIL}).`,
-  envUnknown: `Nie możemy teraz potwierdzić środowiska KSeF po stronie FaktFlow — tej faktury teraz nie wyślemy. Odśwież stronę za kilka minut; jeśli komunikat się powtarza, napisz do pomocy FaktFlow (${SUPPORT_EMAIL}).`,
+  transient: 'Błąd po stronie KSeF albo FaktWay — wysyłkę ponowimy automatycznie. Możesz też wysłać teraz.',
+  transientManual: `Błąd po stronie KSeF albo FaktWay — tej wysyłki nie ponowimy automatycznie. Wyślij ponownie albo wróć do szkicu; jeśli błąd się powtarza, napisz do pomocy FaktWay (${SUPPORT_EMAIL}).`,
+  envUnknown: `Nie możemy teraz potwierdzić środowiska KSeF po stronie FaktWay — tej faktury teraz nie wyślemy. Odśwież stronę za kilka minut; jeśli komunikat się powtarza, napisz do pomocy FaktWay (${SUPPORT_EMAIL}).`,
   setup: 'Brak zweryfikowanego certyfikatu KSeF — uzupełnij ustawienia KSeF, potem wyślij ponownie.',
   notInKsef: 'KSeF nie ma tej faktury — poprzednia wysyłka do niego nie dotarła. Wyślij ją ponownie albo wróć do szkicu.',
-  issueDatePassed: `Tej wysyłki nie wykonaliśmy: dokument ma datę wystawienia sprzed dzisiaj, a w KSeF dokument wystawia się w dniu wysyłki (szczegóły wyżej). Wróć do szkicu, usuń go i wystaw dokument od nowa z dzisiejszą datą. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj dokumentu ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy go w KSeF.`,
-  envMismatch: `Tej wysyłki nie wykonaliśmy: zlecenie dotyczyło innego środowiska KSeF (testowego albo produkcyjnego) niż obecne ustawienie FaktFlow — szczegóły wyżej. Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj tej faktury ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`,
+  issueDatePassed: `Tej wysyłki nie wykonaliśmy: dokument ma datę wystawienia sprzed dzisiaj, a w KSeF dokument wystawia się w dniu wysyłki (szczegóły wyżej). Wróć do szkicu, usuń go i wystaw dokument od nowa z dzisiejszą datą. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj dokumentu ponownie i napisz do pomocy FaktWay (${SUPPORT_EMAIL}) — sprawdzimy go w KSeF.`,
+  envMismatch: `Tej wysyłki nie wykonaliśmy: zlecenie dotyczyło innego środowiska KSeF (testowego albo produkcyjnego) niż obecne ustawienie FaktWay — szczegóły wyżej. Wróć do szkicu i zdecyduj, czy wysłać fakturę w obecnym środowisku. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj tej faktury ponownie i napisz do pomocy FaktWay (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`,
   // D-A4-1b-3 PR B (decyzje Bartosza 07.10.2026 (3) i (9)): szkic po „numer zajęty” jest wycofany —
   // nie wyślesz go, a zwykłej faktury i zaliczki nie usuniesz (00148), więc tekst nie każe „usuń go”.
   numberTaken: 'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie (szczegóły wyżej). Tego dokumentu nie wyślesz do KSeF. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.',
@@ -65,7 +65,7 @@ export const KSEF_SEND_MESSAGES = {
    * (panel decyzji na karcie faktury) albo adres pomocy — bez odsyłania do operatora. Pozostałe kody
    * klasy reconcile zostają przy `reconcile` (§7 p. 17 specyfikacji PR B).
    */
-  duplicate: `KSeF ma już fakturę o tym numerze — tej faktury nie wysyłaj ponownie. Szczegóły są na karcie faktury; pytania: pomoc FaktFlow (${SUPPORT_EMAIL}), podaj numer faktury.`,
+  duplicate: `KSeF ma już fakturę o tym numerze — tej faktury nie wysyłaj ponownie. Szczegóły są na karcie faktury; pytania: pomoc FaktWay (${SUPPORT_EMAIL}), podaj numer faktury.`,
   /** To samo, gdy nad paskiem stoi panel decyzji (ramka „W KSeF jest już faktura o tym numerze”). */
   duplicatePanel: 'KSeF ma już fakturę o tym numerze — szczegóły i dalsze kroki są wyżej, w ramce „W KSeF jest już faktura o tym numerze”. Nie wysyłaj tej faktury ponownie.',
   historical: 'Wysyłka nie powiodła się. Możesz wysłać ponownie albo wrócić do szkicu.',
@@ -103,15 +103,15 @@ const sendToday = (k: SpecialKind) => {
 
 const issueDatePassedSpecial = (k: SpecialKind) => {
   const l = KIND_LABEL[k];
-  return `${l.T} ma datę wystawienia sprzed dzisiaj, a w KSeF dokument wystawia się w dniu wysyłki — nie wyślemy jej ponownie i nie ponowimy automatycznie. Wróć do szkicu, usuń go i wystaw ${l.A} od nowa z dzisiejszą datą. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj ${l.G} ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`;
+  return `${l.T} ma datę wystawienia sprzed dzisiaj, a w KSeF dokument wystawia się w dniu wysyłki — nie wyślemy jej ponownie i nie ponowimy automatycznie. Wróć do szkicu, usuń go i wystaw ${l.A} od nowa z dzisiejszą datą. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj ${l.G} ponownie i napisz do pomocy FaktWay (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`;
 };
 
 /** Hamulec rodzaju w tym środowisku — nowego dokumentu kolejkowanie i tak by nie wysłało. */
 const KIND_BRAKE: Record<SpecialKind, string> = {
-  correction: 'wysyłka korekt do produkcyjnego KSeF jest wstrzymana przez FaktFlow do czasu poprawki ich kwot',
-  final: 'wysyłka faktur rozliczeniowych do KSeF jest wstrzymana przez FaktFlow do czasu pewnego rozliczania zaliczek',
+  correction: 'wysyłka korekt do produkcyjnego KSeF jest wstrzymana przez FaktWay do czasu poprawki ich kwot',
+  final: 'wysyłka faktur rozliczeniowych do KSeF jest wstrzymana przez FaktWay do czasu pewnego rozliczania zaliczek',
   // Zaliczka jest „wstrzymana” tylko przy nieznanym środowisku (wtedy ta gałąź nie jest używana).
-  advance: 'nie możemy teraz potwierdzić środowiska KSeF po stronie FaktFlow',
+  advance: 'nie możemy teraz potwierdzić środowiska KSeF po stronie FaktWay',
 };
 
 /** Rodzaj wstrzymany: szkic tak, nowy dokument dopiero po zdjęciu blokady. */
@@ -133,15 +133,15 @@ export const KSEF_SPECIAL_SEND_MESSAGES = {
   rejectedHeld: (k: SpecialKind) => `KSeF odrzucił treść ${KIND_LABEL[k].G} — możesz wrócić do szkicu. ${heldNote(k)}`,
   terminalHeld: (k: SpecialKind) => `${KIND_LABEL[k].T} nie przeszła kontroli treści — możesz wrócić do szkicu. ${heldNote(k)}`,
   issueDatePassedCodeHeld: (k: SpecialKind) =>
-    `Tej wysyłki nie wykonaliśmy (szczegóły wyżej): ${KIND_LABEL[k].L} ma datę wystawienia sprzed dzisiaj, a w KSeF dokument wystawia się w dniu wysyłki. Możesz wrócić do szkicu. ${heldNote(k)} Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj ${KIND_LABEL[k].G} ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`,
+    `Tej wysyłki nie wykonaliśmy (szczegóły wyżej): ${KIND_LABEL[k].L} ma datę wystawienia sprzed dzisiaj, a w KSeF dokument wystawia się w dniu wysyłki. Możesz wrócić do szkicu. ${heldNote(k)} Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj ${KIND_LABEL[k].G} ponownie i napisz do pomocy FaktWay (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`,
   incomplete: (k: SpecialKind) =>
-    `Nie mamy zapisanej kopii danych ${KIND_LABEL[k].G} potrzebnej do ponownej wysyłki — nie wyślemy jej ponownie i nie ponowimy automatycznie. Wróć do szkicu, usuń go i wystaw ${KIND_LABEL[k].A} od nowa z dzisiejszą datą. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj ${KIND_LABEL[k].G} ponownie i napisz do pomocy FaktFlow (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`,
+    `Nie mamy zapisanej kopii danych ${KIND_LABEL[k].G} potrzebnej do ponownej wysyłki — nie wyślemy jej ponownie i nie ponowimy automatycznie. Wróć do szkicu, usuń go i wystaw ${KIND_LABEL[k].A} od nowa z dzisiejszą datą. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj ${KIND_LABEL[k].G} ponownie i napisz do pomocy FaktWay (${SUPPORT_EMAIL}) — sprawdzimy ją w KSeF.`,
   kindHeld: (k: SpecialKind): string => {
     if (k === 'correction') {
-      return `Wysyłka korekt do produkcyjnego KSeF jest wstrzymana przez FaktFlow do czasu poprawki ich kwot — tej korekty nie wyślemy ponownie i nie ponowimy automatycznie. Możesz wrócić do szkicu; szkicu korekty nie wyślesz, więc po zdjęciu blokady usuń go i wystaw korektę od nowa. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj korekty ponownie — poczeka na zdjęcie blokady (pytania: ${SUPPORT_EMAIL}).`;
+      return `Wysyłka korekt do produkcyjnego KSeF jest wstrzymana przez FaktWay do czasu poprawki ich kwot — tej korekty nie wyślemy ponownie i nie ponowimy automatycznie. Możesz wrócić do szkicu; szkicu korekty nie wyślesz, więc po zdjęciu blokady usuń go i wystaw korektę od nowa. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj korekty ponownie — poczeka na zdjęcie blokady (pytania: ${SUPPORT_EMAIL}).`;
     }
     if (k === 'final') {
-      return `Wysyłka faktur rozliczeniowych do KSeF jest wstrzymana przez FaktFlow do czasu pewnego rozliczania zaliczek — tej faktury nie wyślemy ponownie i nie ponowimy automatycznie. Możesz wrócić do szkicu; szkicu faktury rozliczeniowej nie wyślesz, więc po zdjęciu blokady usuń go i wystaw fakturę rozliczeniową od nowa. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj tej faktury ponownie — poczeka na zdjęcie blokady (pytania: ${SUPPORT_EMAIL}).`;
+      return `Wysyłka faktur rozliczeniowych do KSeF jest wstrzymana przez FaktWay do czasu pewnego rozliczania zaliczek — tej faktury nie wyślemy ponownie i nie ponowimy automatycznie. Możesz wrócić do szkicu; szkicu faktury rozliczeniowej nie wyślesz, więc po zdjęciu blokady usuń go i wystaw fakturę rozliczeniową od nowa. Jeśli powrót do szkicu jest zablokowany, wcześniejsza próba mogła dotrzeć do KSeF: nie wystawiaj tej faktury ponownie — poczeka na zdjęcie blokady (pytania: ${SUPPORT_EMAIL}).`;
     }
     // Zaliczka jest wstrzymana tylko przy nieznanym środowisku (sprawdzane wcześniej).
     return KSEF_SEND_MESSAGES.envUnknown;
@@ -150,7 +150,7 @@ export const KSEF_SPECIAL_SEND_MESSAGES = {
     `Wysyłka do KSeF jest wstrzymana przez operatora. ${KIND_LABEL[k].T} może wyjść do KSeF tylko dziś, w dniu wystawienia: jeśli wysyłka wróci przed północą, spróbujemy wysłać ją automatycznie. Jeśli nie wyjdzie do północy, wróć do szkicu, usuń go i wystaw ${KIND_LABEL[k].A} od nowa.`,
   sendToday,
   transient: (k: SpecialKind) =>
-    `Błąd po stronie KSeF albo FaktFlow — wysyłkę ponawiamy automatycznie mniej więcej co godzinę, ale tylko do północy. Możesz też wysłać teraz. ${sendToday(k)}`,
+    `Błąd po stronie KSeF albo FaktWay — wysyłkę ponawiamy automatycznie mniej więcej co godzinę, ale tylko do północy. Możesz też wysłać teraz. ${sendToday(k)}`,
   resetDone: (k: SpecialKind) =>
     `${KIND_LABEL[k].N} wróciła do szkicu. Szkicu ${KIND_LABEL[k].G} nie wyślesz do KSeF — usuń go („Usuń szkic”) i wystaw ${KIND_LABEL[k].A} od nowa z dzisiejszą datą.`,
   resetDoneHeld: (k: SpecialKind) =>

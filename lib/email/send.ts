@@ -33,11 +33,13 @@ import TrialEnding from './templates/TrialEnding';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 /**
- * Domyślny nadawca z domeny FaktFlow (AUD-97). Do 02.10 był to
+ * Domyślny nadawca z domeny FaktWay (AUD-97). Do 02.10 był to
  * `onboarding@resend.dev` — domena dostawcy, którą Resend przyjmuje tylko na
  * koncie testowym. Produkcja ustawia RESEND_FROM_* jawnie.
  */
-const DEFAULT_FROM = 'FaktFlow <no-reply@app.faktflow.pl>';
+// Apeks domeny, bo tylko on ma DKIM w Resend — subdomena bez weryfikacji
+// odrzuciłaby wysyłkę. Te same adresy co RESEND_FROM_* na produkcji.
+const DEFAULT_FROM = 'FaktWay <powiadomienia@faktway.pl>';
 
 /** Pusta zmienna to brak zmiennej — `??` przepuszczał pusty napis. */
 function envSender(...names: string[]): string | undefined {
@@ -83,8 +85,9 @@ function getResend(): Resend {
  * tej samej domeny używanej dla critical alerts (faktury, hasła).
  *
  * Konwencja (oba opcjonalne — fallback do single `RESEND_FROM_EMAIL`):
- *   RESEND_FROM_TRANSACTIONAL = `FaktFlow <no-reply@app.faktflow.pl>`
- *   RESEND_FROM_MARKETING     = `FaktFlow <hello@hello.faktflow.pl>`
+ *   RESEND_FROM_TRANSACTIONAL = `FaktWay <powiadomienia@faktway.pl>`
+ *   RESEND_FROM_MARKETING     = `FaktWay <kontakt@faktway.pl>`
+ * Osobne subdomeny (np. `app.`, `hello.`) dopiero po ich weryfikacji w Resend.
  */
 function getFromEmail(category: 'transactional' | 'product_updates' | 'marketing'): string {
   if (category === 'transactional') {
@@ -384,8 +387,8 @@ export async function sendTrialEndingEmail(
   );
   const isFinalDay = payload.daysRemaining === 1;
   const subject = isFinalDay
-    ? '⏰ Twój trial FaktFlow kończy się jutro'
-    : `Twój trial FaktFlow kończy się za ${payload.daysRemaining} dni`;
+    ? '⏰ Twój trial FaktWay kończy się jutro'
+    : `Twój trial FaktWay kończy się za ${payload.daysRemaining} dni`;
   return sendViaResend({ to: email, subject, html, idempotencyKey: options.idempotencyKey });
 }
 
@@ -408,7 +411,7 @@ export async function sendPaymentFailedEmail(
   const html = await render(PaymentFailed({ ...payload, appUrl: APP_URL }));
   return sendViaResend({
     to: email,
-    subject: 'Nie udało się pobrać płatności FaktFlow',
+    subject: 'Nie udało się pobrać płatności FaktWay',
     html,
   });
 }
@@ -497,7 +500,7 @@ export async function sendAccountDeletionConfirmationEmail(
   );
   return sendViaResend({
     to: email,
-    subject: 'Potwierdzenie usunięcia konta FaktFlow',
+    subject: 'Potwierdzenie usunięcia konta FaktWay',
     html,
     category: 'transactional',
   });
@@ -527,7 +530,7 @@ export async function sendGdprDeletionScheduledEmail(
   );
   return sendViaResend({
     to: payload.userEmail,
-    subject: 'Żądanie usunięcia konta FaktFlow — możesz cofnąć (RODO)',
+    subject: 'Żądanie usunięcia konta FaktWay — możesz cofnąć (RODO)',
     html,
     category: 'transactional',
   });
@@ -552,17 +555,17 @@ export interface InvoiceEmailPayload {
 
 /**
  * Stopka maila z fakturą do nabywcy. Do 15.10.2026: „Wiadomość wysłana przez
- * FaktFlow” — nabywca nie wiedział, że nadawcą jest sprzedawca, a FaktFlow
+ * FaktWay” — nabywca nie wiedział, że nadawcą jest sprzedawca, a FaktWay
  * tylko przetwarza dane na jego zlecenie, ani że odpowiedź trafi do obsługi
- * FaktFlow (Reply-To), nie do sprzedawcy. Art. 14 RODO jest obowiązkiem
+ * FaktWay (Reply-To), nie do sprzedawcy. Art. 14 RODO jest obowiązkiem
  * sprzedawcy; stopka mówi nabywcy, do kogo się zwrócić.
  */
 export function invoiceEmailFooter(sellerName: string): string {
   const seller = escapeHtml(sellerName);
   return (
-    `Fakturę wysłał(a) ${seller} za pośrednictwem serwisu FaktFlow, który przetwarza dane na zlecenie ${seller}. ` +
+    `Fakturę wysłał(a) ${seller} za pośrednictwem serwisu FaktWay, który przetwarza dane na zlecenie ${seller}. ` +
     `W sprawie faktury, płatności i Twoich danych osobowych skontaktuj się bezpośrednio z ${seller} — ` +
-    `odpowiedź na tę wiadomość trafi do obsługi FaktFlow, która przekaże ją nadawcy.`
+    `odpowiedź na tę wiadomość trafi do obsługi FaktWay, która przekaże ją nadawcy.`
   );
 }
 

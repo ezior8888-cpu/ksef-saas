@@ -127,7 +127,7 @@ export function SavingsCalculatorPreview() {
                   positive
                 />
                 <BreakdownRow
-                  label="Subskrypcja FaktFlow"
+                  label="Subskrypcja FaktWay"
                   value={`−${calc.ksefSaasYear} PLN`}
                 />
                 <BreakdownRow
@@ -144,7 +144,7 @@ export function SavingsCalculatorPreview() {
         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-zinc-200 bg-zinc-100 p-6 lg:px-10">
           <p className="max-w-md text-xs text-zinc-600">
             Szacunek przy założeniu: 8 min na dokument ręcznie vs 1,5 min
-            z OCR FaktFlow. Twój wynik może być inny.
+            z OCR FaktWay. Twój wynik może być inny.
           </p>
           <Link
             href="/register"

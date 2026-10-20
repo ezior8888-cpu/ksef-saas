@@ -154,6 +154,11 @@ function correctionBuyerIdLabel(buyer: CorrectionFormBuyer): string | null {
 }
 
 /** Etykieta stawki np. II — ta sama co w formularzu zwykłej faktury. */
+// E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
+const CORRECTION_TYPE_ITEMS = (
+  Object.entries(CORRECTION_TYPE_LABELS) as [CorrectionFormParsed['correctionType'], string][]
+).map(([value, label]) => ({ value, label }))
+
 const NP_II_OPTION_LABEL = 'np. II (usługa dla firmy z UE)';
 
 /**
@@ -187,6 +192,19 @@ export interface CorrectionInvoiceFormProps {
 }
 
 // Daty w czasie polskim, nie UTC (F-013).
+const TYPOLOGY_KOREKTY_ITEMS = (
+  Object.entries(TYPOLOGY_KOREKTY_LABELS) as [CorrectionFormParsed['typKorekty'], string][]
+).map(([value, label]) => ({ value, label }))
+
+// E1: jedno źródło etykiet dla `items` i <SelectItem> (Base UI pokazuje surową wartość bez `items`)
+const PAYMENT_METHOD_ITEMS = [
+  { value: 'transfer', label: 'Przelew' },
+  { value: 'card', label: 'Karta' },
+  { value: 'cash', label: 'Gotówka' },
+  { value: 'compensation', label: 'Kompensata' },
+  { value: 'other', label: 'Inna' },
+] as const
+
 function defaultIssueDateIso(): string {
   return todayInWarsaw();
 }
@@ -683,21 +701,21 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFill
           <Label className={labelClass}>Typ korekty</Label>
           <Select
             value={correctionType}
-            onValueChange={(v) =>
+            items={CORRECTION_TYPE_ITEMS}
+            onValueChange={(v) => {
+              if (v == null) return
               handleCorrectionTypeChange(v as CorrectionFormParsed['correctionType'])
-            }
+            }}
           >
             <SelectTrigger>
               <SelectValue placeholder="Typ" />
             </SelectTrigger>
             <SelectContent>
-              {(Object.entries(CORRECTION_TYPE_LABELS) as [CorrectionFormParsed['correctionType'], string][]).map(
-                ([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ),
-              )}
+              {CORRECTION_TYPE_ITEMS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           {form.formState.errors.correctionType && (
@@ -711,25 +729,25 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFill
           <Label className={labelClass}>Typ KSeF (skutek w czasie)</Label>
           <Select
             value={typKorekty}
-            onValueChange={(v) =>
+            items={TYPOLOGY_KOREKTY_ITEMS}
+            onValueChange={(v) => {
+              if (v == null) return
               form.setValue(
                 'typKorekty',
                 v as CorrectionFormParsed['typKorekty'],
                 { shouldDirty: true },
               )
-            }
+            }}
           >
             <SelectTrigger>
               <SelectValue placeholder="Typ" />
             </SelectTrigger>
             <SelectContent>
-              {(Object.entries(TYPOLOGY_KOREKTY_LABELS) as [CorrectionFormParsed['typKorekty'], string][]).map(
-                ([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ),
-              )}
+              {TYPOLOGY_KOREKTY_ITEMS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           {form.formState.errors.typKorekty ? (
@@ -775,23 +793,25 @@ function CorrectionFillForm({ parentRow, defaults, onPickOther }: CorrectionFill
             <Label className={labelClass}>Metoda płatności</Label>
             <Select
               value={form.watch('paymentMethod')}
-              onValueChange={(v) =>
+              items={PAYMENT_METHOD_ITEMS}
+              onValueChange={(v) => {
+                if (v == null) return
                 form.setValue(
                   'paymentMethod',
                   v as CorrectionFormParsed['paymentMethod'],
                   { shouldDirty: true },
                 )
-              }
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="transfer">Przelew</SelectItem>
-                <SelectItem value="card">Karta</SelectItem>
-                <SelectItem value="cash">Gotówka</SelectItem>
-                <SelectItem value="compensation">Kompensata</SelectItem>
-                <SelectItem value="other">Inna</SelectItem>
+                {PAYMENT_METHOD_ITEMS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

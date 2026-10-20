@@ -11,11 +11,13 @@
  * CZYSTY moduł (importowany w komponencie): bez KSeF, bazy i Node.
  */
 
+import { SUPPORT_EMAIL } from '@/lib/site';
+
 import type { OriginalInvoiceSummary } from './duplicate-verdict';
 
 /** Dlaczego automat nie rozstrzygnął duplikatu — to samo słowo w danych, alarmie i runbooku. */
 export const DUPLICATE_CHECK_REASONS = [
-  /** Numer KSeF oryginału ma już inna faktura sprzedaży tej firmy w FaktFlow — anomalia, operator. */
+  /** Numer KSeF oryginału ma już inna faktura sprzedaży tej firmy w FaktWay — anomalia, operator. */
   'known-number',
   /** KSeF odmówił pobrania oryginału (403 — token bez InvoiceRead, inne 4xx). */
   'download-refused',
@@ -25,11 +27,11 @@ export const DUPLICATE_CHECK_REASONS = [
   'storage-pending',
   /** Oryginał pobrany, ale zapis jego bajtów w archiwum chwilowo nieudany — ponowienie. */
   'archive-pending',
-  /** Oryginał wygenerował FaktFlow, treść inna niż nasza. */
+  /** Oryginał wygenerował FaktWay, treść inna niż nasza. */
   'faktflow-original',
   /** Inny program, ta sama treść co nasza (poza nagłówkiem). */
   'same-content-other-program',
-  /** Oryginał spoza FaktFlow, a historia nie ma naszego pliku do porównania. */
+  /** Oryginał spoza FaktWay, a historia nie ma naszego pliku do porównania. */
   'no-own-file',
   /** W archiwum jest już inny plik pod tym numerem KSeF — wymaga wyjaśnienia. */
   'archive-conflict',
@@ -70,7 +72,7 @@ export interface KsefDuplicateCheck {
   acquiredAt: string | null;
   /** Status HTTP odmowy pobrania. */
   httpStatus: number | null;
-  /** Faktura sprzedaży w FaktFlow, która ma już ten numer KSeF (`known-number`). */
+  /** Faktura sprzedaży w FaktWay, która ma już ten numer KSeF (`known-number`). */
   knownInvoice: { id: string; internalNumber: string | null } | null;
   /**
    * Ostatnie ponowne sprawdzenie, które NIE pobrało oryginału (np. cron I5
@@ -185,19 +187,19 @@ const DONT_REISSUE = 'Nie wystawiaj tej faktury ponownie.';
 export const DUPLICATE_ORIGINAL_NOTES = {
   /** `known-number` bez decyzji w panelu (zapis PR A bez danych, własna historia, known-stale). */
   KNOWN_NUMBER_NOTE: (k: string, y: string, nr: string) =>
-    `W FaktFlow numer KSeF ${k} ma już dokument ${y} — te dane się nie zgadzają i musimy je wyjaśnić, zanim zdecydujesz, czym jest ten dokument. Napisz do nas: pomoc@faktflow.pl, podając numer ${nr}. ${DONT_REISSUE}`,
+    `W FaktWay numer KSeF ${k} ma już dokument ${y} — te dane się nie zgadzają i musimy je wyjaśnić, zanim zdecydujesz, czym jest ten dokument. Napisz do nas: ${SUPPORT_EMAIL}, podając numer ${nr}. ${DONT_REISSUE}`,
   /** Odnośnik do dokumentu Y (`/invoices/{Y.id}`). */
   KNOWN_LINK: (y: string) => `Zobacz dokument ${y}`,
   /** Odmowa pobrania inna niż 403. */
   DOWNLOAD_REFUSED_NOTE:
-    `Nie mogliśmy pobrać treści tej faktury z KSeF — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni); pytania: pomoc FaktFlow (pomoc@faktflow.pl), podaj numer faktury. ${DONT_REISSUE}`,
+    `Nie mogliśmy pobrać treści tej faktury z KSeF — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni); pytania: pomoc FaktWay (${SUPPORT_EMAIL}), podaj numer faktury. ${DONT_REISSUE}`,
   /** Pobranie, magazyn albo archiwum chwilowo nieudane — panel widać dopiero po wyczerpaniu ponowień joba. */
   PENDING_NOTE:
-    `Nie udało się jeszcze sprawdzić treści tej faktury w KSeF — sprawdzimy ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl, podając numer faktury. ${DONT_REISSUE}`,
+    `Nie udało się jeszcze sprawdzić treści tej faktury w KSeF — sprawdzimy ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: ${SUPPORT_EMAIL}, podając numer faktury. ${DONT_REISSUE}`,
   DEFAULT_NOTE: (doc: string) =>
-    `${doc} nie została przyjęta, bo KSeF ma już fakturę Twojej firmy o tym numerze (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktFlow (pomoc@faktflow.pl), podaj numer faktury. ${DONT_REISSUE}`,
+    `${doc} nie została przyjęta, bo KSeF ma już fakturę Twojej firmy o tym numerze (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktWay (${SUPPORT_EMAIL}), podaj numer faktury. ${DONT_REISSUE}`,
   OWN_HISTORY_NOTE: (doc: string) =>
-    `${doc} nie została przyjęta, bo KSeF ma już wcześniejszą wersję tej faktury wysłaną z FaktFlow (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktFlow (pomoc@faktflow.pl), podaj numer faktury. ${DONT_REISSUE}`,
+    `${doc} nie została przyjęta, bo KSeF ma już wcześniejszą wersję tej faktury wysłaną z FaktWay (dane wyżej). Tej sprawy nie rozstrzygniesz jeszcze w panelu — pytania: pomoc FaktWay (${SUPPORT_EMAIL}), podaj numer faktury. ${DONT_REISSUE}`,
 } as const;
 
 /** Dzień w Polsce (Europe/Warsaw) jako RRRR-MM-DD — nie dzień w UTC. */
@@ -239,7 +241,7 @@ export function describeDuplicateOriginal(
   if (buyer) rows.push({ label: 'Nabywca', value: buyer });
   if (s?.gross) rows.push({ label: 'Kwota brutto', value: `${s.gross} ${s.currency ?? 'PLN'}` });
   if (s?.systemInfo) {
-    rows.push({ label: 'Program', value: s.systemInfo === PROGRAM_FAKTFLOW ? 'FaktFlow' : s.systemInfo });
+    rows.push({ label: 'Program', value: s.systemInfo === PROGRAM_FAKTFLOW ? 'FaktWay' : s.systemInfo });
   }
 
   const doc = invoiceNumber ? `Faktura ${invoiceNumber}` : 'Ta faktura';
@@ -249,7 +251,7 @@ export function describeDuplicateOriginal(
   switch (check?.reason) {
     case 'download-refused':
       note = check.httpStatus === 403
-        ? 'Nie mogliśmy pobrać treści tej faktury z KSeF — dane logowania KSeF w FaktFlow nie mają uprawnienia do odczytu ' +
+        ? 'Nie mogliśmy pobrać treści tej faktury z KSeF — dane logowania KSeF w FaktWay nie mają uprawnienia do odczytu ' +
           'faktur (InvoiceRead). Sprawdź uprawnienia w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach → KSeF. ' +
           DONT_REISSUE
         : N.DOWNLOAD_REFUSED_NOTE;

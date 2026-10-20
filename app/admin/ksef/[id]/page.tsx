@@ -229,7 +229,7 @@ export default async function AdminKsefInvoicePage(props: { params: Promise<{ id
               ['Treść jak nasza (poza nagłówkiem)', c.sameContentExceptHeader === null ? null : c.sameContentExceptHeader ? 'tak' : 'nie'],
               ['W historii tej faktury', c.ownHistory === null ? null : c.ownHistory ? 'tak' : 'nie'],
               ['HTTP odmowy pobrania', c.httpStatus === null ? null : String(c.httpStatus)],
-              ['Faktura w FaktFlow z tym numerem KSeF', c.knownInvoice ? `${c.knownInvoice.internalNumber ?? 'bez numeru'} (${c.knownInvoice.id})` : null],
+              ['Faktura w FaktWay z tym numerem KSeF', c.knownInvoice ? `${c.knownInvoice.internalNumber ?? 'bez numeru'} (${c.knownInvoice.id})` : null],
               ['SHA-256 oryginału', c.sha256],
               ['Archiwum', c.archivePath],
             ];

@@ -9,7 +9,7 @@ export const revalidate = 86400;
 
 export const metadata: Metadata = {
   title: 'RODO i bezpieczeństwo',
-  description: 'Jak FaktFlow chroni dane: lokalizacja serwerów, umowa powierzenia, prawa osób i zgłaszanie naruszeń.',
+  description: 'Jak FaktWay chroni dane: lokalizacja serwerów, umowa powierzenia, prawa osób i zgłaszanie naruszeń.',
 };
 
 /**
@@ -30,7 +30,7 @@ export default function GdprPage() {
         <h2>Kto jest kim</h2>
         <p>
           Dla danych z Twoich faktur (np. danych kontrahentów) <strong>Ty jesteś administratorem</strong>, a
-          FaktFlow — podmiotem przetwarzającym. Zasady opisuje{' '}
+          FaktWay — podmiotem przetwarzającym. Zasady opisuje{' '}
           <Link href="/legal/umowa-powierzenia">umowa powierzenia</Link>, którą zawieramy z każdym klientem
           razem z regulaminem. Dla danych Twojego konta administratorem jesteśmy my — patrz{' '}
           <Link href="/legal/polityka-prywatnosci">polityka prywatności</Link>.
