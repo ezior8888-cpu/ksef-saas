@@ -20,6 +20,7 @@ export default defineConfig({
       'tests/rls-dzieci-faktur.test.ts',
       'tests/rls-lista-faktur-platnosc.test.ts',
       'tests/rls-data-rozpoczecia.test.ts',
+      'tests/rls-faktury-cykliczne.test.ts',
     ],
     exclude: [],
     setupFiles: ['./tests/setup-rls.ts'],

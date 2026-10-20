@@ -1,9 +1,11 @@
+import Link from 'next/link';
 import { RiRepeatLine } from '@remixicon/react';
 
 import { PulpitEmptyState } from '@/components/dashboard/pulpit/card-states';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { RecurringItem } from '@/lib/analytics-finance/recurring';
 import { formatPlMoney } from '@/lib/format/pl';
+import { setAsRecurringHref } from '@/lib/invoices/recurring/visibility';
 
 import type { EmptyStateProps } from './empty';
 
@@ -44,6 +46,15 @@ const SubscriptionsCard = ({ title, description, items, empty, className }: Subs
                   {item.name}
                 </p>
                 <p className="text-muted-foreground text-xs">{`zwykle około ${item.typicalDay}. dnia miesiąca`}</p>
+                {item.templateInvoiceId ? (
+                  <Link
+                    href={setAsRecurringHref(item.templateInvoiceId)}
+                    className="text-primary inline-flex min-h-6 items-center text-xs font-medium underline-offset-4 hover:underline"
+                    aria-label={`Zrób fakturę cykliczną dla: ${item.name}`}
+                  >
+                    Zrób fakturę cykliczną
+                  </Link>
+                ) : null}
               </div>
               <div className="shrink-0 text-right">
                 <p className="text-sm font-medium tabular-nums">{`${formatPlMoney(item.averageAmount)} zł`}</p>

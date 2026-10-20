@@ -13,6 +13,7 @@ import {
   RiMoreLine,
   RiPieChart2Line,
   RiReceiptLine,
+  RiRepeatLine,
   RiSettings3Line,
   RiUpload2Line,
   RiWallet3Line,
@@ -36,8 +37,8 @@ export interface DashboardNavSection {
 
 /**
  * Sekcje menu wg planu Finora §4 — tylko trasy, które istnieją. Trasy
- * z kolejnych etapów (faktury cykliczne, bank) dochodzą razem ze stronami;
- * analizy doszły w E7.
+ * z kolejnych etapów (bank) dochodzą razem ze stronami; analizy doszły
+ * w E7, faktury cykliczne w E9.
  */
 export const dashboardNavSections: DashboardNavSection[] = [
   {
@@ -54,6 +55,12 @@ export const dashboardNavSections: DashboardNavSection[] = [
     items: [
       { href: "/invoices", label: "Faktury", icon: RiFileList3Line },
       { href: "/invoices/new", label: "Wystaw fakturę", icon: RiFileAddLine },
+      // Plan Finora E9 (P6, N1): trasa dochodzi razem ze stroną; ⌘K czyta to samo menu.
+      {
+        href: "/invoices/recurring",
+        label: "Faktury cykliczne",
+        icon: RiRepeatLine,
+      },
       {
         href: "/payments/overdue",
         label: "Przypomnienia",

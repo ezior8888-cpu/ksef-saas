@@ -64,6 +64,14 @@ describe('buildPaletteNavEntries', () => {
   });
 });
 
+describe('buildPaletteNavEntries — faktury cykliczne (plan Finora E9)', () => {
+  it('„Faktury cykliczne” są w ⌘K tak jak w menu, z nazwą sekcji w słowach kluczowych', () => {
+    const entry = buildPaletteNavEntries().find((e) => e.href === '/invoices/recurring');
+    expect(entry).toMatchObject({ group: 'Przejdź do', label: 'Faktury cykliczne' });
+    expect(entry?.keywords).toContain('Sprzedaż');
+  });
+});
+
 describe('buildPaletteNavEntries — unikalne wartości cmdk', () => {
   it('„Wystaw fakturę” jest i w menu, i w akcjach, a wartości (value) się nie powtarzają', () => {
     const entries = buildPaletteNavEntries();

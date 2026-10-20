@@ -43,7 +43,8 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import Link from 'next/link';
 import { AlertCircle, ChevronLeft, Trash2, Loader2 } from 'lucide-react';
-import { RiAddLine, RiCloseLine } from '@remixicon/react';
+import { RiAddLine, RiCloseLine, RiLoader4Line, RiSendPlaneLine } from '@remixicon/react';
+import { Card, CardContent } from '@/components/ui/card';
 import { InvoiceTotals } from '@/components/invoices/invoice-totals';
 import { suggestsSplitPayment } from '@/lib/invoices/annotations';
 import { formatPlMoney } from '@/lib/format/pl';
@@ -141,6 +142,9 @@ const BUYER_ID_TYPE_ITEMS = (['pesel', 'id_card', 'passport', 'no_id'] as const)
   label: BUYER_ID_TYPE_LABELS[k],
 }))
 
+/** Pod przyciskiem wysyłki w trybie „Wystaw teraz” z faktury cyklicznej (C2). */
+const RECURRING_NO_DRAFT_TEXT = 'Fakturę cykliczną wystawiasz od razu — szkic nie zamyka okresu.';
+
 function euCountryName(code: string): string | undefined {
   return EU_BUYER_COUNTRIES.find((k) => k.code === code)?.name;
 }
@@ -150,6 +154,9 @@ export function InvoiceForm({
   vatExempt = false,
   suggestedNumber = null,
   seller = null,
+  initialValues = null,
+  recurringInvoiceId = null,
+  recurringPeriod = null,
 }: {
   /**
    * Dane sprzedawcy do nagłówka dokumentu (P5) — tylko do wyświetlenia.
@@ -165,6 +172,18 @@ export function InvoiceForm({
    * Nowe pozycje dostają wtedy „zw” — inaczej z przyzwyczajenia wpada 23%.
    */
   vatExempt?: boolean;
+  /**
+   * Podkład wpisany od razu w formularz (plan Finora N1: `?wzor=` i
+   * `?cykliczna=` — `prefillFromInvoiceAction`). Bez niego formularz pusty.
+   */
+  initialValues?: Partial<InvoiceFormValues> | null;
+  /**
+   * Pozycja cykliczna (`?cykliczna=`) — ukryte pole; „Wystaw i wyślij” zajmuje
+   * nim okres. W tym trybie nie ma „Zapisz szkic” (C2): szkic nie zamyka okresu.
+   */
+  recurringInvoiceId?: string | null;
+  /** Okres z banera strony (np. `2026-11`) — ukryte pole; zapis sprawdza, czy pozycja go nie zmieniła (C3). */
+  recurringPeriod?: string | null;
 } = {}) {
   const newLine: InvoiceFormValues['lines'][number] = vatExempt
     ? { ...defaultLine, vatRate: 'zw' }
@@ -228,8 +247,13 @@ export function InvoiceForm({
       bankAccount: '',
       notes: '',
       splitPayment: false,
+      ...initialValues,
+      ...(recurringInvoiceId ? { recurringInvoiceId } : {}),
+      ...(recurringInvoiceId && recurringPeriod ? { recurringPeriod } : {}),
     },
   });
+  /** Tryb „Wystaw teraz” z faktury cyklicznej — bez szkicu (C2). */
+  const recurringMode = Boolean(recurringInvoiceId);
 
   const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
@@ -516,6 +540,8 @@ export function InvoiceForm({
 
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-6 pb-32 lg:pb-10">
+      {recurringInvoiceId ? <input type="hidden" {...form.register('recurringInvoiceId')} /> : null}
+      {recurringInvoiceId && recurringPeriod ? <input type="hidden" {...form.register('recurringPeriod')} /> : null}
       {/* NAGŁÓWEK — dwa układy.
           Na telefonie pasek z makiety: strzałka wstecz, tytuł z podtytułem,
           „Szkic” po prawej. Zapis szkicu wchodzi tu z dolnego paska, żeby
@@ -533,14 +559,16 @@ export function InvoiceForm({
           <h1 className="truncate text-xl font-semibold tracking-tight">Nowa faktura</h1>
           <p className="text-muted-foreground truncate text-sm">{miesiacRok} · KSeF</p>
         </div>
-        <button
-          type="button"
-          onClick={handleSaveDraft}
-          disabled={busy}
-          className="text-primary shrink-0 px-2 py-2 text-sm font-semibold transition-opacity disabled:opacity-50"
-        >
-          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Szkic'}
-        </button>
+        {recurringMode ? null : (
+          <button
+            type="button"
+            onClick={handleSaveDraft}
+            disabled={busy}
+            className="text-primary shrink-0 px-2 py-2 text-sm font-semibold transition-opacity disabled:opacity-50"
+          >
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Szkic'}
+          </button>
+        )}
       </div>
 
       <InvoiceCreatePageHeading
@@ -1213,13 +1241,26 @@ export function InvoiceForm({
           </div>
         </InvoiceDocumentCard>
 
-        <InvoiceCreateActions
-          onSend={handleSend}
-          onSave={handleSaveDraft}
-          sending={isSending}
-          saving={isSaving}
-          disabled={busy}
-        />
+        {recurringMode ? (
+          // Ta sama karta co `InvoiceCreateActions`, bez „Zapisz szkic” (C2).
+          <Card data-testid="akcje-formularza" className="h-max shadow-none max-lg:hidden">
+            <CardContent className="space-y-4">
+              <Button type="button" className="w-full" disabled={busy} onClick={handleSend}>
+                {isSending ? <RiLoader4Line className="animate-spin" aria-hidden /> : <RiSendPlaneLine aria-hidden />}
+                Wystaw i wyślij do KSeF
+              </Button>
+              <p className="text-muted-foreground text-xs">{RECURRING_NO_DRAFT_TEXT}</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <InvoiceCreateActions
+            onSend={handleSend}
+            onSave={handleSaveDraft}
+            sending={isSending}
+            saving={isSaving}
+            disabled={busy}
+          />
+        )}
       </InvoiceCreateGrid>
 
       {/* STICKY FOOTER — tylko telefon i tablet; od `lg` akcje są w prawej kolumnie. */}
@@ -1230,19 +1271,26 @@ export function InvoiceForm({
             Na telefonie „Zapisz” niesie tę samą akcję co „Szkic” w nagłówku;
             to nie jest dubel do usunięcia, tylko ten sam wybór w zasięgu kciuka
             i w zasięgu wzroku. */}
+        {recurringMode ? (
+          <p className="text-muted-foreground pointer-events-auto mx-auto mb-2 max-w-7xl text-xs sm:text-right">
+            {RECURRING_NO_DRAFT_TEXT}
+          </p>
+        ) : null}
         <div className="pointer-events-auto mx-auto flex max-w-7xl gap-3 sm:justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            onClick={handleSaveDraft}
-            disabled={busy}
-            className="order-2 flex-1 sm:order-1 sm:flex-none"
-          >
-            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            <span className="sm:hidden">Zapisz</span>
-            <span className="hidden sm:inline">Zapisz szkic</span>
-          </Button>
+          {recurringMode ? null : (
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={handleSaveDraft}
+              disabled={busy}
+              className="order-2 flex-1 sm:order-1 sm:flex-none"
+            >
+              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <span className="sm:hidden">Zapisz</span>
+              <span className="hidden sm:inline">Zapisz szkic</span>
+            </Button>
+          )}
           <Button
             type="button"
             size="lg"

@@ -3,7 +3,7 @@
 import { useTransition } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { RiDownloadLine, RiEditLine, RiFileCodeLine, RiLoader4Line, RiPrinterLine } from '@remixicon/react';
+import { RiDownloadLine, RiEditLine, RiFileCodeLine, RiLoader4Line, RiPrinterLine, RiRepeatLine } from '@remixicon/react';
 
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,7 @@ import { FailedInvoiceActions } from './failed-invoice-actions';
 import { downloadInvoiceXmlAction } from './actions-detail';
 import { saveBlob } from '@/lib/download';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
+import { setAsRecurringHref } from '@/lib/invoices/recurring/visibility';
 
 interface Props {
   invoice: {
@@ -45,6 +46,11 @@ interface Props {
      * co lista faktur) — w karcie „Dokument” pojawia się link „Korekta”.
      */
     can_correct?: boolean;
+    /**
+     * N1: faktura może być wzorem faktury cyklicznej — w karcie „Dokument”
+     * pojawia się „Ustaw jako cykliczną” (arkusz na `/invoices/recurring?wzor=`).
+     */
+    can_set_recurring?: boolean;
   };
   /** Rola w firmie dopuszcza ponowną wysyłkę i powrót do szkicu (owner/admin). */
   canManageSend?: boolean;
@@ -224,6 +230,15 @@ export function InvoiceActions({ invoice, canManageSend = false, section = 'all'
         >
           <RiEditLine />
           Korekta
+        </Link>
+      )}
+      {invoice.can_set_recurring && (
+        <Link
+          href={setAsRecurringHref(invoice.id)}
+          className={cn(buttonVariants({ variant: 'outline' }), full)}
+        >
+          <RiRepeatLine />
+          Ustaw jako cykliczną
         </Link>
       )}
     </>

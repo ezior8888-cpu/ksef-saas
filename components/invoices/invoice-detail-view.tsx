@@ -85,6 +85,12 @@ export interface InvoiceDetailInitial {
   amount_due: number;
   /** E3 / P4: pokazać link „Korekta” (ten sam predykat co lista faktur + brak korekty w toku). */
   can_correct: boolean;
+  /**
+   * N1: pokazać „Ustaw jako cykliczną” (faktura spełnia warunki wzoru faktury
+   * cyklicznej — liczy serwer tym samym predykatem co akcja tworzenia).
+   * Brak pola = przycisk ukryty.
+   */
+  can_set_recurring?: boolean;
   /** E3 / P4: kod QR weryfikacji w KSeF (KOD I); `null` — faktura nie ma pliku XML ani numeru KSeF. */
   qr: InvoiceQrData | null;
   upo_status: Database['public']['Enums']['upo_status_enum'] | null;
@@ -326,6 +332,7 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
     ksef_duplicate_panel: duplicatePanel,
     ksef_retired: retired ? { deletable: retired.deletable } : null,
     can_correct: inv.can_correct,
+    can_set_recurring: inv.can_set_recurring ?? false,
   };
 
   return (

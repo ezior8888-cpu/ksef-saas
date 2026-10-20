@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -29,6 +30,7 @@ import { InvoiceStatTiles } from './_components/invoice-stat-tiles';
 import { InvoicesPagination } from './_components/invoices-pagination';
 import { InvoicesPullToRefresh } from './_components/invoices-pull-to-refresh';
 import { InvoicesToolbar } from './_components/invoices-toolbar';
+import { RecurringDueBanner } from './_components/recurring-due-banner';
 
 export const dynamic = 'force-dynamic';
 
@@ -135,6 +137,11 @@ export default async function InvoicesPage({
   return (
     <div className="space-y-6">
       <h1 className="sr-only">Faktury wystawione</h1>
+
+      {/* N1: ile faktur cyklicznych czeka na wystawienie. Własny odczyt w Suspense — nie wstrzymuje listy, a jego błąd jej nie psuje. */}
+      <Suspense fallback={null}>
+        <RecurringDueBanner supabase={supabase} tenantId={tenantId} today={today} />
+      </Suspense>
 
       <InvoiceStatTiles supabase={supabase} tenantId={tenantId} />
 
