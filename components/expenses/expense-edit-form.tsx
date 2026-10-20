@@ -414,7 +414,7 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
 
           <Card>
             <CardHeader>
-              <CardTitle>Kwoty (PLN)</CardTitle>
+              <CardTitle>Kwoty</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Netto" htmlFor="expense-net">

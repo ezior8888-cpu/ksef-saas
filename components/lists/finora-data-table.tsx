@@ -190,6 +190,14 @@ export function DataTableView<T>({
                     key={header.id}
                     style={{ width: `${header.getSize()}px` }}
                     className='text-muted-foreground first:pl-4 last:px-4 last:text-center'
+                    // Odstępstwo od Finory (WCAG 4.1.2): kierunek sortowania dla czytnika.
+                    aria-sort={
+                      header.column.getCanSort()
+                        ? (({ asc: 'ascending', desc: 'descending' } as const)[
+                            header.column.getIsSorted() as 'asc' | 'desc'
+                          ] ?? 'none')
+                        : undefined
+                    }
                   >
                     {header.isPlaceholder ? null : header.column.getCanSort() ? (
                       <div
@@ -201,6 +209,7 @@ export function DataTableView<T>({
                             header.column.getToggleSortingHandler()?.(e)
                           }
                         }}
+                        role='button'
                         tabIndex={0}
                       >
                         {flexRender(header.column.columnDef.header, header.getContext())}
