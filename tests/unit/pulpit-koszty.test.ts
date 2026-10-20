@@ -129,6 +129,9 @@ describe('getCosts — jedna droga kosztów Pulpitu', () => {
       cost: 123,
       outflow: 123,
       vatDeductible: 0,
+      documentNumber: null,
+      categoryLabel: null,
+      isReviewed: true,
     });
   });
 
@@ -255,6 +258,7 @@ describe('getCosts — jedna droga kosztów Pulpitu', () => {
 describe('sumCostsByMonth', () => {
   const entry = (issueDate: string, cost: number): CostEntry => ({
     id: issueDate, issueDate, sellerNip: null, sellerName: null, cost, outflow: cost, vatDeductible: 0,
+    documentNumber: null, categoryLabel: null, isReviewed: true,
   });
 
   it('sumuje per klucz RRRR-MM w kolejności kluczy, z zerem dla pustego miesiąca', () => {

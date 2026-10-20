@@ -28,7 +28,18 @@ export interface TaxEstimateInvoice {
   settled_advances_net?: number | null;
 }
 
-export type TaxEstimateExpense = KpirCostInput & { issue_date: string };
+/**
+ * Wydatek jako wiersz `expenses` (koszt liczy `kpirCostAmount`) albo jako
+ * gotowy koszt z `getCosts` (`lib/dashboard/costs.ts`, pole `cost` — ta sama
+ * reguła, policzona już przy odczycie).
+ */
+export type TaxEstimateExpense =
+  | (KpirCostInput & { issue_date: string })
+  | { issue_date: string; cost: number };
+
+function expenseCost(expense: TaxEstimateExpense): number {
+  return 'cost' in expense ? expense.cost : kpirCostAmount(expense);
+}
 
 export interface TaxEstimate {
   amount: number;
@@ -60,7 +71,7 @@ export function estimateIncomeTaxThisYear(
       (s, i) => s + kpirRevenueNet({ kind: i.invoice_kind, net: i.net_total, settledAdvancesNet: i.settled_advances_net }),
       0,
     );
-  const cost = expenses.filter((e) => inRange(e.issue_date)).reduce((s, e) => s + kpirCostAmount(e), 0);
+  const cost = expenses.filter((e) => inRange(e.issue_date)).reduce((s, e) => s + expenseCost(e), 0);
   const amount = Math.max(0, roundToCents((revenue - cost) * LINEAR_PIT_RATE));
 
   if (fullYear) {

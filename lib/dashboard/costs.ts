@@ -34,6 +34,12 @@ export interface CostEntry {
    * z `VAT_DEDUCTIBLE_DOCUMENTS` (ta sama reguła co JPK_V7M), inaczej 0.
    */
   vatDeductible: number;
+  /** Numer dokumentu (faktura, paragon) — lista operacji na `/przeplywy`. */
+  documentNumber: string | null;
+  /** Kategoria wydatku nadana przy kategoryzacji; `null` = bez kategorii. */
+  categoryLabel: string | null;
+  /** Czy wydatek zatwierdzono (dane z OCR i KSeF czekają na akceptację). */
+  isReviewed: boolean;
 }
 
 /**
@@ -44,7 +50,7 @@ export interface CostEntry {
 const PROVENANCE_READ_FAILED = 'KSeF expense invoice provenance check is unavailable';
 
 const EXPENSE_COLUMNS =
-  'id, source, ksef_invoice_id, issue_date, seller_nip, seller_name, net_amount, vat_amount, gross_amount, vat_deductible_amount, document_type, is_reviewed, ocr_extracted_data';
+  'id, source, ksef_invoice_id, issue_date, seller_nip, seller_name, document_number, category_label, net_amount, vat_amount, gross_amount, vat_deductible_amount, document_type, is_reviewed, ocr_extracted_data';
 
 /**
  * Koszty z zakresu `[from, toExclusive)` (daty RRRR-MM-DD), posortowane po
@@ -127,6 +133,13 @@ export async function getCosts(
     vatDeductible: VAT_DEDUCTIBLE_DOCUMENTS.has(row.document_type ?? 'invoice')
       ? Number(row.vat_deductible_amount ?? 0)
       : 0,
+    documentNumber: typeof row.document_number === 'string' && row.document_number.trim()
+      ? row.document_number.trim()
+      : null,
+    categoryLabel: typeof row.category_label === 'string' && row.category_label.trim()
+      ? row.category_label.trim()
+      : null,
+    isReviewed: row.is_reviewed === true,
   }));
 }
 
