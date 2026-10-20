@@ -14,16 +14,13 @@ vi.mock('@/lib/dashboard/monthly-figures', async (importOriginal) => ({
   getMonthlyFigures: async () => ({ monthName: '', totalNet: 0, totalVat: 0, totalGross: 0, vatDueLabel: '', daysToVatDue: 0 }),
   getSalesSeries: async () => ({ months: [], currentSeries: [], prevSeries: [], currentMonthKey: '' }),
 }));
-vi.mock('@/components/dashboard/monthly-figures-card', () => ({ MonthlyFiguresCard: () => null }));
-vi.mock('@/components/dashboard/sales-chart-card', () => ({ SalesChartCard: () => null }));
-vi.mock('@/components/dashboard/vat-summary-card', () => ({ VatSummaryCard: () => null }));
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import PrzeplywyPage from '@/app/(dashboard)/przeplywy/page';
 import KpirPage from '@/app/(dashboard)/reports/kpir/page';
-import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
 import { KpirView } from '@/components/expenses/kpir-view';
+import { KpirFinanceCard } from '@/components/przeplywy/finora/chart-finance';
+import { getCashFlowData, type CashFlowData } from '@/lib/dashboard/cash-flow';
 import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
 import type { JpkInvoice } from '@/lib/exports/jpk-fa-generator';
@@ -80,6 +77,8 @@ function database() {
         gte(key: string, value: string) { predicates.push((r) => String(r[key]) >= value); return query; },
         lte(key: string, value: string) { predicates.push((r) => String(r[key]) <= value); return query; },
         gt(key: string, value: string) { predicates.push((r) => String(r[key]) > value); return query; },
+        lt(key: string, value: string) { predicates.push((r) => String(r[key]) < value); return query; },
+        is(key: string, value: unknown) { filters.push(['is', key, value]); predicates.push((r) => (r[key] ?? null) === value); return query; },
         order(key?: string) { sortKey = key ?? null; return query; },
         limit() { return query; },
         range(from: number, to: number) { window = [from, to]; return query; },
@@ -102,6 +101,21 @@ function database() {
 }
 
 const client = () => database() as unknown as SupabaseClient;
+
+/** Karta „Przychody i koszty / Ten miesiąc” z `/przeplywy` dla wyniku `getCashFlowData`. */
+function przeplywyHtml(data: CashFlowData): string {
+  return renderToStaticMarkup(
+    <KpirFinanceCard
+      months={data.months}
+      revenue={data.revenue}
+      costs={data.costs}
+      profit={data.profit}
+      report={data.report}
+      revenueChangePct={data.revenueChangePct}
+      costsHint="none"
+    />,
+  );
+}
 
 function faktura(o: Row): Row {
   return {
@@ -246,10 +260,18 @@ describe('KPiR w aplikacji i „Przepływy”', () => {
     expect(html).toContain(`zamówienie ${formatPlMoney(35000)}, minus zaliczki${' '}${formatPlMoney(10000)}`);
   });
 
-  it('Przepływy: przychód i dochód miesiąca bez dubla', () => {
-    const html = renderToStaticMarkup(
-      <CashFlowDashboard invoices={wiersze} expenses={[]} pendingReviewCount={0} />,
+  it('Przepływy: przychód i dochód miesiąca bez dubla', async () => {
+    // Te same faktury co `wiersze`, ale w bazie: od E5 przychód `/przeplywy`
+    // liczy `getCashFlowData` (zaliczki ROZ czyta sama).
+    tables.invoices.push(
+      faktura({ id: 'zal', internal_number: 'ZAL/1', invoice_kind: 'advance', issue_date: '2020-01-10', net_total: 10000 }),
+      faktura({ id: 'roz', internal_number: 'ROZ/1', invoice_kind: 'final', issue_date: `${ym}-10`, net_total: 35000, advance_invoice_ids: ['zal'] }),
+      faktura({ id: 'fv', internal_number: 'FV/1', issue_date: `${ym}-12`, net_total: 1000 }),
     );
+    const data = await getCashFlowData(client() as never, 'firma-a');
+    expect(data.report.revenue).toBe(26000);
+    expect(data.report.profit).toBe(26000);
+    const html = przeplywyHtml(data);
     expect(html).toContain(formatPlMoney(26000));
     expect(html).not.toContain(formatPlMoney(36000));
   });
@@ -296,7 +318,7 @@ describe('strony — podpięcie odczytu zaliczek', () => {
   });
 
   it('Przepływy: przychód miesiąca 30 000, nie 43 000; każda ROZ ze swoimi zaliczkami', async () => {
-    const html = renderToStaticMarkup(await PrzeplywyPage());
+    const html = przeplywyHtml(await getCashFlowData(client() as never, 'firma-a'));
     expect(html).toContain(formatPlMoney(30000));
     expect(html).not.toContain(formatPlMoney(43000));
     expect(html).not.toContain(formatPlMoney(37000)); // obie ROZ z zaliczką 3 000
@@ -304,7 +326,7 @@ describe('strony — podpięcie odczytu zaliczek', () => {
 
   it('Przepływy: błąd odczytu zaliczek idzie do granicy błędu, nie do zera', async () => {
     failWhen = zapytanieOZaliczki;
-    await expect(PrzeplywyPage()).rejects.toThrow(/zaliczek/);
+    await expect(getCashFlowData(client() as never, 'firma-a')).rejects.toThrow(/zaliczek/);
   });
 
   it('KPiR: faktura sprzedaży EUR wstrzymuje raport z kwotami PLN', async () => {
@@ -319,6 +341,6 @@ describe('strony — podpięcie odczytu zaliczek', () => {
 
   it('Przepływy: faktura sprzedaży EUR zatrzymuje obliczenie przychodu', async () => {
     tables.invoices.find((row) => row.id === 'fv-1')!.currency = 'EUR';
-    await expect(PrzeplywyPage()).rejects.toThrow(/potwierdzonej waluty PLN/);
+    await expect(getCashFlowData(client() as never, 'firma-a')).rejects.toThrow(/potwierdzonej waluty PLN/);
   });
 });

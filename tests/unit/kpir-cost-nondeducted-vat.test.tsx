@@ -3,8 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
+import { KpirFinanceCard } from '@/components/przeplywy/finora/chart-finance';
+import { TaxSavingsGoalCard } from '@/components/przeplywy/finora/statistics-savings-goal-card';
 import { KpirView, type KpirExpenseRow } from '@/components/expenses/kpir-view';
+import { getCashFlowData } from '@/lib/dashboard/cash-flow';
+import type { PageContext } from '@/lib/supabase/page-context';
+import { memoryClient } from './helpers/baza-w-pamieci';
 import { kpirCostAmount, nonDeductedVat } from '@/lib/categorization/kpir-cost';
 import { formatPlMoney } from '@/lib/format/pl';
 
@@ -92,15 +96,39 @@ describe('KPiR w aplikacji', () => {
 });
 
 describe('Przepływy: zysk i szacowany podatek jak w KPiR', () => {
-  const html = renderToStaticMarkup(
-    <CashFlowDashboard
-      invoices={[{ issue_date: `${ym}-05`, net_total: 5000, gross_total: 6150, invoice_kind: 'regular' }]}
-      expenses={[paragon]}
-      pendingReviewCount={0}
-    />,
-  );
+  // Od E5 (plan Finora) liczby `/przeplywy` liczy `getCashFlowData` — ta sama
+  // reguła kosztu (`getCosts` → `kpirCostAmount`) na prawdziwej ścieżce odczytu.
+  async function przeplywy() {
+    const supabase = memoryClient({
+      invoices: [{
+        id: 'fv-1', tenant_id: 'firma-a', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: 'test',
+        currency: 'PLN', invoice_kind: 'regular', advance_invoice_ids: [], issue_date: `${ym}-05`,
+        net_total: 5000, gross_total: 6150,
+      }],
+      expenses: [{ ...paragon, tenant_id: 'firma-a', source: 'manual', ksef_invoice_id: null, is_reviewed: true }],
+    }) as unknown as PageContext['supabase'];
+    return getCashFlowData(supabase, 'firma-a', new Date());
+  }
 
-  it('zysk = 5000 − 1230, podatek 19% od niego', () => {
+  it('zysk = 5000 − 1230, podatek 19% od niego', async () => {
+    const data = await przeplywy();
+    expect(data.report.profit).toBe(3770);
+    expect(data.taxEstimate.amount).toBe(716.3);
+
+    const html = renderToStaticMarkup(
+      <>
+        <KpirFinanceCard
+          months={data.months}
+          revenue={data.revenue}
+          costs={data.costs}
+          profit={data.profit}
+          report={data.report}
+          revenueChangePct={data.revenueChangePct}
+          costsHint="none"
+        />
+        <TaxSavingsGoalCard estimate={data.taxEstimate} />
+      </>,
+    );
     expect(html).toContain(formatPlMoney(3770));
     expect(html).toContain(formatPlMoney(716.3));
     expect(html).not.toContain(formatPlMoney(4000));

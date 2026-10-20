@@ -15,8 +15,11 @@ vi.mock('@/lib/ksef/accounting-provenance', () => ({
 }));
 
 import KpirPage from '@/app/(dashboard)/reports/kpir/page';
-import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
+import { KpirFinanceCard } from '@/components/przeplywy/finora/chart-finance';
+import { getCashFlowData } from '@/lib/dashboard/cash-flow';
 import { estimateIncomeTaxThisYear } from '@/lib/dashboard/tax-estimate';
+import type { PageContext } from '@/lib/supabase/page-context';
+import { memoryClient } from './helpers/baza-w-pamieci';
 
 /**
  * Plan Finora §2.4 pkt 10, ta sama przyczyna co w `getMonthlyFigures`:
@@ -64,19 +67,35 @@ describe('szacunek podatku — rok w Europe/Warsaw', () => {
   });
 });
 
-describe('przepływy (komponent) — okno sześciu miesięcy w Europe/Warsaw', () => {
-  it('1 listopada o 00:30 okno kończy się na listopadzie także przy renderze na serwerze w UTC', () => {
+describe('przepływy — okno sześciu miesięcy w Europe/Warsaw', () => {
+  it('1 listopada o 00:30 okno kończy się na listopadzie także przy renderze na serwerze w UTC', async () => {
     vi.setSystemTime(new Date(PIERWSZY_LISTOPADA_0030));
+    const sprzedaz = (id: string, issue_date: string, net: number) => ({
+      id, tenant_id: 'firma-a', direction: 'outgoing', ksef_status: 'accepted', ksef_environment: 'production',
+      currency: 'PLN', invoice_kind: 'regular', advance_invoice_ids: [], issue_date, net_total: net, gross_total: net * 1.23,
+    });
+    const supabase = memoryClient({
+      invoices: [sprzedaz('maj', '2026-05-20', 5_000), sprzedaz('listopad', '2026-11-01', 1_000)],
+      expenses: [],
+    }) as unknown as PageContext['supabase'];
 
+    // Od E5 (plan Finora) okno liczy `getCashFlowData` — karta tylko je pokazuje.
+    const data = await getCashFlowData(supabase, 'firma-a', new Date());
     const html = renderToStaticMarkup(
-      <CashFlowDashboard
-        invoices={[fv('2026-05-20', 5_000), fv('2026-11-01', 1_000)]}
-        expenses={[]}
-        pendingReviewCount={0}
-        dataFrom="2026-01-01"
+      <KpirFinanceCard
+        months={data.months}
+        revenue={data.revenue}
+        costs={data.costs}
+        profit={data.profit}
+        report={data.report}
+        revenueChangePct={data.revenueChangePct}
+        costsHint="none"
       />,
     );
 
+    expect(data.months.map((m) => m.longLabel)).toContain('lis 2026');
+    expect(data.months.map((m) => m.longLabel)).not.toContain('maj 2026');
+    expect(data.revenue.at(-1)).toBe(1_000);
     expect(html).toContain('lis 2026');
     expect(html).not.toContain('maj 2026');
   });
