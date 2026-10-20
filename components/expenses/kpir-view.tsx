@@ -122,7 +122,8 @@ const KIND_LABELS: Record<KpirEntry['kind'], string> = { revenue: 'Przychód', c
 
 // Kolory grup jak `TRANSACTION_GROUP_STYLES` / kierunki jak `TRANSACTION_DIRECTION_STYLES` w Finorze.
 const COLUMN_STYLES: Record<KpirEntry['kind'], string> = {
-  revenue: 'bg-chart-2/10 text-chart-2',
+  // Odstępstwo od Finory (WCAG 1.4.3): chart-2 na chart-2/10 daje 4,44:1 (ciemny 3,60:1).
+  revenue: 'bg-chart-2/10 text-accent-foreground',
   // Odstępstwo od Finory (WCAG 1.4.3): tekst `accent-foreground`, nie `primary` — `text-primary` na
   // `bg-primary/10` ma 4,44:1 na karcie i 4,20:1 w zaznaczonym wierszu (jasny motyw);
   // `accent-foreground` daje 9,00 / 8,52:1 (jasny) i 8,93:1 (ciemny).
