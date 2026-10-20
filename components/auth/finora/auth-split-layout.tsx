@@ -28,9 +28,14 @@ import { PortalContainerProvider } from '@/components/ui/portal-container'
 import { AuthGlitchBackground } from './auth-glitch-background'
 import { AuthLogo } from './auth-logo'
 
-/** Hasło z planu §5 P15 (treść do akceptacji Masła). */
+/**
+ * Hasło z planu §5 P15 (treść do akceptacji Masła). Drugie zdanie planu
+ * („FLO pilnuje terminów…”) obiecywało FLO, którego klient jeszcze nie ma
+ * (agent niewdrożony, poza Pulpitem od 19.10) — zostaje prawdziwe zdanie
+ * z dawnej strony logowania.
+ */
 export const AUTH_SLOGAN_TITLE = 'Faktury w KSeF bez stresu.'
-export const AUTH_SLOGAN_TEXT = 'FLO pilnuje terminów, płatności i VAT‑u za Ciebie.'
+export const AUTH_SLOGAN_TEXT = 'Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy potwierdzenia.'
 
 export function AuthSplitLayout({
   children,

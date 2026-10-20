@@ -129,7 +129,8 @@ describe('układ logowania (AuthSplitLayout)', () => {
     expect(html).toContain('Tytuł panelu');
     expect(html).toContain('Tekst panelu');
     expect(AUTH_SLOGAN_TITLE).toBe('Faktury w KSeF bez stresu.');
-    expect(AUTH_SLOGAN_TEXT).toBe('FLO pilnuje terminów, płatności i VAT‑u za Ciebie.');
+    // Bez obietnicy FLO, którego klient nie ma (agent niewdrożony).
+    expect(AUTH_SLOGAN_TEXT).toBe('Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy potwierdzenia.');
     expect(html.split(AUTH_SLOGAN_TITLE).length - 1).toBe(2); // telefon + karta
     // Jak w Finorze: prawa połowa zawsze czarna, tekst jasny na czarnym
     // (w obu motywach), karta z wycięciem biała z czarnym tekstem.
