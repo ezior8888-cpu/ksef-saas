@@ -22,6 +22,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import PrzeplywyPage from '@/app/(dashboard)/przeplywy/page';
 import KpirPage from '@/app/(dashboard)/reports/kpir/page';
+import { getKpirData, kpirTotals } from '@/lib/reports/kpir-data';
 import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
 import { KpirView } from '@/components/expenses/kpir-view';
 import { kpirRevenueNet } from '@/lib/categorization/kpir-revenue';
@@ -244,6 +245,8 @@ describe('KPiR w aplikacji i „Przepływy”', () => {
     expect(html).not.toContain(formatPlMoney(36000));
     expect(html).toContain(formatPlMoney(25000));
     expect(html).toContain(`zamówienie ${formatPlMoney(35000)}, minus zaliczki${' '}${formatPlMoney(10000)}`);
+    // Ta sama reguła w funkcji sum, z której liczy widok (plan Finora E8).
+    expect(kpirTotals([], wiersze)).toMatchObject({ col_7: 26000, totalRevenue: 26000, profit: 26000 });
   });
 
   it('Przepływy: przychód i dochód miesiąca bez dubla', () => {
@@ -274,6 +277,32 @@ describe('strony — podpięcie odczytu zaliczek', () => {
       faktura({ id: 'roz-2', internal_number: 'ROZ/2', invoice_kind: 'final', issue_date: `${ten}-11`, net_total: 7000, advance_invoice_ids: ['zal-2'] }),
       faktura({ id: 'fv-1', internal_number: 'FV/1', issue_date: `${ten}-12`, net_total: 1000 }),
     );
+  });
+
+  const okres = () => ({ month: String(now.getMonth() + 1), year: String(now.getFullYear()) });
+
+  it('KPiR (getKpirData): każda ROZ dostaje sumę SWOICH zaliczek, przychód okresu 30 000', async () => {
+    const data = await getKpirData(client(), 'firma-a', okres());
+    const zaliczki = new Map(data.invoices.map((inv) => [inv.internal_number, inv.settled_advances_net]));
+    expect(zaliczki).toEqual(new Map([['ROZ/1', 10000], ['ROZ/2', 3000], ['FV/1', null]]));
+    expect(data).toMatchObject({ currencyBlocked: null, settledError: null });
+    const sumy = kpirTotals(data.expenses, data.invoices);
+    expect(sumy.totalRevenue).toBe(30000);
+    expect(sumy.totalRevenue).not.toBe(43000);
+  });
+
+  it('KPiR (getKpirData): błąd odczytu zaliczek → settledError, nie zero zaliczek', async () => {
+    failWhen = zapytanieOZaliczki;
+    const data = await getKpirData(client(), 'firma-a', okres());
+    expect(data.settledError).toContain('Nie można odczytać zaliczek rozliczonych fakturą końcową');
+    expect(data.currencyBlocked).toBeNull();
+  });
+
+  it('KPiR (getKpirData): sprzedaż w EUR wstrzymuje raport i nie czyta zaliczek', async () => {
+    tables.invoices.find((row) => row.id === 'fv-1')!.currency = 'EUR';
+    const data = await getKpirData(client(), 'firma-a', okres());
+    expect(data.currencyBlocked).toContain('Raport wstrzymany');
+    expect(queries.some((q) => zapytanieOZaliczki(q.table, q.filters))).toBe(false);
   });
 
   it('KPiR: strona odejmuje każdej ROZ jej własne zaliczki (także sprzed miesięcy)', async () => {
