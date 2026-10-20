@@ -44,6 +44,13 @@ export function fakePostgrest(tables: Tables, reads: Read[] = []): PageContext['
         lt(c: string, v: string) { predicates.push((r) => r[c] != null && String(r[c]) < v); return builder; },
         in(c: string, v: unknown[]) { predicates.push((r) => v.includes(r[c])); return builder; },
         is(c: string, v: null) { predicates.push((r) => (v === null ? r[c] == null : r[c] === v)); return builder; },
+        /** `not(c, 'is', null)` i `not(c, 'eq', '{}')` (pusta tablica) — tylko te, których używa kod. */
+        not(c: string, op: string, v: unknown) {
+          if (op === 'is' && v === null) predicates.push((r) => r[c] != null);
+          else if (op === 'eq' && v === '{}') predicates.push((r) => Array.isArray(r[c]) && (r[c] as unknown[]).length > 0);
+          else throw new Error(`fakePostgrest: nieobsługiwane not(${c}, ${op})`);
+          return builder;
+        },
         order(column: string, options?: { ascending?: boolean }) {
           ordering.push({ column, ascending: options?.ascending !== false });
           return builder;
