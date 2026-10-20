@@ -3,13 +3,13 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ saveDraft: vi.fn() }));
+const m = vi.hoisted(() => ({ saveDraft: vi.fn(), send: vi.fn() }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/components/invoices/actions', () => ({
   saveDraftAction: m.saveDraft,
-  saveAndSendInvoiceAction: vi.fn(),
+  saveAndSendInvoiceAction: m.send,
   lookupBuyerAction: vi.fn(),
   prefillFromLastInvoiceAction: vi.fn(),
 }));
@@ -46,6 +46,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-20T08:00:00Z'));
   m.saveDraft.mockReset().mockResolvedValue({ success: false, error: 'stop' });
+  m.send.mockReset().mockResolvedValue({ success: false, error: 'stop' });
   window.matchMedia = ((query: string) => ({
     matches: false, media: query, addEventListener: () => {}, removeEventListener: () => {},
   })) as unknown as typeof window.matchMedia;
@@ -74,20 +75,52 @@ async function zapiszSzkic() {
   });
 }
 
+function przyciski(): string[] {
+  return [...container.querySelectorAll('button')].map((b) => b.textContent?.trim() ?? '');
+}
+
+async function wystaw() {
+  const przycisk = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Wystaw i wyślij do KSeF'));
+  await act(async () => {
+    przycisk!.click();
+    await new Promise((r) => setTimeout(r, 20));
+  });
+}
+
 describe('formularz faktury — podkład i pozycja cykliczna', () => {
-  it('podkład w polach od pierwszego renderu; pozycja cykliczna dochodzi do akcji zapisu', async () => {
+  it('podkład w polach od pierwszego renderu; pozycja i okres dochodzą do „Wystaw i wyślij” (C3)', async () => {
     await act(async () => {
-      root.render(<InvoiceForm initialValues={podklad} recurringInvoiceId={POS} suggestedNumber="FV/9/10/2026" />);
+      root.render(
+        <InvoiceForm initialValues={podklad} recurringInvoiceId={POS} recurringPeriod="2026-11" suggestedNumber="FV/9/10/2026" />,
+      );
     });
     expect(input('buyerName').value).toBe('Klient Podkład');
     expect(input('internalNumber').value).toBe('FV/2/10/2026');
     expect(input('lines.0.name').value).toBe('Abonament miesięczny');
     expect(input('recurringInvoiceId').type).toBe('hidden');
     expect(input('recurringInvoiceId').value).toBe(POS);
+    expect(input('recurringPeriod').type).toBe('hidden');
+    expect(input('recurringPeriod').value).toBe('2026-11');
 
-    await zapiszSzkic();
-    expect(m.saveDraft).toHaveBeenCalledTimes(1);
-    expect(m.saveDraft.mock.calls[0]![0]).toMatchObject({ recurringInvoiceId: POS, buyerName: 'Klient Podkład' });
+    await wystaw();
+    expect(m.send).toHaveBeenCalledTimes(1);
+    expect(m.send.mock.calls[0]![0]).toMatchObject({
+      recurringInvoiceId: POS,
+      recurringPeriod: '2026-11',
+      buyerName: 'Klient Podkład',
+    });
+  });
+
+  it('z pozycji cyklicznej nie ma szkicu: bez „Szkic” i „Zapisz szkic”, z wyjaśnieniem (C2)', async () => {
+    await act(async () => {
+      root.render(<InvoiceForm initialValues={podklad} recurringInvoiceId={POS} recurringPeriod="2026-11" />);
+    });
+    const etykiety = przyciski();
+    expect(etykiety).not.toContain('Szkic');
+    expect(etykiety.some((t) => t.includes('Zapisz'))).toBe(false);
+    expect(etykiety.some((t) => t.includes('Wystaw i wyślij do KSeF'))).toBe(true);
+    expect(container.textContent).toContain('Fakturę cykliczną wystawiasz od razu — szkic nie zamyka okresu.');
+    expect(m.saveDraft).not.toHaveBeenCalled();
   });
 
   it('„Duplikuj” (podkład bez pozycji) — bez ukrytego pola i bez recurringInvoiceId w zapisie', async () => {
@@ -95,6 +128,8 @@ describe('formularz faktury — podkład i pozycja cykliczna', () => {
       root.render(<InvoiceForm initialValues={podklad} />);
     });
     expect(container.querySelector('input[name="recurringInvoiceId"]')).toBeNull();
+    expect(container.querySelector('input[name="recurringPeriod"]')).toBeNull();
+    expect(container.textContent).not.toContain('szkic nie zamyka okresu');
     await zapiszSzkic();
     expect(m.saveDraft.mock.calls[0]![0]).not.toHaveProperty('recurringInvoiceId');
   });

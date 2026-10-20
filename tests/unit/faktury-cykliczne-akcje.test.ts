@@ -85,6 +85,49 @@ describe('createRecurringInvoiceAction', () => {
     expect(r.success && r.recurringInvoice.next_run_date).toBe('2026-11-05');
   });
 
+  it('wzór z tego samego miesiąca, dzień pozycji jeszcze przed nami → pierwszy termin za miesiąc (C5, C6)', async () => {
+    // Wzór 15.10, dzień 25, dziś 20.10: październik pokrywa już sam wzór.
+    db.tables.invoices = [wzor({ issue_date: '2026-10-15' })];
+    const r = await createRecurringInvoiceAction(dane);
+    expect(r.success && r.recurringInvoice.next_run_date).toBe('2026-11-25');
+  });
+
+  it('wzór wystawiony dziś, dzień dzisiejszy → nie od razu „Do wystawienia”', async () => {
+    db.tables.invoices = [wzor({ issue_date: '2026-10-20' })];
+    const r = await createRecurringInvoiceAction({ ...dane, dayOfMonth: 20 });
+    expect(r.success && r.recurringInvoice.next_run_date).toBe('2026-11-20');
+  });
+
+  it.each([
+    ['quarterly' as const, '2026-10-05', 5, '2027-01-05'],
+    ['yearly' as const, '2026-01-15', 15, '2027-01-15'],
+  ])('co %s: wzór z bieżącego okresu → pierwszy termin w następnym okresie', async (frequency, issueDate, day, wynik) => {
+    db.tables.invoices = [wzor({ issue_date: issueDate })];
+    const r = await createRecurringInvoiceAction({ ...dane, frequency, dayOfMonth: day });
+    expect(r.success && r.recurringInvoice.next_run_date).toBe(wynik);
+  });
+
+  it('ta sama faktura jest już wzorem innej pozycji → odmowa z nazwą pozycji, bez drugiej pozycji (K2)', async () => {
+    db.tables.recurring_invoices = [pozycja({ name: 'Abonament Klient' })];
+    await expect(createRecurringInvoiceAction(dane)).resolves.toEqual({
+      success: false,
+      error: 'Ta faktura jest już wzorem faktury cyklicznej „Abonament Klient” — zmień ją na liście faktur cyklicznych.',
+    });
+    expect(db.tables.recurring_invoices).toHaveLength(1);
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  it('wyścig dwóch arkuszy: indeks unikalny wzoru (23505) → ten sam komunikat (K2)', async () => {
+    db.failures['recurring_invoices:insert'] = {
+      code: '23505',
+      message: 'duplicate key value violates unique constraint "recurring_invoices_template_unique"',
+    };
+    await expect(createRecurringInvoiceAction(dane)).resolves.toEqual({
+      success: false,
+      error: 'Ta faktura jest już wzorem innej faktury cyklicznej — zmień ją na liście faktur cyklicznych.',
+    });
+  });
+
   it.each([
     [{ direction: 'incoming' }, 'Wzorem może być tylko faktura sprzedaży, nie faktura kosztowa.'],
     [{ origin: 'import' }, 'Wzorem może być tylko faktura wystawiona w FaktWay — nie faktura z importu.'],
@@ -147,6 +190,30 @@ describe('updateRecurringInvoiceAction', () => {
     expect(r.success && r.recurringInvoice.next_run_date).toBe('2026-11-05');
   });
 
+  it('co miesiąc → co kwartał po fakturze za październik: pierwszy kwartał bez faktury (K1)', async () => {
+    db.tables.invoices!.push({
+      id: 'f-10', tenant_id: TENANT, recurring_invoice_id: POS, recurring_period: '2026-10', issue_date: '2026-10-10',
+    });
+    const r = await updateRecurringInvoiceAction(POS, { ...dane, frequency: 'quarterly', dayOfMonth: 10 });
+    expect(r.success && r.recurringInvoice.next_run_date).toBe('2027-01-10');
+  });
+
+  it('co miesiąc → co rok po fakturze za październik: rok 2027 (K1)', async () => {
+    db.tables.invoices!.push({
+      id: 'f-10', tenant_id: TENANT, recurring_invoice_id: POS, recurring_period: '2026-10', issue_date: '2026-10-10',
+    });
+    const r = await updateRecurringInvoiceAction(POS, { ...dane, frequency: 'yearly', dayOfMonth: 10 });
+    expect(r.success && r.recurringInvoice.next_run_date).toBe('2027-01-10');
+  });
+
+  it('faktury innej firmy nie wpływają na harmonogram', async () => {
+    db.tables.invoices!.push({
+      id: 'f-obca', tenant_id: OTHER, recurring_invoice_id: POS, recurring_period: '2026-12', issue_date: '2026-12-10',
+    });
+    const r = await updateRecurringInvoiceAction(POS, { ...dane, frequency: 'quarterly', dayOfMonth: 10 });
+    expect(r.success && r.recurringInvoice.next_run_date).toBe('2026-11-10');
+  });
+
   it('nowy wzór przechodzi te same warunki co przy tworzeniu', async () => {
     db.tables.invoices!.push(wzor({ id: TPL_2, ksef_status: 'draft' }));
     await expect(updateRecurringInvoiceAction(POS, { ...dane, dayOfMonth: 10, templateInvoiceId: TPL_2 })).resolves.toEqual({
@@ -154,6 +221,14 @@ describe('updateRecurringInvoiceAction', () => {
       error: 'Wzorem może być tylko faktura przyjęta przez KSeF. Poczekaj na przyjęcie albo wybierz inną fakturę.',
     });
     expect(db.tables.recurring_invoices![0]!.template_invoice_id).toBe(TPL);
+  });
+
+  it('zmiana samego wzoru: termin w okresie pokrytym nowym wzorem przesuwa się (weryfikacja C5)', async () => {
+    // Październik „Do wystawienia”, klient wystawił go ręcznie i ustawia tę fakturę jako wzór.
+    db.tables.recurring_invoices = [pozycja({ next_run_date: '2026-10-10' })];
+    db.tables.invoices!.push(wzor({ id: TPL_2, internal_number: 'FV/3/10/2026', issue_date: '2026-10-15' }));
+    const r = await updateRecurringInvoiceAction(POS, { ...dane, dayOfMonth: 10, templateInvoiceId: TPL_2 });
+    expect(r.success && r.recurringInvoice.next_run_date).toBe('2026-11-10');
   });
 
   it('pozycja innej firmy — „nie znaleziono”', async () => {

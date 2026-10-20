@@ -70,6 +70,8 @@ describe('?cykliczna=<id>', () => {
     expect(m.formProps.at(-1)).toMatchObject({
       initialValues: podklad.values,
       recurringInvoiceId: POS,
+      // Okres z banera idzie do formularza — zapis porówna go z bieżącą pozycją (C3).
+      recurringPeriod: '2026-11',
       prefill: null,
       suggestedNumber: 'FV/1/10/2026',
     });
@@ -96,11 +98,23 @@ describe('?cykliczna=<id>', () => {
     expect(html).toContain('Nie znaleziono faktury cyklicznej');
   });
 
-  it('wzór nie do odczytania: pusty formularz z komunikatem', async () => {
+  it('co kwartał: okres z banera w formacie kwartału', async () => {
+    m.getRecurring.mockResolvedValue(pozycja({ frequency: 'quarterly', next_run_date: '2027-01-10' }));
+    const html = await render({ cykliczna: POS });
+    expect(m.formProps.at(-1)).toMatchObject({ recurringInvoiceId: POS, recurringPeriod: '2027-Q1' });
+    expect(html).toContain('I kwartał 2027');
+  });
+
+  it('wzór nie do odczytania: pusty formularz z wykonalnym komunikatem i linkiem do listy (C8)', async () => {
     m.prefillFromInvoice.mockResolvedValue(null);
     const html = await render({ cykliczna: POS });
     expect(m.formProps.at(-1)).not.toHaveProperty('recurringInvoiceId');
+    expect(m.formProps.at(-1)).not.toHaveProperty('recurringPeriod');
     expect(html).toContain('Nie udało się wczytać faktury-wzoru');
+    // Arkusz „Edytuj” nie zmienia wzoru — nie odsyłamy tam.
+    expect(html).not.toContain('w ustawieniach faktury cyklicznej');
+    expect(html).toContain('usuń tę fakturę cykliczną i utwórz ją z innej faktury-wzoru');
+    expect(html).toContain('href="/invoices/recurring"');
   });
 });
 

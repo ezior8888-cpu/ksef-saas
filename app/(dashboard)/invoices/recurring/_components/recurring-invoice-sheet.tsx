@@ -222,7 +222,10 @@ function RecurringInvoiceSheetBody({
 
   const templateId = useWatch({ control, name: 'templateInvoiceId' });
 
-  const preview = previewNextRun({ today, frequency, dayOfMonth, editing });
+  // Data wzoru: pierwszy termin nie wypada w okresie, który wzór już pokrywa —
+  // ta sama funkcja co w akcji zapisu (podgląd = zapis). Edycja liczy z
+  // `editing.coveredThrough` z listy.
+  const preview = previewNextRun({ today, frequency, dayOfMonth, editing, templateIssueDate: selected?.issueDate ?? null });
 
   const chooseTemplate = (id: string | null) => {
     const candidate = items.find((item) => item.value === id)?.candidate ?? null;

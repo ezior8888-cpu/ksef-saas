@@ -119,7 +119,10 @@ describe('P6 — tabela faktur cyklicznych', () => {
     expect(RECURRING_STATUS_STYLES.active).toContain('bg-green-600/10');
     expect(RECURRING_STATUS_STYLES.active).toContain('text-green-800');
     expect(RECURRING_STATUS_STYLES.paused).toContain('bg-amber-600/10');
-    expect(RECURRING_STATUS_STYLES.paused).toContain('text-amber-700');
+    // Wstrzymana: amber-700 miał 4,41:1 na wierszu w stanie hover (`bg-muted/50`), więc 800 — policzone
+    // z oklch w `faktury-cykliczne-lista-kontrast.test.tsx`.
+    expect(RECURRING_STATUS_STYLES.paused).toContain('text-amber-800');
+    expect(RECURRING_STATUS_STYLES.paused).not.toContain('text-amber-700');
     // „Do wystawienia” (stanu nie ma w Finorze): pełny kolor główny, biały tekst 5,10:1.
     expect(RECURRING_STATUS_STYLES.due).toContain('bg-primary text-primary-foreground');
     for (const style of Object.values(RECURRING_STATUS_STYLES)) expect(style).not.toMatch(/(^|\s)text-\w+-600/);
@@ -174,6 +177,23 @@ describe('P6 — tabela faktur cyklicznych', () => {
     expect(html).toMatch(/Pozycje\s*<span>1–3<\/span>\s*z\s*<span>3<\/span>/);
     expect(html).toContain('Poprzednia');
     expect(html).toContain('Następna');
+  });
+});
+
+describe('C9 — długie nazwy się ucinają, nie rozpychają tabeli', () => {
+  const LONG_NAME = 'Abonament miesięczny za obsługę księgową i doradztwo podatkowe dla spółki '.repeat(2).trim();
+  const LONG_CONTRACTOR =
+    'Przedsiębiorstwo Produkcyjno-Handlowo-Usługowe Bardzo Długa Nazwa Kontrahenta z KSeF spółka z ograniczoną odpowiedzialnością';
+
+  it('nazwa szablonu, numer wzoru i kontrahent w tabeli mają `max-w-*` obok `truncate` (jak contractors-table)', () => {
+    const html = view([item({ name: LONG_NAME, contractorName: LONG_CONTRACTOR })]);
+    const table = html.slice(0, html.indexOf('lg:hidden'));
+    // Każdy span `truncate` w komórkach tabeli ma ograniczoną szerokość; w `table-layout: auto`
+    // sam `truncate` niczego nie ucina, bo komórka rośnie do pełnej długości tekstu.
+    const truncated = [...table.matchAll(/<span class="([^"]*\btruncate\b[^"]*)"/g)].map((m) => m[1]);
+    expect(truncated.length).toBe(3);
+    for (const classes of truncated) expect(classes, classes).toMatch(/(^|\s)max-w-\d+(\s|$)/);
+    expect(table).toContain(`title="${LONG_NAME}"`);
   });
 });
 

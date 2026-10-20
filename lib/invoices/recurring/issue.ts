@@ -5,7 +5,11 @@
  * 1. PRZED zapisem `loadRecurringIssueLink` czyta pozycję (klient sesji, RLS)
  *    i liczy okres z jej `next_run_date` w tej chwili. Pozycja wstrzymana,
  *    usunięta albo z innej firmy → odmowa z komunikatem, bez zapisu: faktura
- *    poza harmonogramem nie powstaje bez wiedzy klienta.
+ *    poza harmonogramem nie powstaje bez wiedzy klienta. Okres z formularza
+ *    (ten, który klient widział w banerze) musi być równy okresowi z odczytu
+ *    — inaczej odmowa: `periodTakenMessage` (za okres z formularza jest już
+ *    faktura) albo `RECURRING_CHANGED_MESSAGE` (C3: druga karta, powrót
+ *    wstecz w przeglądarce, zmiana pozycji w międzyczasie).
  * 2. INSERT faktury niesie `recurring_invoice_id` i `recurring_period`
  *    (`insertInvoiceAndLines` w components/invoices/actions.ts). Unikalny
  *    indeks `uq_invoices_recurring_period` (00154) przepuszcza najwyżej jedną
@@ -29,7 +33,7 @@ import type { Database } from '@/types/database';
 import type { RecurringFrequency } from '@/types/recurring-invoice';
 
 import { recurringDb, type InvoiceRecurringColumns } from './db';
-import { nextRunDate, recurringPeriodKey } from './schedule';
+import { nextRunDate, previousRunDate, recurringPeriodKey } from './schedule';
 
 type AnyClient = SupabaseClient<Database> | SupabaseClient;
 
@@ -42,6 +46,14 @@ export const RECURRING_NOT_FOUND_MESSAGE =
   'Nie znaleziono tej faktury cyklicznej — mogła zostać usunięta. Wystaw zwykłą fakturę.';
 export const RECURRING_READ_ERROR_MESSAGE =
   'Nie udało się odczytać faktury cyklicznej. Spróbuj ponownie za chwilę.';
+export const RECURRING_CHANGED_MESSAGE =
+  'Faktura cykliczna zmieniła się od otwarcia formularza — otwórz „Wystaw teraz” ponownie.';
+/** Szkic z pozycji — tylko „Wystaw i wyślij” zajmuje okres (C2). */
+export const RECURRING_DRAFT_REFUSED_MESSAGE =
+  'Fakturę cykliczną wystaw przyciskiem „Wystaw i wyślij do KSeF”.';
+/** Dopisek, gdy kolejka KSeF odmówiła, a szkic z okresem został (protokół pkt 4). */
+export const RECURRING_DRAFT_LEFT_NOTE =
+  'Szkic zajmuje okres faktury cyklicznej — wyślij go do KSeF dziś albo usuń, a okres wróci do „Do wystawienia”.';
 
 /** Powiązanie zapisywanej faktury z okresem pozycji cyklicznej. */
 export interface RecurringIssueLink {
@@ -176,5 +188,55 @@ export async function advanceRecurringRunDate(
   } catch {
     console.error('[recurring-invoices] advance_failed');
     return false;
+  }
+}
+
+export type RestoreRunDateResult =
+  | { restored: true; fromNextRunDate: string; toNextRunDate: string }
+  | { restored: false; reason: 'read_failed' | 'not_found' | 'period_mismatch' | 'changed' | 'update_failed' };
+
+/**
+ * Po usunięciu szkicu, który zajmował okres pozycji (C2/C4): cofa
+ * `next_run_date` o jeden okres, ale tylko gdy poprzedni termin to właśnie
+ * okres szkicu (`recurringPeriodKey(previousRunDate(bieżąca)) === period`)
+ * i tylko warunkowym UPDATE na bieżącej dacie z odczytu. Pozycja zmieniona
+ * (inny dzień w tym samym okresie też jest w porządku — liczy się okres),
+ * przesunięta dalej albo usunięta → nic nie zmieniamy.
+ *
+ * Ponowienie: drugi raz po udanym cofnięciu poprzedni termin to już okres
+ * wcześniejszy niż szkic → `period_mismatch`, data bez zmian. Nie rzuca.
+ */
+export async function restoreRunDateAfterDraftDelete(
+  supabase: AnyClient,
+  tenantId: string,
+  draft: Pick<RecurringIssueLink, 'recurringInvoiceId' | 'period'>,
+): Promise<RestoreRunDateResult> {
+  try {
+    const db = recurringDb(supabase);
+    const { data, error } = await db
+      .from('recurring_invoices')
+      .select('id, next_run_date, frequency, day_of_month')
+      .eq('id', draft.recurringInvoiceId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (error) return { restored: false, reason: 'read_failed' };
+    if (!data) return { restored: false, reason: 'not_found' };
+    const frequency = data.frequency as RecurringFrequency;
+    const current = data.next_run_date;
+    const previous = previousRunDate(current, frequency, data.day_of_month);
+    if (recurringPeriodKey(previous, frequency) !== draft.period) return { restored: false, reason: 'period_mismatch' };
+
+    const { data: updated, error: updateError } = await db
+      .from('recurring_invoices')
+      .update({ next_run_date: previous })
+      .eq('id', data.id)
+      .eq('tenant_id', tenantId)
+      .eq('next_run_date', current)
+      .select('id');
+    if (updateError) return { restored: false, reason: 'update_failed' };
+    if (!Array.isArray(updated) || updated.length === 0) return { restored: false, reason: 'changed' };
+    return { restored: true, fromNextRunDate: current, toNextRunDate: previous };
+  } catch {
+    return { restored: false, reason: 'update_failed' };
   }
 }

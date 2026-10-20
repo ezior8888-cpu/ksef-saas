@@ -25,6 +25,9 @@ import {
   isRecurringPeriodConflict,
   loadRecurringIssueLink,
   periodTakenMessage,
+  RECURRING_CHANGED_MESSAGE,
+  RECURRING_DRAFT_LEFT_NOTE,
+  RECURRING_DRAFT_REFUSED_MESSAGE,
   withRecurringColumns,
   type RecurringIssueLink,
 } from '@/lib/invoices/recurring/issue';
@@ -456,14 +459,17 @@ export type InvoiceActionResult =
  *  i okres idą w TYM SAMYM INSERT — unikalny indeks `uq_invoices_recurring_period`
  *  przepuszcza jedną fakturę na okres. Po udanym zapisie (z pozycjami)
  *  warunkowy UPDATE przesuwa `next_run_date`; jego błąd nie psuje zapisu.
- *  Bez `recurring` wiersz i zachowanie są takie jak przed N1. */
+ *  Oba zdarzenia — zajęcie okresu i samonaprawa daty po 23505 — idą do
+ *  `audit_logs` (K3). Bez `recurring` wiersz i zachowanie są takie jak przed N1. */
 async function insertInvoiceAndLines(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tenantId: string,
   invoice: Invoice,
   formValues?: InvoiceFormValues,
-  recurring?: RecurringIssueLink,
+  recurringIssue?: { link: RecurringIssueLink; userId: string },
 ): Promise<InvoiceActionResult> {
+  const recurring = recurringIssue?.link;
+  const recurringUserId = recurringIssue?.userId ?? null;
   const b2c = formValues ? buyerColumnsFromInvoiceForm(formValues) : null;
 
   const { data: inserted, error: invErr } = await supabase
@@ -511,7 +517,23 @@ async function insertInvoiceAndLines(
     if (recurring && invErr?.code === '23505') {
       const existing = await findInvoiceForPeriod(supabase, tenantId, recurring);
       if (existing) {
-        await advanceRecurringRunDate(supabase, tenantId, recurring);
+        const repaired = await advanceRecurringRunDate(supabase, tenantId, recurring);
+        if (repaired) {
+          await logAudit({
+            action: 'recurring_invoice.run_date_repaired',
+            tenantId,
+            userId: recurringUserId,
+            entityType: 'recurring_invoice',
+            entityId: recurring.recurringInvoiceId,
+            metadata: {
+              recurringPeriod: recurring.period,
+              existingInvoiceId: existing.id,
+              existingInternalNumber: existing.internal_number,
+              fromNextRunDate: recurring.runDate,
+              toNextRunDate: recurring.nextRunDate,
+            },
+          });
+        }
         return { success: false, error: periodTakenMessage(existing) };
       }
       if (isRecurringPeriodConflict(invErr)) {
@@ -565,12 +587,37 @@ async function insertInvoiceAndLines(
     };
   }
 
-  if (recurring) await advanceRecurringRunDate(supabase, tenantId, recurring);
+  if (recurring) {
+    const advanced = await advanceRecurringRunDate(supabase, tenantId, recurring);
+    await logAudit({
+      action: 'recurring_invoice.issued',
+      tenantId,
+      userId: recurringUserId,
+      entityType: 'recurring_invoice',
+      entityId: recurring.recurringInvoiceId,
+      metadata: {
+        invoiceId: inserted.id as string,
+        internalNumber: invoice.internalNumber,
+        recurringPeriod: recurring.period,
+        fromNextRunDate: recurring.runDate,
+        toNextRunDate: recurring.nextRunDate,
+        // false: przesunięcie nie wyszło (albo ktoś zmienił datę) — naprawi je następna próba po 23505.
+        nextRunDateAdvanced: advanced,
+      },
+    });
+  }
 
   return { success: true, invoiceId: inserted.id as string };
 }
 
-/** N1: pozycja cykliczna z formularza (`?cykliczna=`) — odczyt PRZED zapisem; zwykła faktura: `link` pusty. */
+/**
+ * N1: pozycja cykliczna z formularza (`?cykliczna=`) — odczyt PRZED zapisem;
+ * zwykła faktura: `link` pusty. C3: okres z formularza (pokazany w banerze)
+ * musi być okresem pozycji teraz — inaczej nic nie zapisujemy. Jeśli za
+ * okres z formularza jest już faktura, klient dostaje jej numer (a nie radę
+ * „wybierz inny numer”, która prowadziła do drugiej faktury za ten sam
+ * miesiąc); jeśli nie — prośbę o ponowne otwarcie „Wystaw teraz”.
+ */
 async function recurringLinkForForm(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tenantId: string,
@@ -578,12 +625,26 @@ async function recurringLinkForForm(
 ): Promise<{ ok: true; link: RecurringIssueLink | undefined } | { ok: false; error: string }> {
   if (!values.recurringInvoiceId) return { ok: true, link: undefined };
   const loaded = await loadRecurringIssueLink(supabase, tenantId, values.recurringInvoiceId);
-  return loaded.ok ? { ok: true, link: loaded.link } : loaded;
+  if (!loaded.ok) return loaded;
+  const formPeriod = values.recurringPeriod;
+  if (formPeriod && formPeriod !== loaded.link.period) {
+    const existing = await findInvoiceForPeriod(supabase, tenantId, {
+      recurringInvoiceId: loaded.link.recurringInvoiceId,
+      period: formPeriod,
+    });
+    return { ok: false, error: existing ? periodTakenMessage(existing) : RECURRING_CHANGED_MESSAGE };
+  }
+  return { ok: true, link: loaded.link };
 }
 
 export async function saveDraftAction(
   values: InvoiceFormValues
 ): Promise<InvoiceActionResult> {
+  // C2 (E9): z pozycji cyklicznej nie ma szkicu. Szkic zajmowałby okres
+  // i przesuwał harmonogram, a nazajutrz nie dałby się wysłać (data
+  // wystawienia ≠ dziś) — formularz chowa „Zapisz szkic”, a tu odmowa dla
+  // wywołania wprost. Bez zapisu i bez odczytu bazy.
+  if (values?.recurringInvoiceId) return { success: false, error: RECURRING_DRAFT_REFUSED_MESSAGE };
   // Ten sam schemat co formularz i „Wystaw i wyślij” — szkic da się później
   // wysłać do KSeF (F-042), więc nie może omijać walidacji wywołaniem wprost.
   const parsed = invoiceFormSchema.safeParse(values);
@@ -598,11 +659,9 @@ export async function saveDraftAction(
     // Bez 00094 nie znamy prawnej adnotacji P_16; nie zapisujemy dokumentu.
     const cashMethod = await readTenantCashMethodForIssuance(supabase, tenant.id);
     const invoice = buildInvoiceFromForm(values, tenant, vatExemptionBasis, cashMethod);
-    // N1: pozycja wstrzymana, usunięta albo obca — odmowa przed zapisem.
-    const recurring = await recurringLinkForForm(supabase, tenant.id, values);
-    if (!recurring.ok) return { success: false, error: recurring.error };
 
-    const result = await insertInvoiceAndLines(supabase, tenant.id, invoice, values, recurring.link);
+    // Zwykły szkic — bez pozycji cyklicznej (odmowa wyżej).
+    const result = await insertInvoiceAndLines(supabase, tenant.id, invoice, values);
     if (result.success && result.invoiceId) {
       await logAudit({
         action: 'invoice.draft_created',
@@ -613,9 +672,6 @@ export async function saveDraftAction(
         metadata: {
           internalNumber: invoice.internalNumber,
           grossTotal: invoice.grossTotal,
-          ...(recurring.link
-            ? { recurringInvoiceId: recurring.link.recurringInvoiceId, recurringPeriod: recurring.link.period }
-            : {}),
         },
       });
       revalidatePath('/invoices');
@@ -660,7 +716,13 @@ export async function saveAndSendInvoiceAction(
     const recurring = await recurringLinkForForm(supabase, tenant.id, values);
     if (!recurring.ok) return { success: false, error: recurring.error };
     // 1) Najpierw draft - jeśli DB padnie, nie publikujemy eventu-sieroty.
-    const saved = await insertInvoiceAndLines(supabase, tenant.id, invoice, values, recurring.link);
+    const saved = await insertInvoiceAndLines(
+      supabase,
+      tenant.id,
+      invoice,
+      values,
+      recurring.link ? { link: recurring.link, userId } : undefined,
+    );
     if (!saved.success) return saved;
 
     const enq = await enqueueKsefSubmitAfterDraft({
@@ -690,13 +752,17 @@ export async function saveAndSendInvoiceAction(
             metadata: {
               internalNumber: invoice.internalNumber,
               note: isSettingsRead ? 'submit_aborted_tenant_read_error' : 'submit_blocked_no_ksef_cert',
+              ...(recurring.link
+                ? { recurringInvoiceId: recurring.link.recurringInvoiceId, recurringPeriod: recurring.link.period }
+                : {}),
             },
           });
         }
       }
       return {
         success: false,
-        error: enq.error,
+        // C4: szkic z okresem został — klient ma wiedzieć, że okres wróci po usunięciu szkicu.
+        error: recurring.link && saved.invoiceId ? `${enq.error} ${RECURRING_DRAFT_LEFT_NOTE}` : enq.error,
         invoiceId: saved.invoiceId,
       };
     }

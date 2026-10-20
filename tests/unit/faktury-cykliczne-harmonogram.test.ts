@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { previewNextRun } from '@/lib/invoices/recurring/preview';
 import {
   catchUpRunDate,
+  coveredThroughDate,
+  editedRunDate,
   firstRunDate,
+  firstRunDateAfter,
   nextRunDate,
+  periodLastMonthDate,
+  previousRunDate,
   recurringPeriodKey,
   recurringPeriodLabel,
   rescheduleRunDate,
@@ -156,5 +162,143 @@ describe('recurringPeriodLabel', () => {
     ['coś', 'coś'],
   ])('%s → %s', (okres, podpis) => {
     expect(recurringPeriodLabel(okres)).toBe(podpis);
+  });
+});
+
+describe('previousRunDate — odwrotność nextRunDate (cofnięcie po usunięciu szkicu)', () => {
+  it.each([
+    ['2026-12-10', 'monthly', 10, '2026-11-10'],
+    ['2027-01-10', 'monthly', 10, '2026-12-10'],
+    ['2027-01-05', 'quarterly', 5, '2026-10-05'],
+    ['2027-02-28', 'yearly', 28, '2026-02-28'],
+  ] as const)('%s, %s, dzień %s → %s', (data, czestotliwosc, dzien, wynik) => {
+    expect(previousRunDate(data, czestotliwosc, dzien)).toBe(wynik);
+  });
+
+  it('nextRunDate(previousRunDate(x)) = x dla każdej częstotliwości', () => {
+    for (const f of ['monthly', 'quarterly', 'yearly'] as const) {
+      let run = '2026-01-15';
+      for (let i = 0; i < 30; i++) {
+        expect(nextRunDate(previousRunDate(run, f, 15), f, 15)).toBe(run);
+        run = nextRunDate(run, f, 15);
+      }
+    }
+  });
+});
+
+describe('firstRunDateAfter — pierwszy termin nie w okresie pokrytym już fakturą', () => {
+  it('wzór z dnia wcześniejszego niż dzień pozycji, w tym samym miesiącu → następny miesiąc', () => {
+    // Wzór 15.10, dzień 25, dziś 20.10: 25.10 to wciąż październik, który pokrywa wzór.
+    expect(firstRunDateAfter('2026-10-20', '2026-10-15', 'monthly', 25)).toBe('2026-11-25');
+  });
+
+  it('wzór z dziś, dzień dzisiejszy → za miesiąc, nie od razu „Do wystawienia”', () => {
+    expect(firstRunDateAfter('2026-10-20', '2026-10-20', 'monthly', 20)).toBe('2026-11-20');
+  });
+
+  it('wzór z poprzedniego miesiąca — bez zmian względem najbliższego dnia od dziś', () => {
+    expect(firstRunDateAfter('2026-10-20', '2026-09-25', 'monthly', 25)).toBe('2026-10-25');
+    expect(firstRunDateAfter('2026-10-20', '2026-09-10', 'monthly', 5)).toBe('2026-11-05');
+  });
+
+  it('co kwartał: wzór z IV kwartału → pierwszy termin w I kwartale 2027', () => {
+    expect(firstRunDateAfter('2026-10-20', '2026-10-05', 'quarterly', 5)).toBe('2027-01-05');
+    expect(firstRunDateAfter('2026-10-20', '2026-10-01', 'quarterly', 1)).toBe('2027-01-01');
+  });
+
+  it('co rok: wzór z tego roku → pierwszy termin w przyszłym roku', () => {
+    expect(firstRunDateAfter('2026-10-20', '2026-01-15', 'yearly', 15)).toBe('2027-01-15');
+    expect(firstRunDateAfter('2026-10-20', '2026-10-05', 'yearly', 5)).toBe('2027-01-05');
+  });
+
+  it('bez pokrytego okresu — jak firstRunDate', () => {
+    expect(firstRunDateAfter('2026-10-20', null, 'monthly', 25)).toBe(firstRunDate('2026-10-20', 25));
+  });
+});
+
+describe('coveredThroughDate — do kiedy okresy są pokryte fakturą', () => {
+  it('ostatni miesiąc okresu faktury z pozycji (miesiąc, kwartał, rok)', () => {
+    expect(periodLastMonthDate('2026-10')).toBe('2026-10-01');
+    expect(periodLastMonthDate('2026-Q4')).toBe('2026-12-01');
+    expect(periodLastMonthDate('2026-Q1')).toBe('2026-03-01');
+    expect(periodLastMonthDate('2026')).toBe('2026-12-01');
+    expect(periodLastMonthDate('coś')).toBeNull();
+  });
+
+  it('późniejsza z dat: wzór albo koniec okresu ostatniej faktury z pozycji', () => {
+    expect(coveredThroughDate('2026-09-10', [])).toBe('2026-09-10');
+    expect(coveredThroughDate('2026-09-10', [{ recurring_period: '2026-10', issue_date: '2026-10-10' }])).toBe('2026-10-01');
+    // Faktura za październik wystawiona z opóźnieniem 02.11 pokrywa październik, nie listopad.
+    expect(coveredThroughDate('2026-09-10', [{ recurring_period: '2026-10', issue_date: '2026-11-02' }])).toBe('2026-10-01');
+    expect(coveredThroughDate(null, [{ recurring_period: '2026-Q4', issue_date: '2026-10-10' }])).toBe('2026-12-01');
+    expect(coveredThroughDate(null, [])).toBeNull();
+  });
+});
+
+describe('editedRunDate i podgląd w arkuszu — ta sama funkcja', () => {
+  const pozycja = { next_run_date: '2026-11-10', frequency: 'monthly' as const, day_of_month: 10 };
+
+  it('zmiana co miesiąc → co kwartał po fakturze za październik: pierwszy kwartał bez faktury', () => {
+    const covered = coveredThroughDate('2026-09-10', [{ recurring_period: '2026-10', issue_date: '2026-10-10' }]);
+    const wejscie = { current: pozycja, frequency: 'quarterly' as const, dayOfMonth: 10, today: '2026-10-20', coveredThrough: covered };
+    expect(editedRunDate(wejscie)).toBe('2027-01-10');
+    expect(previewNextRun({ today: '2026-10-20', frequency: 'quarterly', dayOfMonth: 10, editing: { ...pozycja, coveredThrough: covered } }))
+      .toEqual({ date: '2027-01-10', periodLabel: 'I kwartał 2027' });
+  });
+
+  it('zmiana co miesiąc → co rok po fakturze za październik: rok 2027', () => {
+    const covered = coveredThroughDate('2026-09-10', [{ recurring_period: '2026-10', issue_date: '2026-10-10' }]);
+    expect(editedRunDate({ current: pozycja, frequency: 'yearly', dayOfMonth: 10, today: '2026-10-20', coveredThrough: covered }))
+      .toBe('2027-01-10');
+  });
+
+  it('zmiana co kwartał → co miesiąc po fakturze za IV kwartał: styczeń, nie listopad', () => {
+    const covered = coveredThroughDate('2026-09-10', [{ recurring_period: '2026-Q4', issue_date: '2026-10-10' }]);
+    expect(editedRunDate({
+      current: { next_run_date: '2027-01-10', frequency: 'quarterly', day_of_month: 10 },
+      frequency: 'monthly', dayOfMonth: 10, today: '2026-10-20', coveredThrough: covered,
+    })).toBe('2027-01-10');
+  });
+
+  it('zmiana samego dnia: ten sam miesiąc, ale nie w okresie już pokrytym', () => {
+    expect(editedRunDate({ current: pozycja, frequency: 'monthly', dayOfMonth: 5, today: '2026-10-20', coveredThrough: '2026-10-01' }))
+      .toBe('2026-11-05');
+    // Pozycja sprzed poprawki wskazywała okres wzoru — zmiana dnia już go nie zostawi.
+    expect(editedRunDate({
+      current: { next_run_date: '2026-10-25', frequency: 'monthly', day_of_month: 25 },
+      frequency: 'monthly', dayOfMonth: 28, today: '2026-10-20', coveredThrough: '2026-10-15',
+    })).toBe('2026-11-28');
+  });
+
+  it('zmiana na drobniejszą częstotliwość nie gubi zaległego, niewystawionego okresu (weryfikacja K1)', () => {
+    // Co kwartał, termin 05.10 minął i faktury za IV kwartał nie ma (ostatnia za III kwartał).
+    // Przejście na co miesiąc 20.10: październik nadal „Do wystawienia”, nie dopiero listopad.
+    const covered = coveredThroughDate('2026-04-05', [{ recurring_period: '2026-Q3', issue_date: '2026-07-05' }]);
+    expect(editedRunDate({
+      current: { next_run_date: '2026-10-05', frequency: 'quarterly', day_of_month: 5 },
+      frequency: 'monthly', dayOfMonth: 5, today: '2026-10-20', coveredThrough: covered,
+    })).toBe('2026-10-05');
+    // Co rok, termin 15.01 minął (rok 2026 bez faktury): co miesiąc → styczeń zostaje.
+    expect(editedRunDate({
+      current: { next_run_date: '2026-01-15', frequency: 'yearly', day_of_month: 15 },
+      frequency: 'monthly', dayOfMonth: 15, today: '2026-01-20', coveredThrough: '2025-12-01',
+    })).toBe('2026-01-15');
+    // Termin w przyszłości: liczymy od wcześniejszej z dat, ale nie w okresie pokrytym.
+    expect(editedRunDate({
+      current: { next_run_date: '2027-01-15', frequency: 'yearly', day_of_month: 15 },
+      frequency: 'monthly', dayOfMonth: 15, today: '2026-10-20', coveredThrough: '2026-12-01',
+    })).toBe('2027-01-15');
+  });
+
+  it('bez zmian dnia i częstotliwości data zostaje', () => {
+    expect(editedRunDate({ current: pozycja, frequency: 'monthly', dayOfMonth: 10, today: '2026-10-20', coveredThrough: '2026-12-01' }))
+      .toBe('2026-11-10');
+  });
+
+  it('nowa pozycja w podglądzie: data wzoru przesuwa pierwszy termin jak akcja', () => {
+    expect(previewNextRun({ today: '2026-10-20', frequency: 'monthly', dayOfMonth: 20, templateIssueDate: '2026-10-20' }))
+      .toEqual({ date: '2026-11-20', periodLabel: 'listopad 2026' });
+    expect(previewNextRun({ today: '2026-10-20', frequency: 'quarterly', dayOfMonth: 5, templateIssueDate: '2026-10-05' }))
+      .toEqual({ date: '2027-01-05', periodLabel: 'I kwartał 2027' });
   });
 });

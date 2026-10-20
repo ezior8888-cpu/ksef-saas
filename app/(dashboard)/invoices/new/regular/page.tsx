@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import {
   prefillFromInvoiceAction,
   prefillFromLastInvoiceAction,
@@ -27,12 +29,21 @@ interface Notice {
   tone: 'info' | 'error';
   title: string;
   text: string;
+  /** Link pod tekstem — wyjście z komunikatu (protokół pkt 4). */
+  link?: { href: string; label: string };
 }
 
 /** Podkład ze wskazanej faktury albo pozycji cyklicznej (plan Finora N1). */
 interface Source {
   initialValues: PrefillFromInvoice['values'];
   recurringInvoiceId: string | null;
+  /**
+   * Okres, który pokazał baner (`recurringPeriodKey(next_run_date)` w chwili
+   * renderu). Formularz odsyła go w ukrytym polu, a zapis odmawia, gdy
+   * pozycja ma już inny okres — nieaktualna karta nie wystawi faktury za
+   * następny miesiąc pod etykietą tego, który klient widział (C3).
+   */
+  recurringPeriod: string | null;
 }
 
 /**
@@ -80,13 +91,16 @@ async function loadSource(
         notice: {
           tone: 'error',
           title: `Nie udało się wczytać faktury-wzoru dla „${pozycja.name}”`,
-          text: 'Formularz jest pusty. Spróbuj ponownie za chwilę albo wybierz inną fakturę-wzór w ustawieniach faktury cyklicznej.',
+          // Arkusz „Edytuj” nie zmienia wzoru — wyjście to nowa pozycja z innego wzoru.
+          text: 'Formularz jest pusty. Spróbuj ponownie za chwilę. Jeśli to się powtarza, usuń tę fakturę cykliczną i utwórz ją z innej faktury-wzoru.',
+          link: { href: '/invoices/recurring', label: 'Przejdź do faktur cyklicznych' },
         },
       };
     }
-    const okres = recurringPeriodLabel(recurringPeriodKey(pozycja.next_run_date, pozycja.frequency));
+    const okresKlucz = recurringPeriodKey(pozycja.next_run_date, pozycja.frequency);
+    const okres = recurringPeriodLabel(okresKlucz);
     return {
-      source: { initialValues: prefill.values, recurringInvoiceId: pozycja.id },
+      source: { initialValues: prefill.values, recurringInvoiceId: pozycja.id, recurringPeriod: okresKlucz },
       notice: {
         tone: 'info',
         title: `Faktura cykliczna „${pozycja.name}” — ${okres}`,
@@ -109,7 +123,7 @@ async function loadSource(
       };
     }
     return {
-      source: { initialValues: prefill.values, recurringInvoiceId: null },
+      source: { initialValues: prefill.values, recurringInvoiceId: null, recurringPeriod: null },
       notice: {
         tone: 'info',
         title: `Kopia faktury ${prefill.sourceNumber ?? ''}`.trim(),
@@ -142,7 +156,7 @@ async function loadSource(
  */
 export default async function NewRegularInvoicePage({
   searchParams,
-}: { searchParams?: Promise<SearchParams> } = {}) {
+}: { searchParams?: Promise<SearchParams> }) {
   const ctx = await getPageContext();
   const { supabase, tenantId } = ctx;
   const params = (await searchParams) ?? {};
@@ -161,7 +175,11 @@ export default async function NewRegularInvoicePage({
       suggestedNumber={suggestedNumber}
       seller={seller}
       {...(source
-        ? { initialValues: source.initialValues, recurringInvoiceId: source.recurringInvoiceId }
+        ? {
+            initialValues: source.initialValues,
+            recurringInvoiceId: source.recurringInvoiceId,
+            ...(source.recurringPeriod ? { recurringPeriod: source.recurringPeriod } : {}),
+          }
         : {})}
     />
   );
@@ -172,7 +190,14 @@ export default async function NewRegularInvoicePage({
     <div className="space-y-4">
       <Alert variant={notice.tone === 'error' ? 'destructive' : 'default'}>
         <AlertTitle>{notice.title}</AlertTitle>
-        <AlertDescription>{notice.text}</AlertDescription>
+        <AlertDescription>
+          <p>{notice.text}</p>
+          {notice.link ? (
+            <Link href={notice.link.href} className="font-medium">
+              {notice.link.label}
+            </Link>
+          ) : null}
+        </AlertDescription>
       </Alert>
       {form}
     </div>

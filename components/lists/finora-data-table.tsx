@@ -317,9 +317,14 @@ export function DataTablePagination<T>({ table }: { table: TanstackTable<T> }) {
                 <PaginationItem key={page}>
                   <Button
                     size='icon'
+                    // Odstępstwo od Finory (WCAG 1.4.3): tekst `accent-foreground`, nie `primary`.
+                    // `text-primary` na `bg-primary/10` ma 4,44:1 (jasny motyw, spoczynek) i 3,84:1 /
+                    // 4,13:1 pod kursorem (`primary/20`, jasny / ciemny); `accent-foreground` daje
+                    // 9,00 / 7,79:1 (jasny) i 8,93 / 7,43:1 (ciemny) — ten sam odcień błękitu,
+                    // tylko ciemniejszy (jasny) albo jaśniejszy (ciemny).
                     className={cn(
                       !isActive &&
-                        'bg-primary/10 text-primary hover:bg-primary/20 focus-visible:ring-primary/20 dark:focus-visible:ring-primary/40'
+                        'bg-primary/10 text-accent-foreground hover:bg-primary/20 focus-visible:ring-primary/20 dark:focus-visible:ring-primary/40'
                     )}
                     onClick={() => table.setPageIndex(page - 1)}
                     aria-current={isActive ? 'page' : undefined}

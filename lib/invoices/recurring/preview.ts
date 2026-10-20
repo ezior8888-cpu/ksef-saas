@@ -2,17 +2,17 @@
  * Podgląd „Następne wystawienie” w arkuszu faktury cyklicznej (plan Finora
  * N1, P6) — te same funkcje harmonogramu co akcje serwera, więc podgląd
  * zgadza się z tym, co zapisze `createRecurringInvoiceAction`
- * (`firstRunDate`) i `updateRecurringInvoiceAction` (`rescheduleRunDate`).
- * „Dziś” podaje wywołujący z serwera (Europe/Warsaw), nigdy z zegara
- * przeglądarki.
+ * (`firstRunDateAfter` od daty wzoru) i `updateRecurringInvoiceAction`
+ * (`editedRunDate` od okresu pokrytego fakturą). „Dziś” podaje wywołujący
+ * z serwera (Europe/Warsaw), nigdy z zegara przeglądarki.
  */
 import type { RecurringFrequency, RecurringInvoiceRow } from '@/types/recurring-invoice';
 
 import {
-  firstRunDate,
+  editedRunDate,
+  firstRunDateAfter,
   recurringPeriodKey,
   recurringPeriodLabel,
-  rescheduleRunDate,
   RECURRING_DAY_MAX,
   RECURRING_DAY_MIN,
 } from './schedule';
@@ -25,25 +25,27 @@ export interface NextRunPreview {
 }
 
 /**
- * Nowa pozycja: najbliższy dzień `dayOfMonth` od dziś. Edycja: bez zmiany
- * dnia i częstotliwości data zostaje, ze zmianą — ten sam miesiąc, nowy dzień.
- * `null`, gdy dzień nie jest liczbą całkowitą 1–28 (formularz pokaże błąd).
+ * Nowa pozycja: najbliższy dzień `dayOfMonth` od dziś, ale nie w okresie
+ * faktury-wzoru (`templateIssueDate` — data wystawienia wybranego wzoru).
+ * Edycja: `editedRunDate` z `editing.coveredThrough` (data z listy P6, ta
+ * sama, którą liczy akcja edycji). `null`, gdy dzień nie jest liczbą
+ * całkowitą 1–28 (formularz pokaże błąd).
  */
 export function previewNextRun(input: {
   today: string;
   frequency: RecurringFrequency;
   dayOfMonth: number;
-  editing?: Pick<RecurringInvoiceRow, 'next_run_date' | 'frequency' | 'day_of_month'> | null;
+  /** Data wystawienia wybranej faktury-wzoru (nowa pozycja). */
+  templateIssueDate?: string | null;
+  editing?:
+    | (Pick<RecurringInvoiceRow, 'next_run_date' | 'frequency' | 'day_of_month'> & { coveredThrough?: string | null })
+    | null;
 }): NextRunPreview | null {
-  const { today, frequency, dayOfMonth, editing } = input;
+  const { today, frequency, dayOfMonth, editing, templateIssueDate = null } = input;
   if (!Number.isInteger(dayOfMonth) || dayOfMonth < RECURRING_DAY_MIN || dayOfMonth > RECURRING_DAY_MAX) return null;
-  let date: string;
-  if (!editing) {
-    date = firstRunDate(today, dayOfMonth);
-  } else {
-    const changed = editing.frequency !== frequency || editing.day_of_month !== dayOfMonth;
-    date = changed ? rescheduleRunDate(editing.next_run_date, dayOfMonth) : editing.next_run_date;
-  }
+  const date = editing
+    ? editedRunDate({ current: editing, frequency, dayOfMonth, today, coveredThrough: editing.coveredThrough ?? null })
+    : firstRunDateAfter(today, templateIssueDate, frequency, dayOfMonth);
   return { date, periodLabel: recurringPeriodLabel(recurringPeriodKey(date, frequency)) };
 }
 

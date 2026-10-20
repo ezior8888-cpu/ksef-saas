@@ -15,6 +15,7 @@ import { getRlsTestEnvironment } from './helpers/rls-environment';
  *    (recurring_invoice_id, recurring_period) → 23505 na
  *    `uq_invoices_recurring_period` (tę nazwę rozpoznaje aplikacja);
  *  - CHECK-i tabeli i formatu okresu, brak praw `anon`;
+ *  - jedna pozycja na fakturę-wzór w firmie (`recurring_invoices_template_unique`);
  *  - klient nie przepina powiązania UPDATE-em (wyzwalacz), a usunięcie
  *    pozycji zeruje samo `recurring_invoice_id` i NIE rusza faktury
  *    przyjętej w KSeF (ON DELETE SET NULL (recurring_invoice_id) przechodzi
@@ -35,6 +36,9 @@ const ORG_A = '00154154-0000-4000-8000-00000000000a';
 const ORG_B = '00154154-0000-4000-8000-00000000000b';
 const TPL_A = '00154154-1111-4000-8000-00000000000a';
 const TPL_B = '00154154-1111-4000-8000-00000000000b';
+/** Dodatkowe wzory firmy A — jedna pozycja na wzór (K2), więc kilka pozycji = kilka wzorów. */
+const TPL_A2 = '00154154-1111-4000-8000-0000000000a2';
+const TPL_A3 = '00154154-1111-4000-8000-0000000000a3';
 const EMAIL_A = 'rls-cykliczne-a@ksef-saas.test';
 const EMAIL_B = 'rls-cykliczne-b@ksef-saas.test';
 const PASS = 'RlsCykliczne2026Aa!';
@@ -72,8 +76,7 @@ async function signedIn(email: string, org: string): Promise<SupabaseClient> {
 }
 
 /** Faktura-wzór przyjęta w KSeF (stan serwerowy — wstawia klucz serwisowy). */
-async function acceptedTemplate(id: string, org: string, nip: string) {
-  const number = `FV/W/${org.slice(-1)}`;
+async function acceptedTemplate(id: string, org: string, nip: string, number = `FV/W/${org.slice(-1)}`) {
   const { error } = await admin.from('invoices').insert({
     id, tenant_id: org, direction: 'outgoing', internal_number: number, invoice_type: 'VAT',
     invoice_kind: 'regular', issue_date: '2026-10-01', seller_nip: nip, buyer_nip: '1234567890',
@@ -141,6 +144,8 @@ describe.skipIf(!hasDatabase)('00154: faktury cykliczne na prawdziwej bazie', ()
     if (mErr) throw mErr;
     await acceptedTemplate(TPL_A, ORG_A, '9480000014');
     await acceptedTemplate(TPL_B, ORG_B, '9480000021');
+    await acceptedTemplate(TPL_A2, ORG_A, '9480000014', 'FV/W/a2');
+    await acceptedTemplate(TPL_A3, ORG_A, '9480000014', 'FV/W/a3');
     clientA = await signedIn(EMAIL_A, ORG_A);
     clientB = await signedIn(EMAIL_B, ORG_B);
   });
@@ -258,8 +263,11 @@ describe.skipIf(!hasDatabase)('00154: faktury cykliczne na prawdziwej bazie', ()
 
     it('odczyt pozycji do zapisu i licznik banera działają na prawdziwym PostgREST', async () => {
       const id = await newRecurring(clientA, { next_run_date: '2026-10-10' });
-      await newRecurring(clientA, { next_run_date: '2026-12-10', name: 'Późniejsza' });
-      await newRecurring(clientA, { next_run_date: '2026-09-10', active: false, name: 'Wstrzymana' });
+      // Każda pozycja z innego wzoru — jedna pozycja na wzór (K2).
+      await newRecurring(clientA, { next_run_date: '2026-12-10', name: 'Późniejsza', template_invoice_id: TPL_A2 });
+      await newRecurring(clientA, {
+        next_run_date: '2026-09-10', active: false, name: 'Wstrzymana', template_invoice_id: TPL_A3,
+      });
 
       const link = await loadRecurringIssueLink(clientA, ORG_A, id);
       expect(link).toEqual({
@@ -277,7 +285,34 @@ describe.skipIf(!hasDatabase)('00154: faktury cykliczne na prawdziwej bazie', ()
         ['Abonament', 'due'],
         ['Późniejsza', 'active'],
       ]);
-      expect(list[0]).toMatchObject({ templateNumber: 'FV/W/a', templateGrossTotal: 1230, contractorName: 'Klient testowy' });
+      // Pozycja „Abonament” ma wzór TPL_A (pozostałe — własne wzory, K2).
+      expect(list.find((p) => p.id === id)).toMatchObject({
+        templateNumber: 'FV/W/a', templateGrossTotal: 1230, contractorName: 'Klient testowy',
+        // Bez faktur z pozycji okres pokryty to data wzoru (podgląd „Edytuj”).
+        coveredThrough: '2026-10-01',
+      });
+    });
+  });
+
+  describe('jedna pozycja na fakturę-wzór (K2)', () => {
+    it('druga pozycja z tym samym wzorem → 23505 na recurring_invoices_template_unique; inny wzór przechodzi', async () => {
+      await newRecurring(clientA);
+      const second = await clientA.from('recurring_invoices').insert({
+        tenant_id: ORG_A, template_invoice_id: TPL_A, name: 'Drugi abonament', frequency: 'quarterly',
+        day_of_month: 5, next_run_date: '2026-11-05',
+      });
+      expect(second.error?.code).toBe('23505');
+      expect(second.error?.message).toContain('recurring_invoices_template_unique');
+
+      await expect(newRecurring(clientA, { template_invoice_id: TPL_A2, name: 'Inny wzór' })).resolves.toEqual(expect.any(String));
+    });
+
+    it('przepięcie pozycji UPDATE-em na wzór innej pozycji → 23505', async () => {
+      await newRecurring(clientA);
+      const other = await newRecurring(clientA, { template_invoice_id: TPL_A2, name: 'Inny wzór' });
+      const r = await clientA.from('recurring_invoices').update({ template_invoice_id: TPL_A }).eq('id', other);
+      expect(r.error?.code).toBe('23505');
+      expect(r.error?.message).toContain('recurring_invoices_template_unique');
     });
   });
 

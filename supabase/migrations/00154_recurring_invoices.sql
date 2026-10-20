@@ -7,6 +7,16 @@
 --      Pozycja tylko PRZYPOMINA i WYPEŁNIA formularz. Nic w bazie (cron, job,
 --      wyzwalacz) nie tworzy z niej faktury ani szkicu — robi to człowiek
 --      przyciskiem „Wystaw i wyślij do KSeF” (zasada N1).
+--      Jedna pozycja na fakturę-wzór w firmie: UNIQUE
+--      `recurring_invoices_template_unique` (tenant_id, template_invoice_id).
+--      Dwie pozycje z tego samego wzoru to dwie faktury za ten sam miesiąc
+--      dla tego samego nabywcy, a indeks okresu jest per pozycja i tego nie
+--      złapie. Aplikacja sprawdza to przed zapisem (komunikat z nazwą
+--      istniejącej pozycji) i rozpoznaje tę nazwę przy 23505 (wyścig dwóch
+--      arkuszy) — app/actions/recurring-invoices.ts. Ten sam indeks obsługuje
+--      klucz obcy wzoru (kaskada przy usunięciu faktury), więc osobnego
+--      indeksu na (tenant_id, template_invoice_id) nie ma. Tabela jest nowa
+--      i pusta, więc UNIQUE nie ma czego naruszyć.
 --   2. W `invoices` dwie kolumny NULL: `recurring_invoice_id` (klucz złożony
 --      (tenant_id, recurring_invoice_id) → recurring_invoices (tenant_id, id))
 --      i `recurring_period` (okres, za który wystawiamy: '2026-11', '2026-Q4',
@@ -72,6 +82,9 @@ CREATE TABLE public.recurring_invoices (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT recurring_invoices_tenant_id_id_key UNIQUE (tenant_id, id),
+  -- Jedna pozycja na fakturę-wzór w firmie (nagłówek, pkt 1). Obsługuje też
+  -- klucz obcy wzoru poniżej.
+  CONSTRAINT recurring_invoices_template_unique UNIQUE (tenant_id, template_invoice_id),
   -- Wzór tylko z tej samej firmy: jednokolumnowy klucz dowodzi istnienia
   -- faktury, nie jej właściciela (00121). (tenant_id, id) w invoices daje
   -- unikalny indeks z 00073.
@@ -85,9 +98,8 @@ COMMENT ON TABLE public.recurring_invoices IS
 
 CREATE INDEX idx_recurring_invoices_due
   ON public.recurring_invoices (tenant_id, active, next_run_date);
--- Indeks pod klucz obcy wzoru (kaskada przy usunięciu faktury).
-CREATE INDEX idx_recurring_invoices_template
-  ON public.recurring_invoices (tenant_id, template_invoice_id);
+-- Indeks pod klucz obcy wzoru (kaskada przy usunięciu faktury) daje
+-- `recurring_invoices_template_unique` — osobnego nie zakładamy.
 
 CREATE TRIGGER trg_recurring_invoices_updated_at
   BEFORE UPDATE ON public.recurring_invoices

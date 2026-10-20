@@ -30,6 +30,7 @@ const state = {
   invoice_line_items: [] as Row[],
   recurring_invoices: [] as Row[],
   tenants: [] as Row[],
+  ksef_submissions: [] as Row[],
   /** Każdy INSERT do `invoices` (także odrzucony) — dowód „zero zmian” dla zwykłej faktury. */
   invoiceInserts: [] as Row[],
   tablesTouched: [] as string[],
@@ -67,7 +68,9 @@ function unique(row: Row): { code: string; message: string; details: string } | 
   return null;
 }
 
-function table(name: keyof Pick<typeof state, 'invoices' | 'invoice_line_items' | 'recurring_invoices' | 'tenants'>) {
+function table(
+  name: keyof Pick<typeof state, 'invoices' | 'invoice_line_items' | 'recurring_invoices' | 'tenants' | 'ksef_submissions'>,
+) {
   return state[name];
 }
 
@@ -111,9 +114,11 @@ function fakeSupabase() {
           return { data: hit.map((r) => ({ id: r.id })), error: null };
         }
         if (op === 'delete') {
+          const hit = rows().filter(matches);
           const keep = rows().filter((r) => !matches(r));
           rows().splice(0, rows().length, ...keep);
-          return { data: null, error: null };
+          // DELETE … RETURNING (`.select(...)` po `.delete()`), jak PostgREST.
+          return { data: hit.map((r) => ({ ...r })), error: null };
         }
         return { data: rows().filter(matches), error: null };
       };
@@ -156,13 +161,17 @@ function fakeSupabase() {
   };
 }
 
-vi.mock('@/lib/supabase/auth-context', () => ({ requireUserAndActiveOrg: mocks.auth }));
+vi.mock('@/lib/supabase/auth-context', () => ({
+  requireUserAndActiveOrg: mocks.auth,
+  ActionAuthError: class ActionAuthError extends Error {},
+}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.audit }));
 vi.mock('@/lib/invoices/ksef-submit-enqueue', () => ({ enqueueKsefSubmitAfterDraft: mocks.enqueue }));
 vi.mock('@/lib/gus/client', () => ({ lookupCompanyByNip: mocks.gus }));
 
 import { saveAndSendInvoiceAction, saveDraftAction } from '@/components/invoices/actions';
+import { deleteDraftInvoiceAction } from '@/components/invoices/draft-actions';
 import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
 
 // 20.10.2026 10:00 w Polsce.
@@ -179,7 +188,9 @@ const form = (internalNumber: string, extra: Partial<InvoiceFormValues> = {}): I
   ...extra,
 });
 
-const cykliczna = (internalNumber: string) => form(internalNumber, { recurringInvoiceId: RECURRING });
+/** Formularz z „Wystaw teraz”: pozycja i okres, który strona pokazała w banerze (C3). */
+const cykliczna = (internalNumber: string, recurringPeriod = '2026-11') =>
+  form(internalNumber, { recurringInvoiceId: RECURRING, recurringPeriod });
 
 function pozycja(): Row {
   return state.recurring_invoices[0]!;
@@ -199,6 +210,7 @@ beforeEach(() => {
   state.tablesTouched = [];
   state.failRecurringUpdate = false;
   state.failLines = false;
+  state.ksef_submissions = [];
   state.tenants = [{
     id: TENANT, nip: '5260001246', name: 'Moja Firma',
     address_json: { countryCode: 'PL', addressLine1: 'ul. A 1', addressLine2: '00-001 Warszawa' },
@@ -264,7 +276,9 @@ describe('faktura z pozycji cyklicznej — jedna faktura na okres (N1)', () => {
     await expect(saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'))).resolves.toMatchObject({ success: true });
     const ponowienie = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'));
 
-    expect(ponowienie.success).toBe(false);
+    // Komunikat o okresie (z okresu formularza), nie o numerze — klient nie
+    // dostaje rady „wybierz inny numer”, która prowadzi do drugiej faktury (C3).
+    expect(ponowienie).toEqual({ success: false, error: 'Faktura za ten okres jest już wystawiona: FV/1/11/2026' });
     expect(state.invoices).toHaveLength(1);
     expect(fakturyOkresu('2026-11')).toHaveLength(1);
     // Okres listopadowy wystawiony; pozycja czeka na grudzień i nie przeskakuje dalej.
@@ -325,18 +339,153 @@ describe('faktura z pozycji cyklicznej — jedna faktura na okres (N1)', () => {
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
-  it('szkic z pozycji cyklicznej też zajmuje okres; drugi zapis dostaje komunikat z numerem szkicu', async () => {
-    await expect(saveDraftAction(cykliczna('FV/1/11/2026'))).resolves.toMatchObject({ success: true });
-    expect(fakturyOkresu('2026-11')).toHaveLength(1);
+  it('druga karta z tym samym okresem i INNYM numerem → komunikat o okresie, jedna faktura, data przesunięta raz (C3)', async () => {
+    // Dwie karty otwarte na „listopad 2026”; karta A wystawia.
+    await expect(saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'))).resolves.toMatchObject({ success: true });
     expect(pozycja().next_run_date).toBe('2026-12-10');
 
-    pozycja().next_run_date = '2026-11-10';
-    const r = await saveAndSendInvoiceAction(cykliczna('FV/2/11/2026'));
+    // Karta B: numer zmieniony (np. po komunikacie o zajętym numerze), okres z formularza nadal listopad.
+    const b = await saveAndSendInvoiceAction(cykliczna('FV/2/11/2026'));
+
+    expect(b).toEqual({ success: false, error: 'Faktura za ten okres jest już wystawiona: FV/1/11/2026' });
+    expect(state.invoices).toHaveLength(1);
+    expect(fakturyOkresu('2026-12')).toHaveLength(0);
+    expect(pozycja().next_run_date).toBe('2026-12-10');
+    expect(mocks.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('pozycja zmieniona od otwarcia formularza (inny okres, bez faktury za okres z formularza) → odmowa bez zapisu', async () => {
+    // Formularz otwarty na listopad; w międzyczasie ktoś przestawił pozycję na grudzień.
+    pozycja().next_run_date = '2026-12-10';
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'));
     expect(r).toEqual({
       success: false,
-      error: 'Faktura za ten okres jest już wystawiona: FV/1/11/2026',
+      error: 'Faktura cykliczna zmieniła się od otwarcia formularza — otwórz „Wystaw teraz” ponownie.',
     });
-    expect(state.invoices).toHaveLength(1);
+    expect(state.invoiceInserts).toEqual([]);
+    expect(pozycja().next_run_date).toBe('2026-12-10');
+  });
+
+  it('formularz bez okresu (stara karta sprzed wdrożenia) → odmowa walidacji, bez zapisu', async () => {
+    const r = await saveAndSendInvoiceAction(form('FV/1/11/2026', { recurringInvoiceId: RECURRING }));
+    expect(r).toEqual({
+      success: false,
+      error: 'Brakuje okresu faktury cyklicznej — otwórz „Wystaw teraz” ponownie.',
+    });
+    expect(state.invoiceInserts).toEqual([]);
+  });
+
+  it('wpis audytu: pozycja, okres i przesunięcie next_run_date (K3)', async () => {
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'));
+    expect(r.success).toBe(true);
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'recurring_invoice.issued',
+      tenantId: TENANT,
+      userId: 'user-1',
+      entityType: 'recurring_invoice',
+      entityId: RECURRING,
+      metadata: expect.objectContaining({
+        invoiceId: r.success ? r.invoiceId : null,
+        internalNumber: 'FV/1/11/2026',
+        recurringPeriod: '2026-11',
+        fromNextRunDate: '2026-11-10',
+        toNextRunDate: '2026-12-10',
+        nextRunDateAdvanced: true,
+      }),
+    }));
+  });
+
+  it('samonaprawa po 23505 zapisuje przesunięcie w audycie (K3)', async () => {
+    state.failRecurringUpdate = true;
+    await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'));
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'recurring_invoice.issued',
+      metadata: expect.objectContaining({ nextRunDateAdvanced: false }),
+    }));
+    state.failRecurringUpdate = false;
+    mocks.audit.mockClear();
+
+    await saveAndSendInvoiceAction(cykliczna('FV/2/11/2026'));
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'recurring_invoice.run_date_repaired',
+      entityType: 'recurring_invoice',
+      entityId: RECURRING,
+      metadata: expect.objectContaining({
+        recurringPeriod: '2026-11',
+        existingInternalNumber: 'FV/1/11/2026',
+        fromNextRunDate: '2026-11-10',
+        toNextRunDate: '2026-12-10',
+      }),
+    }));
+  });
+});
+
+describe('szkic a pozycja cykliczna (C2, C4, C7)', () => {
+  it('„Zapisz szkic” z pozycji cyklicznej → odmowa bez zapisu; okres i data bez zmian', async () => {
+    const r = await saveDraftAction(cykliczna('FV/1/11/2026'));
+    expect(r).toEqual({
+      success: false,
+      error: 'Fakturę cykliczną wystaw przyciskiem „Wystaw i wyślij do KSeF”.',
+    });
+    expect(state.invoiceInserts).toEqual([]);
+    expect(pozycja().next_run_date).toBe('2026-11-10');
+  });
+
+  it('kolejka KSeF odmówiła → szkic trzyma okres; komunikat mówi, co zrobić', async () => {
+    mocks.enqueue.mockResolvedValue({ ok: false, error: 'Najpierw wgraj certyfikat KSeF w Ustawieniach.' });
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'));
+    expect(r).toMatchObject({ success: false, invoiceId: expect.any(String) });
+    expect(!r.success && r.error).toContain('Najpierw wgraj certyfikat KSeF w Ustawieniach.');
+    expect(!r.success && r.error).toContain('wyślij go do KSeF dziś albo usuń');
+    expect(fakturyOkresu('2026-11')).toHaveLength(1);
+    expect(pozycja().next_run_date).toBe('2026-12-10');
+  });
+
+  it('usunięcie szkicu powiązanego z okresem przywraca next_run_date; okres znów do wystawienia', async () => {
+    mocks.enqueue.mockResolvedValue({ ok: false, error: 'Najpierw wgraj certyfikat KSeF w Ustawieniach.' });
+    const zapis = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'));
+    const szkicId = String(!zapis.success && zapis.invoiceId);
+    expect(pozycja().next_run_date).toBe('2026-12-10');
+
+    await expect(deleteDraftInvoiceAction(szkicId)).resolves.toEqual({ success: true });
+
+    expect(state.invoices).toHaveLength(0);
+    expect(pozycja().next_run_date).toBe('2026-11-10');
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'recurring_invoice.run_date_restored',
+      entityType: 'recurring_invoice',
+      entityId: RECURRING,
+      metadata: expect.objectContaining({ recurringPeriod: '2026-11', fromNextRunDate: '2026-12-10', toNextRunDate: '2026-11-10' }),
+    }));
+
+    // Ponowne „Wystaw teraz” wystawia TEN SAM okres.
+    mocks.enqueue.mockResolvedValue({ ok: true, mode: 'online_queued' });
+    await expect(saveAndSendInvoiceAction(cykliczna('FV/2/11/2026'))).resolves.toMatchObject({ success: true });
+    expect(fakturyOkresu('2026-11')).toHaveLength(1);
+    expect(pozycja().next_run_date).toBe('2026-12-10');
+  });
+
+  it('usunięcie szkicu, gdy pozycja zmieniła się od zapisu (inny okres) → data bez zmian', async () => {
+    mocks.enqueue.mockResolvedValue({ ok: false, error: 'Najpierw wgraj certyfikat KSeF w Ustawieniach.' });
+    const zapis = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'));
+    const szkicId = String(!zapis.success && zapis.invoiceId);
+    // Ktoś zmienił pozycję (np. częstotliwość) — cofnięcie nie trafiłoby w okres szkicu.
+    pozycja().next_run_date = '2027-01-10';
+    pozycja().frequency = 'quarterly';
+
+    await expect(deleteDraftInvoiceAction(szkicId)).resolves.toEqual({ success: true });
+    expect(pozycja().next_run_date).toBe('2027-01-10');
+    expect(mocks.audit).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'recurring_invoice.run_date_restored' }));
+  });
+
+  it('usunięcie zwykłego szkicu nie dotyka pozycji cyklicznych', async () => {
+    await expect(saveDraftAction(form('FV/1/10/2026'))).resolves.toMatchObject({ success: true });
+    const szkicId = String(state.invoices[0]!.id);
+    state.tablesTouched = [];
+    await expect(deleteDraftInvoiceAction(szkicId)).resolves.toEqual({ success: true });
+    expect(state.invoices).toHaveLength(0);
+    expect(state.tablesTouched).not.toContain('recurring_invoices');
+    expect(pozycja().next_run_date).toBe('2026-11-10');
   });
 });
 
@@ -357,7 +506,8 @@ describe('pozycja wstrzymana, usunięta albo z innej firmy — odmowa przed zapi
     ['z innej firmy', () => { pozycja().tenant_id = 'ten-2'; }],
   ])('%s', async (_opis, ustaw) => {
     ustaw();
-    const r = await saveDraftAction(cykliczna('FV/1/11/2026'));
+    // „Wystaw i wyślij” (szkic z pozycji jest odrzucany wcześniej, C2).
+    const r = await saveAndSendInvoiceAction(cykliczna('FV/1/11/2026'));
     expect(r).toEqual({
       success: false,
       error: 'Nie znaleziono tej faktury cyklicznej — mogła zostać usunięta. Wystaw zwykłą fakturę.',

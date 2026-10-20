@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ColumnDef, ColumnFiltersState, PaginationState } from '@tanstack/react-table';
+import type { ColumnDef, ColumnFiltersState, OnChangeFn, PaginationState } from '@tanstack/react-table';
 import {
   getCoreRowModel,
   getFacetedRowModel,
@@ -55,7 +55,9 @@ function ContractorCell({ item }: { item: RecurringInvoiceListItem }) {
           {companyInitials(item.contractorName)}
         </AvatarFallback>
       </Avatar>
-      <span className='truncate font-medium' title={item.contractorName ?? undefined}>
+      {/* `max-w-*` obok `truncate`: w tabeli o układzie automatycznym sam `truncate` niczego nie ucina
+          (komórka rośnie do pełnej długości tekstu). Wzór: contractors-table.tsx. */}
+      <span className='max-w-56 truncate font-medium' title={item.contractorName ?? undefined}>
         {item.contractorName ? shortenLegalForm(item.contractorName) : '—'}
       </span>
     </div>
@@ -84,10 +86,10 @@ export function recurringColumns(onEdit: (item: RecurringInvoiceListItem) => voi
       accessorFn: (row) => row.name,
       cell: ({ row }) => (
         <div className='flex min-w-0 flex-col'>
-          <span className='truncate font-medium' title={row.original.name}>
+          <span className='max-w-56 truncate font-medium' title={row.original.name}>
             {row.original.name}
           </span>
-          <span className='text-muted-foreground truncate font-mono text-xs'>
+          <span className='text-muted-foreground max-w-56 truncate font-mono text-xs'>
             {row.original.templateNumber ?? '(bez numeru)'}
           </span>
         </div>
@@ -196,6 +198,19 @@ export function RecurringInvoicesView({
     if (!open && openSheetOnLoad) router.replace('/invoices/recurring');
   };
 
+  // Po `router.refresh()` (wstrzymaj / wznów / usuń / edytuj) serwer przysyła nową tablicę `items`.
+  // Domyślnie tanstack zeruje wtedy stronę (`autoResetPageIndex`), więc klient wracał na stronę 1.
+  // Wyłączamy to i zerujemy ręcznie tylko tam, gdzie zmienia się zestaw wierszy z woli klienta.
+  const resetPage = () => setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }));
+  const changeSearch: OnChangeFn<string> = (value) => {
+    setGlobalFilter(value);
+    resetPage();
+  };
+  const changeColumnFilters: OnChangeFn<ColumnFiltersState> = (updater) => {
+    setColumnFilters(updater);
+    resetPage();
+  };
+
   const columns = useMemo(
     () =>
       recurringColumns((item) => {
@@ -211,8 +226,9 @@ export function RecurringInvoicesView({
     columns,
     getRowId: (row) => row.id,
     state: { columnFilters, globalFilter, pagination },
-    onColumnFiltersChange: setColumnFilters,
-    onGlobalFilterChange: setGlobalFilter,
+    autoResetPageIndex: false,
+    onColumnFiltersChange: changeColumnFilters,
+    onGlobalFilterChange: changeSearch,
     globalFilterFn: (row, _columnId, filterValue) => {
       const search = String(filterValue).toLowerCase();
       return (
@@ -230,6 +246,12 @@ export function RecurringInvoicesView({
     getPaginationRowModel: getPaginationRowModel(),
     onPaginationChange: setPagination,
   });
+
+  // Usunięcie jedynej pozycji ostatniej strony: przytnij indeks do ostatniej istniejącej strony,
+  // zamiast pokazywać pustą tabelę. Ustawienie stanu w trakcie renderu, pod warunkiem (wzorzec
+  // „dostosuj stan do zmiany danych” z dokumentacji Reacta), więc bez migotania pustej strony.
+  const lastPageIndex = Math.max(0, table.getPageCount() - 1);
+  if (pagination.pageIndex > lastPageIndex) setPagination((p) => ({ ...p, pageIndex: lastPageIndex }));
 
   return (
     <div className='space-y-6'>
@@ -271,7 +293,7 @@ export function RecurringInvoicesView({
                 <div className='flex flex-1 flex-wrap items-center gap-4 lg:justify-end'>
                   <TableSearch
                     value={globalFilter}
-                    onChange={setGlobalFilter}
+                    onChange={changeSearch}
                     placeholder='Szukaj po nazwie lub kontrahencie'
                     className='max-w-2xs sm:max-w-2xs'
                   />

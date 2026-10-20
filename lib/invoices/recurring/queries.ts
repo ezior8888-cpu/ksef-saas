@@ -16,7 +16,7 @@ import type { Database, Json } from '@/types/database';
 import type { RecurringInvoiceRow, RecurringStatus } from '@/types/recurring-invoice';
 
 import { recurringDb } from './db';
-import { recurringPeriodKey, statusOf } from './schedule';
+import { coveredThroughDate, recurringPeriodKey, statusOf, type IssuedPeriod } from './schedule';
 import { TEMPLATE_FILTERS } from './template';
 
 type AnyClient = SupabaseClient<Database> | SupabaseClient;
@@ -38,6 +38,13 @@ export interface RecurringInvoiceListItem extends RecurringInvoiceRow {
   templateNumber: string | null;
   /** „Kwota brutto wzoru” w PLN (wzór jest zawsze w PLN). */
   templateGrossTotal: number | null;
+  /**
+   * Do kiedy okresy są pokryte fakturą (`coveredThroughDate`: wzór albo
+   * faktury z tej pozycji) — podgląd terminu po zmianie częstotliwości
+   * w arkuszu „Edytuj” liczy z tej samej daty co akcja edycji. Brak (błąd
+   * odczytu faktur) — podgląd liczy od dziś, akcja i tak czyta sama.
+   */
+  coveredThrough?: string | null;
 }
 
 /** Faktura, którą można wskazać jako wzór („+ Nowa faktura cykliczna”). */
@@ -97,21 +104,27 @@ export async function listRecurringInvoices(
   }
 
   const templateIds = [...new Set(rows.map((r) => r.template_invoice_id))];
-  const templates = new Map<string, { internal_number: string | null; gross_total: number | null; buyer_data: Json | null }>();
+  const templates = new Map<
+    string,
+    { internal_number: string | null; gross_total: number | null; buyer_data: Json | null; issue_date: string | null }
+  >();
   for (let i = 0; i < templateIds.length; i += IN_CHUNK) {
     const { data, error } = await db
       .from('invoices')
-      .select('id, internal_number, gross_total, buyer_data')
+      .select('id, internal_number, gross_total, buyer_data, issue_date')
       .eq('tenant_id', tenantId)
       .in('id', templateIds.slice(i, i + IN_CHUNK));
     if (error) throw new Error('Nie udało się wczytać faktur-wzorów. Odśwież stronę za chwilę.');
     for (const t of data ?? []) templates.set(t.id, t);
   }
 
+  const issued = await readIssuedPeriods(db, tenantId, rows.map((r) => r.id));
+
   return rows
     .map(toRow)
     .map((row) => {
       const t = templates.get(row.template_invoice_id);
+      const ownIssued = issued?.get(row.id) ?? [];
       return {
         ...row,
         status: statusOf(row, today),
@@ -119,9 +132,67 @@ export async function listRecurringInvoices(
         contractorName: t ? buyerName(t.buyer_data) : null,
         templateNumber: t?.internal_number ?? null,
         templateGrossTotal: t?.gross_total == null ? null : Number(t.gross_total),
+        ...(issued ? { coveredThrough: coveredThroughDate(t?.issue_date ?? null, ownIssued) } : {}),
       };
     })
     .sort((a, b) => a.next_run_date.localeCompare(b.next_run_date) || a.name.localeCompare(b.name, 'pl'));
+}
+
+type IssuedRow = IssuedPeriod & { id: string; recurring_invoice_id: string | null };
+
+/**
+ * Okresy i daty faktur wystawionych z pozycji (pełne strony po `id`).
+ * `null`, gdy odczyt się nie udał — lista działa dalej, a podgląd terminu
+ * w „Edytuj” liczy wtedy od dziś (akcja edycji czyta faktury sama).
+ */
+async function readIssuedPeriods(
+  db: ReturnType<typeof recurringDb>,
+  tenantId: string,
+  recurringIds: string[],
+): Promise<Map<string, IssuedPeriod[]> | null> {
+  const byItem = new Map<string, IssuedPeriod[]>();
+  try {
+    for (let i = 0; i < recurringIds.length; i += IN_CHUNK) {
+      const chunk = recurringIds.slice(i, i + IN_CHUNK);
+      const rows = await readCompletePages<IssuedRow>('Faktury z pozycji cyklicznych', (from, to) =>
+        db
+          .from('invoices')
+          .select('id, recurring_invoice_id, recurring_period, issue_date', { count: 'exact' })
+          .eq('tenant_id', tenantId)
+          .in('recurring_invoice_id', chunk)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+      for (const r of rows) {
+        if (!r.recurring_invoice_id) continue;
+        const list = byItem.get(r.recurring_invoice_id) ?? [];
+        list.push({ recurring_period: r.recurring_period, issue_date: r.issue_date });
+        byItem.set(r.recurring_invoice_id, list);
+      }
+    }
+  } catch {
+    return null;
+  }
+  return byItem;
+}
+
+/** Okres pokryty fakturą dla jednej pozycji — wzór i faktury z pozycji (akcja edycji). */
+export async function readCoveredThrough(
+  supabase: AnyClient,
+  tenantId: string,
+  item: Pick<RecurringInvoiceRow, 'id' | 'template_invoice_id'>,
+): Promise<{ ok: true; coveredThrough: string | null } | { ok: false }> {
+  const db = recurringDb(supabase);
+  const [template, issued] = await Promise.all([
+    db.from('invoices').select('issue_date').eq('id', item.template_invoice_id).eq('tenant_id', tenantId).maybeSingle(),
+    db
+      .from('invoices')
+      .select('recurring_period, issue_date')
+      .eq('tenant_id', tenantId)
+      .eq('recurring_invoice_id', item.id),
+  ]);
+  if (template.error || issued.error) return { ok: false };
+  return { ok: true, coveredThrough: coveredThroughDate(template.data?.issue_date ?? null, issued.data ?? []) };
 }
 
 /**

@@ -126,6 +126,14 @@ describe('arkusz „Nowa faktura cykliczna”', () => {
     expect(text()).toContain('Faktura za listopad 2026');
   });
 
+  it('wzór wystawiony dziś: podgląd jak zapis — pierwszy termin za miesiąc, nie okres wzoru (C5, C6)', () => {
+    renderSheet({ initialTemplate: { ...CANDIDATE, issueDate: '2026-10-20' } });
+    expect(input('recurring-invoice-form-day')?.value).toBe('20');
+    // Bez daty wzoru w podglądzie byłoby 20.10.2026 — październik, który pokrywa już wzór.
+    expect(input('recurring-invoice-form-next')?.value).toBe('20.11.2026');
+    expect(text()).toContain('Faktura za listopad 2026');
+  });
+
   it('brak faktur do wyboru: wyjaśnienie warunków wzoru zamiast pustej listy', () => {
     renderSheet({ candidates: [] });
     expect(text()).toContain(NO_TEMPLATES_TEXT);
