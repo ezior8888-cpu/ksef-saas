@@ -23,6 +23,8 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
 export interface CostEntry {
   id: string;
   issueDate: string;
+  /** Źródło wydatku (`ksef_inbox` = faktura ze skrzynki KSeF) — P9 liczy z niego koszty skrzynki. */
+  source: string;
   sellerNip: string | null;
   sellerName: string | null;
   /** Koszt jak w KPiR: `kpirCostAmount` (netto + VAT bez prawa do odliczenia). */
@@ -126,6 +128,7 @@ export async function getCosts(
   return visible.map((row) => ({
     id: row.id,
     issueDate: row.issue_date,
+    source: String(row.source),
     sellerNip: typeof row.seller_nip === 'string' && row.seller_nip.trim()
       ? row.seller_nip.trim()
       : null,

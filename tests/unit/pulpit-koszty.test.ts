@@ -124,6 +124,7 @@ describe('getCosts — jedna droga kosztów Pulpitu', () => {
     expect(entry).toEqual<CostEntry>({
       id: 'e-1',
       issueDate: '2026-09-10',
+      source: 'manual',
       sellerNip: '1234567890',
       sellerName: 'Dostawca Sp. z o.o.',
       cost: 123,
@@ -273,7 +274,7 @@ describe('getCosts — jedna droga kosztów Pulpitu', () => {
 
 describe('sumCostsByMonth', () => {
   const entry = (issueDate: string, cost: number): CostEntry => ({
-    id: issueDate, issueDate, sellerNip: null, sellerName: null, cost, outflow: cost, vatDeductible: 0,
+    id: issueDate, issueDate, source: 'manual', sellerNip: null, sellerName: null, cost, outflow: cost, vatDeductible: 0,
     categoryLabel: null, vat: 0, documentNumber: null, isReviewed: true,
   });
 
