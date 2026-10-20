@@ -86,6 +86,11 @@ const nextConfig: NextConfig = {
   },
 
   experimental: {
+    // Build na app-1 (20.10.2026): po ekranach Finory `next build --webpack`
+    // przekroczył pułap sterty 3072 MB (exit 134). Mniejsze zużycie pamięci
+    // webpacka kosztem kilku sekund builda; razem z pułapem 3584 MB
+    // w Dockerfile (tests/unit/build-pamiec-sterty.test.ts).
+    webpackMemoryOptimizations: true,
     // Plan Finora: prymitywy Base UI, ikony Remix, wykresy recharts (E1), paleta ⌘K cmdk (E2).
     optimizePackageImports: ['lucide-react', '@base-ui/react', '@remixicon/react', 'recharts', 'cmdk'],
   },
