@@ -74,6 +74,7 @@ import { OnboardingForm } from '@/components/onboarding/form';
 import { ImportProgressView, type ImportJobRow } from '@/components/onboarding/import-progress-view';
 import { ImportSourceSelector } from '@/components/onboarding/import-source-selector';
 import { MagicImportForm } from '@/components/onboarding/magic-import-form';
+import { tekstBezZnacznikow } from './helpers/tekst-html';
 
 const ROOT = join(__dirname, '..', '..');
 const css = readFileSync(join(ROOT, 'app/globals.css'), 'utf8');
@@ -102,7 +103,7 @@ async function forgot(params: Record<string, string> = {}) {
 function buttonsNamed(html: string, name: string): number {
   // Tekst przycisku bez znaczników (ikona, spany) — tak liczy nazwę Playwright.
   return [...html.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)]
-    .map((m) => m[1].replace(/<[^>]+>/g, '').trim())
+    .map((m) => tekstBezZnacznikow(m[1]).trim())
     .filter((text) => text === name).length;
 }
 
@@ -129,7 +130,8 @@ describe('układ logowania (AuthSplitLayout)', () => {
     expect(html).toContain('Tytuł panelu');
     expect(html).toContain('Tekst panelu');
     expect(AUTH_SLOGAN_TITLE).toBe('Faktury w KSeF bez stresu.');
-    expect(AUTH_SLOGAN_TEXT).toBe('FLO pilnuje terminów, płatności i VAT‑u za Ciebie.');
+    // Bez obietnicy FLO, którego klient nie ma (agent niewdrożony).
+    expect(AUTH_SLOGAN_TEXT).toBe('Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy potwierdzenia.');
     expect(html.split(AUTH_SLOGAN_TITLE).length - 1).toBe(2); // telefon + karta
     // Jak w Finorze: prawa połowa zawsze czarna, tekst jasny na czarnym
     // (w obu motywach), karta z wycięciem biała z czarnym tekstem.

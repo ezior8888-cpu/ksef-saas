@@ -20,6 +20,7 @@ import { signedAmount } from '@/components/przeplywy/finora/operation-amount';
 import type { CashFlowChartData, CashFlowOperation, FlowBucket, MonthFlow } from '@/lib/dashboard/cash-movements';
 import { formatPlMoney } from '@/lib/format/pl';
 import { PAID_EMPTY_STATE } from '@/lib/invoices/paid-labels';
+import { tekstBezZnacznikow } from './helpers/tekst-html';
 
 /**
  * Karty `/przeplywy` (plan Finora P2, etap E5) — każda w stanie z danymi
@@ -303,7 +304,7 @@ describe('TransactionDatatable (Wszystkie operacje)', () => {
     expect(out).toContain('Wszystkie operacje');
     expect(out).toContain('Ostatnie 12 miesięcy');
     for (const header of ['Kontrahent', 'Kategoria', 'Kwota', 'Status', 'Akcje']) expect(out).toContain(header);
-    expect(out.replace(/<[^>]+>/g, '')).toContain('Pozycje 1–5 z 8');
+    expect(tekstBezZnacznikow(out)).toContain('Pozycje 1–5 z 8');
     expect(out).toContain('Poprzednia');
     expect(out).toContain('Następna');
     expect(out).toContain('Opłacona');
