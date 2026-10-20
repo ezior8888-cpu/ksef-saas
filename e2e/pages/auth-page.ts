@@ -16,8 +16,10 @@ export class AuthPage {
     this.emailInput = page.locator('#email');
     this.passwordInput = page.locator('#password');
     this.submitButton = page.locator('button[type="submit"]');
-    this.errorBanner = page.locator('[role="alert"], div[class*="border-red"]').first();
-    this.successBanner = page.locator('div[class*="border-green"]').first();
+    // Komunikaty to `Alert` Finory (`AuthMessage`): błąd `role=alert`,
+    // potwierdzenie `role=status` (plan Finora P15, E10b).
+    this.errorBanner = page.locator('[data-slot="alert"][data-tone="error"], [role="alert"]').first();
+    this.successBanner = page.locator('[data-slot="alert"][data-tone="success"]').first();
   }
 
   async gotoLogin(): Promise<void> {

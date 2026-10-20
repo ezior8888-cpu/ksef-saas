@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 
+import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout';
 import { MagicImportForm } from '@/components/onboarding/magic-import-form';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
@@ -30,13 +31,13 @@ export default async function MagicImportPage({
     .maybeSingle();
   if (!membership) redirect('/onboarding');
 
+  // Plan Finora P15 (E10b): układ logowania Finory zamiast szkła.
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        <div className="rounded-3xl border border-glass-border bg-glass-white-strong backdrop-blur-glass-lg shadow-glass-lg p-8 lg:p-12">
-          <MagicImportForm tenantId={tenantId} />
-        </div>
-      </div>
-    </div>
+    <AuthSplitLayout
+      panelTitle="Magiczny import z KSeF"
+      panelText="Pobieramy faktury z wybranego okresu i budujemy z nich katalog kontrahentów i produktów."
+    >
+      <MagicImportForm tenantId={tenantId} />
+    </AuthSplitLayout>
   );
 }
