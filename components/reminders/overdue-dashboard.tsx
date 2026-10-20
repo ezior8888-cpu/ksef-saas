@@ -47,7 +47,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { buttonVariants, Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { RECEIVABLES_NOTE } from '@/lib/dashboard/receivables';
+import { RECEIVABLES_NOTE } from '@/lib/dashboard/receivables-note';
 import { formatIsoDatePl, formatTimestampDatePl } from '@/lib/format/iso-date';
 import { companyInitials, shortenLegalForm } from '@/lib/format/legal-form';
 import { formatPlInt, formatPlMoney } from '@/lib/format/pl';

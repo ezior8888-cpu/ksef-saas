@@ -31,8 +31,7 @@ import type { KsefEnvironment } from '@/types/ksef';
  * stara, opłacona faktura bez środowiska nie blokuje karty.
  */
 
-/** Podpis każdej karty z tą sumą (jak `/payments/overdue`). */
-export const RECEIVABLES_NOTE = 'Bez importów i faktur skorygowanych';
+export { RECEIVABLES_NOTE } from '@/lib/dashboard/receivables-note';
 
 const ENVIRONMENT_ERROR = 'Przyjęte faktury wymagają uzgodnienia środowiska KSeF';
 const KNOWN_ENVIRONMENTS: ReadonlySet<string> = new Set(['test', 'demo', 'production']);

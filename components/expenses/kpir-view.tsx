@@ -49,10 +49,10 @@ import {
   kpirTotals,
   type KpirExpenseRow,
   type KpirInvoiceRow,
-} from '@/lib/reports/kpir-data';
+} from '@/lib/reports/kpir-totals';
 import { cn } from '@/lib/utils';
 
-export type { KpirExpenseRow, KpirInvoiceRow } from '@/lib/reports/kpir-data';
+export type { KpirExpenseRow, KpirInvoiceRow } from '@/lib/reports/kpir-totals';
 
 const MONTHS = [
   'Styczeń',
