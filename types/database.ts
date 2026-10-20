@@ -1,6 +1,6 @@
-// Wygenerowane 19.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
-// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00153
-// (m.in. 00150 dziennik prób wysyłki, 00151/00152 marka FaktWay, 00153 data rozpoczęcia działalności). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
+// Wygenerowane 20.10.2026 z produkcyjnego schematu (postgres-meta na db-1,
+// schematy graphql_public i public; PostgREST v14.6) po migracjach do 00154
+// (m.in. 00153 data rozpoczęcia działalności, 00154 faktury cykliczne). Nie edytuj ręcznie: przy nowej migracji wygeneruj ponownie.
 export type Json =
   | string
   | number
@@ -1867,6 +1867,8 @@ export type Database = {
           payment_status: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at: string | null
           pdf_storage_path: string | null
+          recurring_invoice_id: string | null
+          recurring_period: string | null
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
@@ -1938,6 +1940,8 @@ export type Database = {
           payment_status?: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at?: string | null
           pdf_storage_path?: string | null
+          recurring_invoice_id?: string | null
+          recurring_period?: string | null
           reminders_paused?: boolean
           reminders_paused_reason?: string | null
           sale_date?: string | null
@@ -2009,6 +2013,8 @@ export type Database = {
           payment_status?: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at?: string | null
           pdf_storage_path?: string | null
+          recurring_invoice_id?: string | null
+          recurring_period?: string | null
           reminders_paused?: boolean
           reminders_paused_reason?: string | null
           sale_date?: string | null
@@ -2040,6 +2046,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "invoices_overdue"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_recurring_invoice_same_tenant_fk"
+            columns: ["tenant_id", "recurring_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_invoices"
+            referencedColumns: ["tenant_id", "id"]
           },
           {
             foreignKeyName: "invoices_tenant_id_fkey"
@@ -3516,6 +3529,91 @@ export type Database = {
           },
           {
             foreignKeyName: "push_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recurring_invoices: {
+        Row: {
+          active: boolean
+          created_at: string
+          created_by: string | null
+          day_of_month: number
+          frequency: string
+          id: string
+          name: string
+          next_run_date: string
+          template_invoice_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          day_of_month: number
+          frequency: string
+          id?: string
+          name: string
+          next_run_date: string
+          template_invoice_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          day_of_month?: number
+          frequency?: string
+          id?: string
+          name?: string
+          next_run_date?: string
+          template_invoice_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_invoices_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_invoices_template_same_tenant_fk"
+            columns: ["tenant_id", "template_invoice_id"]
+            isOneToOne: true
+            referencedRelation: "invoices"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "recurring_invoices_template_same_tenant_fk"
+            columns: ["tenant_id", "template_invoice_id"]
+            isOneToOne: true
+            referencedRelation: "invoices_overdue"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "recurring_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "mv_tenant_dashboard_summary"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "recurring_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_verification_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_invoices_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -5321,6 +5419,8 @@ export type Database = {
           payment_status: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at: string | null
           pdf_storage_path: string | null
+          recurring_invoice_id: string | null
+          recurring_period: string | null
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
@@ -5576,6 +5676,8 @@ export type Database = {
           payment_status: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at: string | null
           pdf_storage_path: string | null
+          recurring_invoice_id: string | null
+          recurring_period: string | null
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null
@@ -5660,6 +5762,8 @@ export type Database = {
           payment_status: Database["public"]["Enums"]["payment_status_enum"]
           pdf_generated_at: string | null
           pdf_storage_path: string | null
+          recurring_invoice_id: string | null
+          recurring_period: string | null
           reminders_paused: boolean
           reminders_paused_reason: string | null
           sale_date: string | null

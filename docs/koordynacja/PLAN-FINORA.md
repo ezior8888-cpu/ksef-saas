@@ -1383,7 +1383,8 @@ Transactions, Monthly Analytics, Accounts i Invoice List.
 | 20.10.2026 | P5 Wystaw fakturę (`/invoices/new/*`) ← Create Invoice | #295 | sesja lokalna; agenci: budowa (mocny model, izolowany worktree), przegląd 2 soczewki (logika mocny model, wierność Finorze i WCAG Sonnet; weryfikacja mocny model), poprawki w sesji | scalone i wdrożone 20.10 | `cfceeaa5` | oprawa dokumentu Finory dla zwykłej, zaliczkowej i rozliczającej (`components/invoices/finora/invoice-document.tsx`, karta akcji 18rem, pasek na telefonie bez zmian), korekta tylko w ramce (`correction-form.tsx` nietknięty — #283), wybór rodzaju w kartach; logika pól, walidacji i wysyłki bez zmian. Przegląd: 9 znalezisk, 5 potwierdzonych (etykiety pól bez `htmlFor`, nagłówek dokumentu ucięty na 375 px, wiersze pozycji szersze od karty przy 1280 px → próg 1360 px, etykieta zaliczki, odstępstwo kolumn Nabywca/Płatność od `xl` opisane) — poprawione z czerwonymi testami |
 | 20.10.2026 | Build produkcyjny: pamięć sterty | #297 | sesja lokalna | scalone i wdrożone 20.10 ok. 23:07 | `cfceeaa5` | wdrożenie #294 padło: `next build --webpack` „JavaScript heap out of memory” (exit 134) przy pułapie 3072 MB; Coolify zostawił starą aplikację, worker był już na nowym kodzie (stan mieszany ok. 45 min). Przyczyna: mapy źródeł dla Sentry (token jest, mapy zostają) urosły z kodem — pomiar lokalny szczytu sterty kompilacji 67251ef6 3296 MB → main 4365 MB → z `experimental.webpackMemoryOptimizations` 3526 MB. Poprawka: ta opcja + pułap 3584 MB w `Dockerfile`, strażnik `build-pamiec-sterty`. Szczyt swapu `app-1` w udanym buildzie 6,2 z 8 GB — zapas mały, przy dalszym wzroście aplikacji patrzeć na swap |
 | 20.10.2026 | CI: pułap sterty jak na produkcji | #298 | sesja lokalna | **czeka na Bartosza** (zmiana w `.github/`) | — | job „Next build” budował z domyślną stertą runnera (~4 GB) i przepuścił regresję; `NODE_OPTIONS=--max-old-space-size=3584` w kroku Build + strażnik równości z `Dockerfile` |
-| 20.10.2026 | E9 faktury cykliczne (N1 v1) | (ten PR) | sesja lokalna; agenci: dane (mocny model), ekran (Sonnet, przerwany limitem → dokończony mocnym modelem), przegląd 4 soczewki + krytyk kompletności (weryfikacja mocny model), poprawki 2 obszary + weryfikacja adwersaryjna | w trakcie | — | migracja **00154** (`recurring_invoices`, `invoices.recurring_invoice_id`/`recurring_period`, `uq_invoices_recurring_period`, UNIQUE wzoru, wyzwalacz blokujący przepięcie), `lib/invoices/recurring/*`, akcje, `/invoices/recurring` w układzie Recurring Invoices, baner na `/invoices`, „Duplikuj”, „Ustaw jako cykliczną”, „Zrób fakturę cykliczną”, menu i ⌘K. Przegląd: 12 potwierdzonych + 3 z krytyka (2 krytyczne: build padał na typach strony; formularz z dwóch kart dawał drugą fakturę w miesiącu) — poprawione z czerwonymi testami; weryfikacja poprawek znalazła 2 kolejne (zaległy okres przy kwartał → miesiąc, zmiana samego wzoru) — poprawione |
+| 20.10.2026 | E9 faktury cykliczne (N1 v1) | #296 | sesja lokalna; agenci: dane (mocny model), ekran (Sonnet, przerwany limitem → dokończony mocnym modelem), przegląd 4 soczewki + krytyk kompletności (weryfikacja mocny model), poprawki 2 obszary + weryfikacja adwersaryjna | scalone 20.10, migracja 00154 wgrana na db-1 przed wdrożeniem, wdrożone ok. 23:53 (worker i aplikacja) | `eb5b1620` | migracja **00154** (`recurring_invoices`, `invoices.recurring_invoice_id`/`recurring_period`, `uq_invoices_recurring_period`, UNIQUE wzoru, wyzwalacz blokujący przepięcie), `lib/invoices/recurring/*`, akcje, `/invoices/recurring` w układzie Recurring Invoices, baner na `/invoices`, „Duplikuj”, „Ustaw jako cykliczną”, „Zrób fakturę cykliczną”, menu i ⌘K. Przegląd: 12 potwierdzonych + 3 z krytyka (2 krytyczne: build padał na typach strony; formularz z dwóch kart dawał drugą fakturę w miesiącu) — poprawione z czerwonymi testami; weryfikacja poprawek znalazła 2 kolejne (zaległy okres przy kwartał → miesiąc, zmiana samego wzoru) — poprawione |
+| 20.10.2026 | Typy bazy z produkcji po 00154 | (ten PR) | sesja lokalna | w trakcie | — | `types/database.ts` z postgres-meta na db-1 (diff tylko obiekty 00154), `lib/invoices/recurring/db.ts` bez rozszerzenia `Database` i rzutowania przez `unknown` (`toRecurringRow` zawęża `frequency`); rejestr: 00154 wgrana |
 
 **Decyzje po E3 (Bartosz 17.10: „odpowiedz sam, ma być jak najbardziej
 poprawnie”):** (1) lista `/invoices` dalej pokazuje faktury ze wszystkich
@@ -1445,11 +1446,18 @@ przykładowych; FLO poza Pulpitem (miejsce z projektu Claude Design). Wygląd
 naszego projektu porzucamy — przyjmujemy wyłącznie Finorę. „Wrócimy do tego”:
 podpięcie prawdziwych danych w karty Finory.
 
-**Następny krok (20.10.2026, wieczór):** na produkcji (`cfceeaa5`) są Pulpit
-Finance (#292), ekrany E3b, E5, E6, E7, E8, E10a, E10b (#294) i P5 „Wystaw
-fakturę” (#295). Ten PR wnosi **E9**: faktury cykliczne N1 v1, bez crona.
-Po scaleniu idzie migracja **00154** na db-1 przed wdrożeniem, potem typy
-z produkcji i usunięcie rzutowania w `lib/invoices/recurring/db.ts`.
+**Następny krok (20.10.2026, noc):** na produkcji (`eb5b1620`) są:
+- Pulpit Finance (#292);
+- ekrany E3b, E5, E6, E7, E8, E10a, E10b (#294);
+- P5 „Wystaw fakturę” (#295);
+- E9 faktury cykliczne (#296), z migracją 00154 wgraną na db-1.
+
+Ten PR dodaje typy z produkcji po 00154. Plan Finora ma teraz w układzie
+Finory wszystkie istniejące ekrany. Zostaje:
+- odbiór wizualny (niżej) i poprawki z niego osobnym PR;
+- P12 Bank (N5, etap późniejszy);
+- N1b (przypomnienie e‑mailem o „Do wystawienia”);
+- podpięcie prawdziwych danych w karty Pulpitu (Bartosz: „wrócimy do tego”).
 
 **Dla Bartosza:**
 - (1) #298: ten sam pułap sterty w CI co na produkcji. To zmiana w
