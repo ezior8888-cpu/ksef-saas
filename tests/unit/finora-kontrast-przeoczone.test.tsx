@@ -15,6 +15,11 @@ import SettingsNav from '@/components/settings/finora/settings-nav';
 
 import { color, contrast, oklch, over, rowBackgrounds, themes, type Rgb, type Theme } from './helpers/kontrast';
 
+/** Pełne escapowanie znaków specjalnych wyrażenia regularnego (CodeQL js/incomplete-sanitization). */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * WCAG 1.4.3 (tekst ≥ 4,5:1): miejsca z tekstem na półprzezroczystym tle
  * primary / chart-2, które przeoczył przegląd `finora-kontrast-primary-10`
@@ -35,7 +40,7 @@ function classOf(html: string, ...needles: string[]): string {
 
 /** Kolor (`text-x` / `bg-x/NN`) dla wariantu (`''`, `dark:`, `hover:`, `dark:hover:`); `null`, gdy brak. */
 function pick(cls: string, kind: 'text' | 'bg', variant: string): { token: string; alpha: number } | null {
-  const re = new RegExp(`(?:^|\\s)${variant.replace(/:/g, '\\:')}${kind}-([a-z0-9-]+?)(?:/(\\d+))?(?=\\s|$)`, 'g');
+  const re = new RegExp(`(?:^|\\s)${escapeRegExp(variant)}${kind}-([a-z0-9-]+?)(?:/(\\d+))?(?=\\s|$)`, 'g');
   const NOT_COLOR = /^(xs|sm|base|lg|[0-9]?xl|left|right|center|nowrap|wrap|balance|pretty|ellipsis|clip|start|end|justify)$/;
   for (const m of cls.matchAll(re)) {
     if (NOT_COLOR.test(m[1])) continue;

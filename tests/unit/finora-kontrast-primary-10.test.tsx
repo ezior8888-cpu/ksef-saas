@@ -34,12 +34,17 @@ import { parseInvoiceListParams } from '@/lib/invoices/list-query';
 
 import { THEME_NAMES, color, contrast, oklch, over, rowBackgrounds, themes, type Rgb, type Theme } from './helpers/kontrast';
 
+/** Pełne escapowanie znaków specjalnych wyrażenia regularnego (CodeQL js/incomplete-sanitization). */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 type Layer = { token: string; alpha: number };
 type Variant = '' | 'dark:' | 'hover:' | 'dark:hover:';
 
 /** `text-…` / `bg-…[/NN]` z danym prefiksem wariantu; klasy, które nie są kolorem (`text-xs`), pomijamy. */
 function layers(classes: string, variant: Variant, theme: Theme): { text?: Layer; bg?: Layer } {
-  const re = new RegExp(`(?:^|\\s)${variant.replace(/:/g, '\\:')}(text|bg)-([a-z0-9-]+?)(?:/(\\d+))?(?=\\s|$)`, 'g');
+  const re = new RegExp(`(?:^|\\s)${escapeRegExp(variant)}(text|bg)-([a-z0-9-]+?)(?:/(\\d+))?(?=\\s|$)`, 'g');
   const found: { text?: Layer; bg?: Layer } = {};
   for (const m of classes.matchAll(re)) {
     try {
