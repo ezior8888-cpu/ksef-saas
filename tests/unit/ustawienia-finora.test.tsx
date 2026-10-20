@@ -433,7 +433,8 @@ describe('dostępność ustawień (WCAG AA)', () => {
   it('aktywna zakładka: w jasnym motywie text-chart-3 (primary/15 daje 4,13:1)', () => {
     const src = read('components/settings/finora/settings-nav.tsx');
     expect(src).toContain('text-chart-3');
-    expect(src).toContain('dark:text-primary');
+    // Ciemny motyw: accent-foreground (primary na primary/20–/30 to 3,4–5,0:1 — finora-kontrast-przeoczone).
+    expect(src).toContain('dark:text-accent-foreground');
     expect(src).not.toMatch(/(?<!dark:)(?<!dark:hover:)(?<!-)\btext-primary\b/);
   });
 

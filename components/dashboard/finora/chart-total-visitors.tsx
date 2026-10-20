@@ -46,7 +46,8 @@ const TotalVisitorsCard = ({ title, totalVisitors, percentage, visitorData, clas
 
         <div className='flex items-center gap-2'>
           <span className='text-2xl font-semibold'>{totalVisitors}</span>
-          <Badge className='bg-primary/15 dark:bg-primary/25 [a&]:hover:bg-primary/5 focus-visible:ring-primary/20 dark:focus-visible:ring-primary/40 text-primary focus-visible:outline-none'>
+          {/* Odstępstwo od Finory (WCAG 1.4.3): text-primary na primary/15 daje 4,13:1 (ciemny /25: 3,76:1); accent-foreground 8,38 / 6,76. */}
+          <Badge className='bg-primary/15 dark:bg-primary/25 [a&]:hover:bg-primary/5 focus-visible:ring-primary/20 dark:focus-visible:ring-primary/40 text-accent-foreground focus-visible:outline-none'>
             {percentage > 0 && '+'}
             {percentage}%
           </Badge>

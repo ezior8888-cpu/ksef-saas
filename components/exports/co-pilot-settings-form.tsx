@@ -330,7 +330,8 @@ export function CoPilotSettingsForm({
                   <RiFileTextLine className="size-5" aria-hidden />
                   {opt.label}
                 </FieldLabel>
-                <p className="text-muted-foreground text-xs">{opt.desc}</p>
+                {/* WCAG 1.4.3: muted-foreground na zaznaczonym kafelku (primary/10) daje 4,23:1. */}
+                <p className={cn('text-xs', selected ? 'text-accent-foreground' : 'text-muted-foreground')}>{opt.desc}</p>
               </div>
             </div>
           );

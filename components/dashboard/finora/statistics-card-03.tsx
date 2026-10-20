@@ -54,7 +54,12 @@ const StatisticsCard = ({
           <span className='text-lg font-semibold'>{value}</span>
           <span className='text-muted-foreground text-sm'>{title}</span>
         </p>
-        <Badge className='bg-primary/10 text-primary dark:bg-primary/25'>{badgeContent}</Badge>
+        {/*
+          Odstępstwo od Finory (WCAG 1.4.3): tekst `accent-foreground`, nie `primary` —
+          `text-primary` na `bg-primary/10` ma 4,44:1 (jasny), na `dark:bg-primary/25`
+          3,76:1 (ciemny); `accent-foreground` daje 9,00 i 6,76:1.
+        */}
+        <Badge className='bg-primary/10 text-accent-foreground dark:bg-primary/25'>{badgeContent}</Badge>
       </CardContent>
     </Card>
   )
