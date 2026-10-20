@@ -77,7 +77,7 @@ export default function AboutPage() {
             z szablonu podpisane jako nasz zespół (wprowadzanie w błąd,
             a wizerunek modeli użyty w cudzym kontekście). */}
 
-        {/* Metryki („1,2 mln faktur przeszło przez FaktFlow”, „8 tys. firm
+        {/* Metryki („1,2 mln faktur przeszło przez” naszą usługę, „8 tys. firm
             miesięcznie”, „99,9% dostępności”) usunięte 15.10.2026: liczby
             pochodziły z szablonu, a serwis jest przed startem. Wracają tylko
             z danymi, które da się wykazać (art. 5 u.p.n.p.r., art. 16 u.z.n.k.). */}
@@ -223,8 +223,9 @@ export default function AboutPage() {
             </Rise>
           </div>
 
-          {/* „Pulpit FaktFlow” usunięty 15.10.2026 — był to panel
-              inwestycyjny z szablonu. Wraca tylko prawdziwy zrzut. */}
+          {/* Zrzut „pulpitu” usunięty 15.10.2026 — był to panel
+              inwestycyjny z szablonu podpisany nazwą produktu. Wraca tylko
+              prawdziwy zrzut. */}
         </Container>
       </section>
 
