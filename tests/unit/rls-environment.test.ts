@@ -61,6 +61,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-lista-faktur-platnosc.test.ts',
       // 00153 (plan Finora E4, limit VAT): GRANT SELECT nowej kolumny tenants, CHECK, izolacja.
       'tests/rls-data-rozpoczecia.test.ts',
+      // 00154 (plan Finora E9, N1): faktury cykliczne — izolacja firm, jeden okres, CHECK-i, SET NULL.
+      'tests/rls-faktury-cykliczne.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);
