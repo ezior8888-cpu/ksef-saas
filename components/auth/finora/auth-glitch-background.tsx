@@ -4,11 +4,8 @@
 // `<LetterGlitch />` z zielenią `#5ee9b5`/`#00bc7d`/`#009966` na czarnym.
 // U nas (plan §5 P15, §10.4): trzy odcienie wykresów presetu D2
 // (`--chart-1..3` z `app/globals.css` — od jaśniejszego do ciemniejszego, jak
-// zielenie Finory), znaki od „zł”, tło `--background`, więc panel idzie za
-// jasnym i ciemnym motywem.
-
-// React Imports
-import { useMemo, useSyncExternalStore } from 'react'
+// zielenie Finory), znaki od „zł”, tło `#000000` i winieta jak w Finorze
+// (na sztywno w obu motywach).
 
 // Component Imports
 import LetterGlitch from '@/components/ui/letter-glitch'
@@ -61,51 +58,9 @@ export function resolveCssColor(ctx: CanvasRenderingContext2D, value: string): s
   return pixelToHex(ctx.getImageData(0, 0, 1, 1).data)
 }
 
-function readPresetColors(isDark: boolean): string[] {
-  const fallback = [...(isDark ? AUTH_GLITCH_FALLBACK.dark : AUTH_GLITCH_FALLBACK.light)]
-
-  if (typeof document === 'undefined') return fallback
-
-  const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
-
-  if (!ctx) return fallback
-
-  const styles = getComputedStyle(document.documentElement)
-
-  return AUTH_GLITCH_COLOR_VARS.map(
-    (name, index) => resolveCssColor(ctx, styles.getPropertyValue(name)) ?? fallback[index]
-  )
-}
-
-// Motywem rządzi `lib/theme/theme.ts` (klasa `dark` na <html>), więc
-// słuchamy zmian klasy, a nie `prefers-color-scheme`.
-function subscribeTheme(onChange: () => void) {
-  const observer = new MutationObserver(onChange)
-
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-
-  return () => observer.disconnect()
-}
-
-type ThemeSnapshot = 'light' | 'dark' | 'server'
-
-const readTheme = (): ThemeSnapshot => (document.documentElement.classList.contains('dark') ? 'dark' : 'light')
-// Render na serwerze i hydratacja: bez dokumentu i kanwy, kolory zapasowe.
-const readThemeOnServer = (): ThemeSnapshot => 'server'
-
+// Finora ma tło ekranów logowania na sztywno czarne (`#000000`) i ciemną
+// winietę w OBU motywach, więc zawsze bierzemy ciemny zestaw kolorów presetu
+// (jaśniejsze odcienie czytelne na czerni), bez czytania motywu.
 export function AuthGlitchBackground() {
-  const theme = useSyncExternalStore(subscribeTheme, readTheme, readThemeOnServer)
-
-  const colors = useMemo(
-    () => (theme === 'server' ? [...AUTH_GLITCH_FALLBACK.light] : readPresetColors(theme === 'dark')),
-    [theme]
-  )
-
-  return (
-    <LetterGlitch
-      glitchColors={colors}
-      characters={AUTH_GLITCH_CHARACTERS}
-      backgroundColor='var(--background)'
-    />
-  )
+  return <LetterGlitch glitchColors={[...AUTH_GLITCH_FALLBACK.dark]} characters={AUTH_GLITCH_CHARACTERS} />
 }

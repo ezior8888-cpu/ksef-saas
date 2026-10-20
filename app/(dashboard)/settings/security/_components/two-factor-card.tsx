@@ -44,8 +44,8 @@ const MFA_ERROR_MESSAGES: Record<string, string> = {
 // Kolory Alert z Finory (`two-factor-setup-dialog.tsx`, „Can't scan the code?”).
 function RecoveryUnavailableNotice() {
   return (
-    <Alert role="note" className="border-none bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400">
-      <AlertDescription className="text-amber-600/80 dark:text-amber-400/80">
+    <Alert role="note" className="border-none bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400">
+      <AlertDescription className="text-amber-800 dark:text-amber-400/80">
         Utrata dostępu do aplikacji TOTP może zablokować logowanie.
         Samodzielne odzyskiwanie dostępu, także kodami ratunkowymi, jest obecnie
         niedostępne. W razie utraty dostępu{' '}
@@ -223,7 +223,7 @@ export function TwoFactorCard({ isEnabled }: Props) {
       <div className="flex items-center gap-3">
         {isEnabled ? (
           <>
-            <Badge className="bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400">Włączone</Badge>
+            <Badge className="bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400">Włączone</Badge>
             <Button variant="outline" onClick={() => setStage({ kind: 'unenroll' })}>
               Wyłącz aplikację TOTP
             </Button>

@@ -9,6 +9,8 @@ import { Switch } from '@/components/ui/switch';
 
 interface Props {
   contractorId: string;
+  /** Nazwa kontrahenta w nazwie przełącznika — każdy wiersz ma inną (WCAG 2.4.6). */
+  contractorName: string;
   excluded: boolean;
 }
 
@@ -16,8 +18,11 @@ interface Props {
  * Przełącznik przypomnień kontrahenta (P13: „Przypomnienia (przełącznik)”).
  * Włączony = przypomnienia idą; wyłączony = kontrahent wykluczony
  * (`reminder_excluded`). Akcja i komunikaty bez zmian.
+ *
+ * Nazwa stała, z kontrahentem (jak „Auto-sync {instytucja}” w Finorze);
+ * stan ogłasza rola switch, więc nie powtarzamy go w nazwie.
  */
-export function ContractorReminderToggle({ contractorId, excluded }: Props) {
+export function ContractorReminderToggle({ contractorId, contractorName, excluded }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [localExcluded, setLocalExcluded] = useState(excluded);
@@ -46,15 +51,15 @@ export function ContractorReminderToggle({ contractorId, excluded }: Props) {
     });
   };
 
-  const label = localExcluded ? 'Przypomnienia wyłączone' : 'Przypomnienia włączone';
+  const state = localExcluded ? 'Przypomnienia wyłączone' : 'Przypomnienia włączone';
 
   return (
     <Switch
       checked={!localExcluded}
       onCheckedChange={handleToggle}
       disabled={isPending}
-      aria-label={label}
-      title={label}
+      aria-label={`Przypomnienia dla ${contractorName}`}
+      title={state}
     />
   );
 }

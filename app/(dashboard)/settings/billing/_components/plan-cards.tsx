@@ -42,7 +42,7 @@ function PlanCard({ isPending, onSelect }: PlanCardProps) {
             <CardTitle className="text-lg">Miesięcznie</CardTitle>
             <CardDescription>Płać co miesiąc, anuluj kiedy chcesz</CardDescription>
           </div>
-          <Badge className="bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400">
+          <Badge className="bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400">
             <RiSparklingLine aria-hidden />
             {TRIAL_DAYS} dni za darmo
           </Badge>

@@ -395,7 +395,7 @@ const STATUS_MAP: Record<
   completed: {
     icon: RiCheckLine,
     label: 'Gotowe',
-    className: 'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400',
+    className: 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400',
   },
   failed: {
     icon: RiCloseLine,
@@ -405,13 +405,13 @@ const STATUS_MAP: Record<
   generating: {
     icon: RiLoader4Line,
     label: 'Generowanie',
-    className: 'bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400',
+    className: 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
     spin: true,
   },
   pending: {
     icon: RiTimeLine,
     label: 'Oczekuje',
-    className: 'bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400',
+    className: 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
   },
   expired: {
     icon: RiTimeLine,

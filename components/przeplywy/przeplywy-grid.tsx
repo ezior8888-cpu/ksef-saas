@@ -53,9 +53,12 @@ import RecentActivityCard from './finora/widget-recent-activity';
  * Strona nie woła na swoim poziomie żadnej funkcji z §2.4.
  *
  * Karty z tymi samymi danymi biorą je przez `cache()` — jedno zapytanie na
- * żądanie. Wykres „Wpływy i wydatki” czyta pięć lat (widok „Rok”), reszta
- * kart ruchów — 12 miesięcy: stary koszt w walucie obcej zatrzymuje wtedy
- * tylko wykres, a nie kafle bieżącego miesiąca.
+ * żądanie. Wpłaty i koszty mają osobne ładowarki: kafel „Wpłynęło” czeka
+ * tylko na wpłaty, „Wydano” tylko na koszty, więc strażnik jednego źródła
+ * nie zabiera kafla drugiego. Karty łączące oba źródła (wykres, „Skąd
+ * i dokąd”, operacje) padają przez każde z nich. Wykres „Wpływy i wydatki”
+ * czyta pięć lat (widok „Rok”), reszta kart ruchów — 12 miesięcy: stary
+ * koszt w walucie obcej zatrzymuje wtedy tylko wykres i karty łączone.
  */
 
 export interface PrzeplywyCardProps {
@@ -73,21 +76,32 @@ const RECENT_MONTHS = 12;
 const loadCashFlowData = cache((supabase: PageContext['supabase'], tenantId: string, nowIso: string) =>
   getCashFlowData(supabase, tenantId, new Date(nowIso)));
 
-const loadMovements = cache(
-  async (supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: 'recent' | 'years') => {
-    const now = new Date(nowIso);
-    const today = todayInWarsaw(now);
-    const range =
-      span === 'years'
-        ? { from: yearsWindowStart(today), toExclusive: nextMonthStart(today) }
-        : warsawMonthWindow(now, RECENT_MONTHS);
-    const [inflows, costs] = await Promise.all([
-      getInflows(supabase, tenantId, range),
-      getCosts(supabase, tenantId, range),
-    ]);
-    return { inflows, costs, today };
-  },
-);
+type Span = 'recent' | 'years';
+
+function movementsRange(nowIso: string, span: Span) {
+  const now = new Date(nowIso);
+  const today = todayInWarsaw(now);
+  return span === 'years'
+    ? { from: yearsWindowStart(today), toExclusive: nextMonthStart(today) }
+    : warsawMonthWindow(now, RECENT_MONTHS);
+}
+
+/** Wpłaty — osobno od kosztów, żeby strażnik kosztów nie zabierał kafla wpływów. */
+const loadInflows = cache((supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span) =>
+  getInflows(supabase, tenantId, movementsRange(nowIso, span)));
+
+/** Koszty — osobno od wpłat, żeby strażnik wpłat nie zabierał kafla wydatków. */
+const loadCosts = cache((supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span) =>
+  getCosts(supabase, tenantId, movementsRange(nowIso, span)));
+
+/** Karty łączące oba źródła (wykres, źródła, operacje) — czekają na obie ładowarki. */
+async function loadMovements(supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span) {
+  const [inflows, costs] = await Promise.all([
+    loadInflows(supabase, tenantId, nowIso, span),
+    loadCosts(supabase, tenantId, nowIso, span),
+  ]);
+  return { inflows, costs, today: todayInWarsaw(new Date(nowIso)) };
+}
 
 const loadReceivables = cache((supabase: PageContext['supabase'], tenantId: string, nowIso: string) =>
   getReceivables(supabase, tenantId, new Date(nowIso)));
@@ -198,8 +212,8 @@ export async function GoalSlotCard({ supabase, tenantId, nowIso, className }: Wi
 
 export async function InflowMonthSlotCard({ supabase, tenantId, nowIso, className }: WithClass) {
   return loadCard('Wpłynęło w tym miesiącu', className, async () => {
-    const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'recent');
-    const flow = monthFlows(inflows, costs, today).inflow;
+    const inflows = await loadInflows(supabase, tenantId, nowIso, 'recent');
+    const flow = monthFlows(inflows, [], todayInWarsaw(new Date(nowIso))).inflow;
     return (
       <StatisticsAreaStatCard
         chartKey="income"
@@ -220,11 +234,11 @@ export async function InflowMonthSlotCard({ supabase, tenantId, nowIso, classNam
 
 export async function OutflowMonthSlotCard({ supabase, tenantId, nowIso, className }: WithClass) {
   return loadCard('Wydano w tym miesiącu', className, async () => {
-    const [{ inflows, costs, today }, verified] = await Promise.all([
-      loadMovements(supabase, tenantId, nowIso, 'recent'),
+    const [costs, verified] = await Promise.all([
+      loadCosts(supabase, tenantId, nowIso, 'recent'),
       getDashboardActiveOrgVerified(),
     ]);
-    const flow = monthFlows(inflows, costs, today).outflow;
+    const flow = monthFlows([], costs, todayInWarsaw(new Date(nowIso))).outflow;
     return (
       <StatisticsAreaStatCard
         chartKey="expense"
@@ -324,21 +338,23 @@ export async function VatSummarySlotCard({ supabase, tenantId, nowIso, className
   });
 }
 
+/** Podpis kart na sumie należności (§2.4 pkt 11): „Należności” i „Zaległości” mówią to samo. */
+function receivablesNote(foreignCurrencyCount: number): string {
+  return foreignCurrencyCount > 0
+    ? `${RECEIVABLES_NOTE} · Pominięto ${foreignCurrencyCount} ${plural(foreignCurrencyCount, ['fakturę', 'faktury', 'faktur'])} w walucie obcej`
+    : RECEIVABLES_NOTE;
+}
+
 export async function ReceivablesSlotCard({ supabase, tenantId, nowIso, className }: WithClass) {
   return loadCard('Należności', className, async () => {
     const r = await loadReceivables(supabase, tenantId, nowIso);
-    const skipped = r.foreignCurrencyCount;
     return (
       <StatisticsAssetsLiabilities
         notDue={r.notDue}
         overdue={r.overdue}
         count={r.count}
         overdueCount={r.overdueCount}
-        note={
-          skipped > 0
-            ? `${RECEIVABLES_NOTE} · Pominięto ${skipped} ${plural(skipped, ['fakturę', 'faktury', 'faktur'])} w walucie obcej`
-            : RECEIVABLES_NOTE
-        }
+        note={receivablesNote(r.foreignCurrencyCount)}
         className={className}
       />
     );
@@ -353,6 +369,7 @@ export async function OverdueSlotCard({ supabase, tenantId, nowIso, className }:
         overdue={r.overdue}
         total={r.total}
         oldestOverdueDays={r.oldestOverdueDays}
+        note={receivablesNote(r.foreignCurrencyCount)}
         className={className}
       />
     );

@@ -24,41 +24,56 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 type Supabase = PageContext['supabase'];
 
-export interface ExpenseMonthStats {
+export interface ExpenseMonthTotals {
   /** Miesiąc RRRR-MM. */
   month: string;
   /** Wypływ brutto (`gross_amount`) kosztów miesiąca. */
   gross: number;
   /** VAT do odliczenia (reguła JPK_V7M z `getCosts`). */
   vatDeductible: number;
-  /** Stałe koszty z okna 4 miesięcy kończącego się na `month` (N3). */
+}
+
+export interface RecurringExpenseStats {
+  /** Stałe koszty z okna 4 miesięcy kończącego się na wybranym miesiącu (N3). */
   recurring: RecurringCost[];
   recurringTotal: number;
 }
 
 /**
- * Kafle P8 dla miesiąca `month` (RRRR-MM). Jedno odczytanie kosztów z okna
- * 4 miesięcy: z niego miesiąc (brutto, VAT) i stałe koszty (N3).
+ * Kafle P8 „Wydatki w miesiącu” i „VAT do odliczenia” dla miesiąca `month`
+ * (RRRR-MM). Osobne zapytanie tylko o ten miesiąc (P8, §2.4 pkt 12): koszt
+ * spoza miesiąca, którego `getCosts` nie przepuszcza (np. KSeF w walucie
+ * bez kursu), nie zabiera tych kafli (§2.4 pkt 15).
  */
-export async function getExpenseMonthStats(
+export async function getExpenseMonthTotals(
   supabase: Supabase,
   tenantId: string,
   month: string,
-): Promise<ExpenseMonthStats> {
+): Promise<ExpenseMonthTotals> {
+  const entries = await getCosts(supabase, tenantId, {
+    from: `${month}-01`,
+    toExclusive: `${shiftMonth(month, 1)}-01`,
+  });
+  return {
+    month,
+    gross: roundToCents(entries.reduce((sum, entry) => sum + entry.outflow, 0)),
+    vatDeductible: roundToCents(entries.reduce((sum, entry) => sum + entry.vatDeductible, 0)),
+  };
+}
+
+/** Kafel P8 „Stałe koszty” (N3): własne zapytanie z okna 4 miesięcy kończącego się na `month`. */
+export async function getRecurringExpenseStats(
+  supabase: Supabase,
+  tenantId: string,
+  month: string,
+): Promise<RecurringExpenseStats> {
   const keys = recurringMonthKeys(month);
   const entries = await getCosts(supabase, tenantId, {
     from: `${keys[0]}-01`,
     toExclusive: `${shiftMonth(month, 1)}-01`,
   });
-  const inMonth = entries.filter((entry) => entry.issueDate.slice(0, 7) === month);
   const recurring = findRecurringCosts(entries, keys);
-  return {
-    month,
-    gross: roundToCents(inMonth.reduce((sum, entry) => sum + entry.outflow, 0)),
-    vatDeductible: roundToCents(inMonth.reduce((sum, entry) => sum + entry.vatDeductible, 0)),
-    recurring,
-    recurringTotal: recurringCostsMonthlyTotal(recurring),
-  };
+  return { recurring, recurringTotal: recurringCostsMonthlyTotal(recurring) };
 }
 
 /** Kafel P9 „Faktury kosztowe w miesiącu”: koszty ze skrzynki KSeF w bieżącym miesiącu (Europe/Warsaw). */

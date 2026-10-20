@@ -102,7 +102,6 @@ export function EmailInvoiceButton({
                     type="email"
                     autoComplete="email"
                     placeholder="e-mail nabywcy"
-                    aria-label="Adres e-mail odbiorcy faktury"
                     aria-invalid={!!form.formState.errors.to}
                     {...form.register('to')}
                   />

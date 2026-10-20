@@ -84,9 +84,15 @@ export default async function ExpensesPage({
       <ExpenseStatsCards supabase={supabase} tenantId={tenantId} month={month} />
 
       {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Nie udało się pobrać wydatków: {error.message}</AlertTitle>
-        </Alert>
+        <>
+          <Alert variant="destructive">
+            <AlertTitle>Nie udało się pobrać wydatków: {error.message}</AlertTitle>
+          </Alert>
+          {/* Od `lg` przycisk stoi w pasku tabeli; bez tabeli dodawanie zostaje tu. */}
+          <div className="flex justify-end max-lg:hidden">
+            <CaptureButton />
+          </div>
+        </>
       ) : (
         <Card>
           <ExpensesTable

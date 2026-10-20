@@ -12,6 +12,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { companyInitials, shortenLegalForm } from '@/lib/format/legal-form';
 import { formatPlMoney } from '@/lib/format/pl';
+import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 
 import { INBOX_STATUS_LABELS, type InboxRow, type InboxStatus } from './inbox-rows';
 
@@ -20,7 +21,9 @@ import { INBOX_STATUS_LABELS, type InboxRow, type InboxStatus } from './inbox-ro
  * Wydatki). Kolumny: Data wystawienia · Sprzedawca (NIP) · Numer · Numer KSeF
  * · Brutto · Status (Nowa / Opisana) · Akcje. Kolumny „Termin płatności” nie
  * ma — termin faktur kosztowych to N7. Poniżej `lg` karty jak dotąd
- * (sprzedawca, NIP, kwota, data i numer KSeF), w oprawie Finory.
+ * (sprzedawca, NIP, kwota, data otrzymania z KSeF i numer KSeF), w oprawie
+ * Finory. Lista jest sortowana po dacie przyjęcia w KSeF, więc ta data stoi
+ * też w tabeli (druga linia komórki daty).
  */
 
 const STATUS_STYLES: Record<InboxStatus, string> = {
@@ -34,6 +37,11 @@ export function inboxAmount(row: Pick<InboxRow, 'gross' | 'currency'>): string {
 }
 
 const statusValue = (row: InboxRow) => row.status ?? 'none';
+
+/** Data przyjęcia w KSeF z godziną (Europe/Warsaw); brak → „—”, jak dotąd. */
+export function inboxAcceptedAt(row: Pick<InboxRow, 'acceptedAt'>): string {
+  return row.acceptedAt ? formatWarsawDateTime(row.acceptedAt) : '—';
+}
 
 function StatusBadge({ status }: { status: InboxStatus | null }) {
   if (!status) return <span className="text-muted-foreground">—</span>;
@@ -73,8 +81,15 @@ export const inboxColumns: ColumnDef<InboxRow>[] = [
     header: 'Data wystawienia',
     id: 'issueDate',
     accessorFn: (row) => row.issueDate ?? '',
-    cell: ({ row }) => <span className="text-muted-foreground tabular-nums">{plDate(row.original.issueDate)}</span>,
-    size: 130,
+    cell: ({ row }) => (
+      <div className="flex flex-col">
+        <span className="text-muted-foreground tabular-nums">{plDate(row.original.issueDate)}</span>
+        <span className="text-muted-foreground text-xs tabular-nums" title="Data otrzymania z KSeF">
+          Otrzymana {inboxAcceptedAt(row.original)}
+        </span>
+      </div>
+    ),
+    size: 150,
   },
   {
     header: 'Sprzedawca',
@@ -147,6 +162,9 @@ const FILTERS = [
   { columnId: 'status', allLabel: 'Wszystkie statusy', labels: { ...INBOX_STATUS_LABELS, none: 'Bez wydatku' } },
 ];
 
+/** Bez kolumn zależnych od wydatków — gdy ich odczyt padł (strona pokazuje komunikat). */
+const COLUMNS_WITHOUT_STATUS = inboxColumns.filter((column) => column.id !== 'status' && column.id !== 'actions');
+
 export function searchInboxText(row: InboxRow): string {
   return [row.sellerName, row.sellerNip, row.number, row.ksefNumber].filter(Boolean).join(' ');
 }
@@ -170,7 +188,7 @@ export function InboxEmptyState() {
   );
 }
 
-function InboxCard({ row }: { row: InboxRow }) {
+function InboxCard({ row, statusUnavailable }: { row: InboxRow; statusUnavailable: boolean }) {
   const content = (
     <>
       <Avatar className="after:border-none">
@@ -189,9 +207,10 @@ function InboxCard({ row }: { row: InboxRow }) {
           <p className="text-foreground shrink-0 text-sm font-medium tabular-nums">{inboxAmount(row)}</p>
         </div>
         <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-          <span className="tabular-nums">{plDate(row.issueDate)}</span>
+          <span className="tabular-nums" title="Data otrzymania z KSeF">{inboxAcceptedAt(row)}</span>
+          <span className="tabular-nums">wyst. {plDate(row.issueDate)}</span>
           {row.number ? <span className="font-mono">{row.number}</span> : null}
-          <StatusBadge status={row.status} />
+          {statusUnavailable ? null : <StatusBadge status={row.status} />}
         </div>
         <p className="text-muted-foreground mt-1 truncate font-mono text-xs">{row.ksefNumber ?? '—'}</p>
       </div>
@@ -206,12 +225,19 @@ function InboxCard({ row }: { row: InboxRow }) {
   );
 }
 
-export function InboxTable({ rows }: { rows: InboxRow[] }) {
+export function InboxTable({
+  rows,
+  statusUnavailable = false,
+}: {
+  rows: InboxRow[];
+  /** Odczyt wydatków powiązanych padł: kolumny „Status” i „Akcje” są ukryte, a nie „—”. */
+  statusUnavailable?: boolean;
+}) {
   return (
     <TransactionDatatable
       data={rows}
-      columns={inboxColumns}
-      filters={FILTERS}
+      columns={statusUnavailable ? COLUMNS_WITHOUT_STATUS : inboxColumns}
+      filters={statusUnavailable ? [] : FILTERS}
       searchId="inbox-search"
       searchPlaceholder="Szukaj: sprzedawca, NIP, numer…"
       searchText={searchInboxText}
@@ -219,7 +245,7 @@ export function InboxTable({ rows }: { rows: InboxRow[] }) {
       renderCards={(pageRows) => (
         <div className="divide-y">
           {pageRows.map((row) => (
-            <InboxCard key={row.id} row={row.original} />
+            <InboxCard key={row.id} row={row.original} statusUnavailable={statusUnavailable} />
           ))}
         </div>
       )}

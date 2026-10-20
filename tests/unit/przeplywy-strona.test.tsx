@@ -17,9 +17,11 @@ import {
   InflowMonthSlotCard,
   KpirFinanceSlotCard,
   OutflowMonthSlotCard,
+  OverdueSlotCard,
   PendingReviewAlert,
   PrzeplywyCardError,
   PrzeplywyGrid,
+  ReceivablesSlotCard,
   VatSummarySlotCard,
 } from '@/components/przeplywy/przeplywy-grid';
 import type { PageContext } from '@/lib/supabase/page-context';
@@ -192,5 +194,54 @@ describe('karty: jedna karta = jedno źródło awarii', () => {
     expect(out).toContain('href="/expenses?filter=unreviewed"');
 
     expect(await PendingReviewAlert({ supabase: db({ expenses: [cost('a')] }), tenantId: TENANT })).toBeNull();
+  });
+});
+
+describe('kafle miesiąca: każdy pada tylko przez swoje źródło (§2.4 pkt 15)', () => {
+  const paid = sale('paid', { paid_amount: 1230, paid_at: '2026-10-10T10:00:00Z', payment_status: 'paid' });
+
+  it('koszt KSeF bez uzgodnionego środowiska zabiera „Wydano”, a „Wpłynęło” pokazuje kwotę', async () => {
+    const supabase = db({
+      invoices: [paid],
+      expenses: [cost('ksef', { source: 'ksef_inbox', ksef_invoice_id: 'brak-faktury' })],
+    });
+
+    const inflow = await card(InflowMonthSlotCard(props(supabase)));
+    const outflow = await card(OutflowMonthSlotCard(props(supabase)));
+
+    expect(inflow.type).toBe(StatisticsAreaStatCard);
+    expect((inflow.props.flow as { amount: number }).amount).toBe(1230);
+    expect(outflow.type).toBe(PrzeplywyCardError);
+    expect(outflow.props.message).toBe('Koszty ze skrzynki KSeF wymagają uzgodnienia środowiska KSeF');
+  });
+
+  it('opłacona faktura bez środowiska zabiera „Wpłynęło”, a „Wydano” pokazuje kwotę', async () => {
+    const supabase = db({
+      invoices: [sale('bez-env', { ksef_environment: null, paid_amount: 1230, paid_at: '2026-10-10T10:00:00Z', payment_status: 'paid' })],
+      expenses: [cost('e1')],
+    });
+
+    const inflow = await card(InflowMonthSlotCard(props(supabase)));
+    const outflow = await card(OutflowMonthSlotCard(props(supabase)));
+
+    expect(inflow.type).toBe(PrzeplywyCardError);
+    expect(inflow.props.message).toBe('Przyjęte faktury wymagają uzgodnienia środowiska KSeF');
+    expect(outflow.type).toBe(StatisticsAreaStatCard);
+    expect((outflow.props.flow as { amount: number }).amount).toBe(123);
+  });
+});
+
+describe('„Zaległości”: ten sam podpis co „Należności” (§2.4 pkt 11)', () => {
+  it('nota o importach i pominiętej fakturze w walucie obcej', async () => {
+    const supabase = db({
+      invoices: [sale('pln', { payment_due_date: '2026-10-01' }), sale('eur', { currency: 'EUR', payment_due_date: '2026-10-01' })],
+      expenses: [],
+    });
+
+    const receivables = await card(ReceivablesSlotCard(props(supabase)));
+    const overdue = await card(OverdueSlotCard(props(supabase)));
+
+    expect(String(receivables.props.note)).toContain('Pominięto 1 fakturę w walucie obcej');
+    expect(overdue.props.note).toBe(receivables.props.note);
   });
 });

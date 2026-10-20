@@ -230,7 +230,8 @@ describe('„Zysk” na Pulpicie = „Zysk” miesiąca na /przeplywy (dawny „
     expect(report.revenue).toBe(21234.56);
     expect(report.costs).toBe(623.1);
     expect(report.profit).toBe(20611.46);
-    expect(cashFlow.report).toEqual({ ...report, monthlyAverageNet: cashFlow.report.monthlyAverageNet });
+    // Średnia też ta sama: /przeplywy liczy ją z 11 pełnych miesięcy jak Pulpit.
+    expect(cashFlow.report).toEqual(report);
     expect(cashFlowProfitLabel(html)).toBe(`${formatPlMoney(report.profit)} zł`);
   });
 });

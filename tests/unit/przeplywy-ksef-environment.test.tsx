@@ -323,3 +323,29 @@ describe('przepływy: dane od 1 stycznia dla szacunku podatku', () => {
     }
   });
 });
+
+/**
+ * „Średnio miesięcznie” w karcie „Ten miesiąc” (plan Finora P1/P2): średnia
+ * netto z 11 pełnych miesięcy bez bieżącego — ta sama co na Pulpicie, choć
+ * wykres `/przeplywy` pokazuje tylko 6 miesięcy.
+ */
+describe('przepływy: średnia miesięczna z 11 pełnych miesięcy', () => {
+  const sprzedaz = (id: string, issue_date: string, net: number): Row => ({
+    id, tenant_id: TENANT, direction: 'outgoing', currency: 'PLN', ksef_status: 'accepted',
+    ksef_environment: 'production', issue_date, net_total: net, gross_total: net,
+  });
+
+  it('październik: listopad–kwiecień po 10 000, maj–wrzesień po 2 000 (+100 we wrześniu) → 6 372,73', async () => {
+    vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+    const months = ['2025-11', '2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'];
+    const outgoingInvoices = months.map((m, i) => sprzedaz(`s-${m}`, `${m}-10`, i < 6 ? 10_000 : 2_000));
+
+    const data = await getCashFlowData(asClient(client({ outgoingInvoices })), TENANT, new Date());
+
+    // Wykres nadal 6 miesięcy; wrzesień ma też fakturę bazową klienta (100 netto).
+    expect(data.revenue).toEqual([2_000, 2_000, 2_000, 2_000, 2_100, 0]);
+    // (6 × 10 000 + 4 × 2 000 + 2 100) / 11; z 5 miesięcy wyszłoby 2 020.
+    expect(data.report.monthlyAverageNet).toBe(6_372.73);
+    expect(data.report.revenue).toBe(0);
+  });
+});

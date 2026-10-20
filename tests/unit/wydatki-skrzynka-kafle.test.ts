@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   countExpensesToReview,
-  getExpenseMonthStats,
+  getExpenseMonthTotals,
   getInboxMonthCosts,
   getLastInboxFetchAt,
+  getRecurringExpenseStats,
 } from '@/lib/dashboard/expense-stats';
 import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import type { PageContext } from '@/lib/supabase/page-context';
@@ -120,7 +121,7 @@ beforeEach(() => {
   failingTables = new Set();
 });
 
-describe('getExpenseMonthStats — kafle P8', () => {
+describe('getExpenseMonthTotals i getRecurringExpenseStats — kafle P8', () => {
   it('brutto i VAT do odliczenia tylko z miesiąca; paragon bez VAT do odliczenia', async () => {
     tables.expenses = [
       expense('e-1'),
@@ -128,7 +129,7 @@ describe('getExpenseMonthStats — kafle P8', () => {
       expense('e-3', { issue_date: '2026-09-30', gross_amount: 999 }),
     ];
 
-    const stats = await getExpenseMonthStats(database(), TENANT, '2026-10');
+    const stats = await getExpenseMonthTotals(database(), TENANT, '2026-10');
 
     expect(stats.gross).toBe(173);
     expect(stats.vatDeductible).toBe(23);
@@ -143,14 +144,26 @@ describe('getExpenseMonthStats — kafle P8', () => {
       expense('e-4', { source: 'ksef_inbox', ksef_invoice_id: 'inv-test', gross_amount: 77 }),
     ];
 
-    const stats = await getExpenseMonthStats(database(), TENANT, '2026-10');
+    const stats = await getExpenseMonthTotals(database(), TENANT, '2026-10');
 
     expect(stats.gross).toBe(200);
-    const expenseQueries = queries.filter((q) => q.table === 'expenses');
-    for (const q of expenseQueries) {
+    const monthQueries = queries.filter((q) => q.table === 'expenses');
+    expect(monthQueries.length).toBeGreaterThan(0);
+    for (const q of monthQueries) {
       expect(q.filters).toContainEqual(['eq', 'is_deductible', true]);
       expect(q.filters).toContainEqual(['eq', 'tenant_id', TENANT]);
-      // Okno 4 miesięcy (stałe koszty) do końca wybranego miesiąca.
+      // Brutto i VAT: tylko wybrany miesiąc.
+      expect(q.filters).toContainEqual(['gte', 'issue_date', '2026-10-01']);
+      expect(q.filters).toContainEqual(['lt', 'issue_date', '2026-11-01']);
+    }
+
+    queries = [];
+    await getRecurringExpenseStats(database(), TENANT, '2026-10');
+    const windowQueries = queries.filter((q) => q.table === 'expenses');
+    expect(windowQueries.length).toBeGreaterThan(0);
+    for (const q of windowQueries) {
+      expect(q.filters).toContainEqual(['eq', 'is_deductible', true]);
+      // Stałe koszty: okno 4 miesięcy do końca wybranego miesiąca.
       expect(q.filters).toContainEqual(['gte', 'issue_date', '2026-07-01']);
       expect(q.filters).toContainEqual(['lt', 'issue_date', '2026-11-01']);
     }
@@ -162,7 +175,7 @@ describe('getExpenseMonthStats — kafle P8', () => {
       expense('e-2', { gross_amount: -246, vat_deductible_amount: -46 }),
     ];
 
-    const stats = await getExpenseMonthStats(database(), TENANT, '2026-10');
+    const stats = await getExpenseMonthTotals(database(), TENANT, '2026-10');
 
     expect(stats.gross).toBe(984);
     expect(stats.vatDeductible).toBe(184);
@@ -172,7 +185,23 @@ describe('getExpenseMonthStats — kafle P8', () => {
     tables.invoices = [incoming('inv-eur', { currency: 'EUR' })];
     tables.expenses = [expense('e-1', { source: 'ksef_inbox', ksef_invoice_id: 'inv-eur', is_reviewed: false })];
 
-    await expect(getExpenseMonthStats(database(), TENANT, '2026-10'))
+    await expect(getExpenseMonthTotals(database(), TENANT, '2026-10'))
+      .rejects.toBeInstanceOf(KsefExpenseCurrencyNotSupportedError);
+  });
+
+  it('koszt KSeF w EUR bez kursu z lipca nie blokuje brutto i VAT października (osobne zapytanie miesiąca)', async () => {
+    tables.invoices = [incoming('inv-eur', { currency: 'EUR' })];
+    tables.expenses = [
+      expense('e-lipiec', { source: 'ksef_inbox', ksef_invoice_id: 'inv-eur', issue_date: '2026-07-15', is_reviewed: false }),
+      expense('e-1'),
+    ];
+
+    const stats = await getExpenseMonthTotals(database(), TENANT, '2026-10');
+
+    expect(stats.gross).toBe(123);
+    expect(stats.vatDeductible).toBe(23);
+    // Wadliwy koszt jest w oknie stałych kosztów — tylko ten kafel dostaje wyjątek.
+    await expect(getRecurringExpenseStats(database(), TENANT, '2026-10'))
       .rejects.toBeInstanceOf(KsefExpenseCurrencyNotSupportedError);
   });
 
@@ -180,7 +209,7 @@ describe('getExpenseMonthStats — kafle P8', () => {
     tables.expenses = Array.from({ length: 1203 }, (_, i) =>
       expense(`e-${String(i).padStart(5, '0')}`, { gross_amount: 12.3, vat_deductible_amount: 2.3 }));
 
-    const stats = await getExpenseMonthStats(database(), TENANT, '2026-10');
+    const stats = await getExpenseMonthTotals(database(), TENANT, '2026-10');
 
     expect(stats.gross).toBe(14796.9);
     expect(stats.vatDeductible).toBe(2766.9);
@@ -194,17 +223,18 @@ describe('getExpenseMonthStats — kafle P8', () => {
       expense('b-10', { issue_date: '2026-10-20', seller_nip: '2222222222', gross_amount: 900 }),
     ];
 
-    const stats = await getExpenseMonthStats(database(), TENANT, '2026-10');
+    const stats = await getRecurringExpenseStats(database(), TENANT, '2026-10');
 
     expect(stats.recurring.map((r) => [r.sellerNip, r.averageAmount, r.typicalDay])).toEqual([['1111111111', 60, 3]]);
     expect(stats.recurringTotal).toBe(60);
-    expect(stats.gross).toBe(900);
+    expect((await getExpenseMonthTotals(database(), TENANT, '2026-10')).gross).toBe(900);
   });
 
   it('niepełny odczyt: polski komunikat, nie zero', async () => {
     failingTables.add('expenses');
 
-    await expect(getExpenseMonthStats(database(), TENANT, '2026-10')).rejects.toThrow(/^Nie można odczytać kosztów/);
+    await expect(getExpenseMonthTotals(database(), TENANT, '2026-10')).rejects.toThrow(/^Nie można odczytać kosztów/);
+    await expect(getRecurringExpenseStats(database(), TENANT, '2026-10')).rejects.toThrow(/^Nie można odczytać kosztów/);
   });
 });
 

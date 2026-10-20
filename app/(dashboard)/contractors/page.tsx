@@ -10,7 +10,7 @@ import { RECEIVABLES_NOTE } from '@/lib/dashboard/receivables';
 import { sanitizeSearch } from '@/lib/invoices/list-query';
 import { getPageContext } from '@/lib/supabase/page-context';
 
-import { ContractorStatTiles, loadReceivables } from './_components/contractor-stat-tiles';
+import { ContractorStatTiles, foreignCurrencyNote, loadReceivables } from './_components/contractor-stat-tiles';
 import { ContractorsTable, type ContractorTableRow } from './_components/contractors-table';
 
 export const dynamic = 'force-dynamic';
@@ -49,9 +49,12 @@ export default async function ContractorsPage({
   // kolumny dostają „—”, a nad tabelą jest komunikat (jak fakty listy faktur, E3).
   let byNip: Map<string, ContractorReceivables> | null = null;
   let receivablesError: string | null = null;
+  let skippedForeign: string | null = null;
   if (hasContractors) {
     try {
-      byNip = receivablesByNip(await loadReceivables(supabase, tenantId));
+      const receivables = await loadReceivables(supabase, tenantId);
+      byNip = receivablesByNip(receivables);
+      skippedForeign = foreignCurrencyNote(receivables.foreignCurrencyCount);
     } catch (error) {
       receivablesError = pulpitErrorMessage(error);
     }
@@ -105,7 +108,7 @@ export default async function ContractorsPage({
               contractors={rows}
               q={q}
               emptyText={q ? `Brak kontrahentów dla „${q}”.` : 'Brak wyników.'}
-              note={`Należności i „Po terminie”: ${RECEIVABLES_NOTE.toLowerCase()}. Pokazujemy do 200 kontrahentów, od ostatnio użytych.`}
+              note={`Należności i „Po terminie”: ${RECEIVABLES_NOTE.toLowerCase()}.${skippedForeign ? ` ${skippedForeign}.` : ''} Pokazujemy do 200 kontrahentów, od ostatnio użytych.`}
             />
           </Card>
         </>

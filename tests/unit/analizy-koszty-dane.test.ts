@@ -160,13 +160,36 @@ describe('kategorie, trend, ostatnie, VAT', () => {
     expect(trend.map((t) => t.amount)).toEqual([10, 0, 0, 0, 0, 5]);
   });
 
-  it('ostatnie wydatki: od najnowszego, nazwa sprzedawcy albo NIP', () => {
+  it('ostatnie wydatki: od najnowszego, nazwa sprzedawcy albo „NIP …”', () => {
     const recent = recentCosts([
       cost({ id: 'a', issueDate: '2026-10-01' }),
       cost({ id: 'b', issueDate: '2026-10-09', sellerName: null }),
       cost({ id: 'c', issueDate: '2026-09-30' }),
     ], '2026-10');
-    expect(recent.map((r) => [r.id, r.name])).toEqual([['b', '1234567890'], ['a', 'Dostawca']]);
+    expect(recent.map((r) => [r.id, r.name])).toEqual([['b', 'NIP 1234567890'], ['a', 'Dostawca']]);
+  });
+
+  it('ostatnie wydatki: forma prawna skrócona jak w „Stałych kosztach” (§7.2)', () => {
+    const name = 'Alfa spółka z ograniczoną odpowiedzialnością';
+    const [recent] = recentCosts([cost({ sellerName: name })], '2026-10');
+    const [recurring] = recurringSuppliers(
+      [cost({ sellerName: name, issueDate: '2026-08-05' }), cost({ sellerName: name, issueDate: '2026-09-05' }), cost({ sellerName: name })],
+      monthKeysEnding('2026-10', 3),
+    );
+    expect(recent?.name).toBe('Alfa sp. z o.o.');
+    expect(recurring?.name).toBe(recent?.name);
+  });
+
+  it('kategorie różniące się wielkością liter to jedna kategoria', () => {
+    const entries = [
+      cost({ categoryLabel: 'Paliwo', outflow: 600 }),
+      cost({ categoryLabel: 'paliwo', outflow: 500 }),
+      cost({ categoryLabel: 'Biuro', outflow: 800 }),
+    ];
+    const slices = costCategoryBreakdown(entries, '2026-10');
+    expect(slices.map((s) => [s.label, s.amount])).toEqual([['Paliwo', 1100], ['Biuro', 800]]);
+    expect(new Set(slices.map((s) => s.key)).size).toBe(slices.length);
+    expect(costMonthStats(entries, '2026-10', '2026-09', TODAY).topCategory).toBe('Paliwo');
   });
 
   it('VAT z wydatków: naliczony, do odliczenia (reguła dokumentu z getCosts), do opisania', () => {

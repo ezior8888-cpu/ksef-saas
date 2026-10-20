@@ -129,6 +129,14 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
     currency ?? '',
     form.issue_date,
   );
+  // Jednostka kwoty w karcie szczegółów: bez potwierdzonego kursu w kolumnie
+  // zostaje kwota w walucie faktury KSeF (runner kategoryzacji), więc „zł”
+  // tylko dla PLN albo po przeliczeniu kursem.
+  const grossUnit = ksefCurrencyUnknown
+    ? '(waluta do wyjaśnienia)'
+    : foreignKsef && !hasKsefRate
+      ? currency
+      : 'zł';
 
   const confidence = Number(expense.categorization_confidence ?? 0);
   const method = expense.categorization_method;
@@ -305,7 +313,7 @@ export function ExpenseEditForm({ expense, photoUrl, ksefCurrency }: ExpenseEdit
             <CardContent className="flex flex-col gap-4">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-2xl font-semibold tabular-nums wrap-break-word">
-                  {formatPlMoney(Number(expense.gross_amount))} zł
+                  {formatPlMoney(Number(expense.gross_amount))} {grossUnit}
                 </span>
                 <Badge className={REVIEW_STYLES[reviewStatus]}>{REVIEW_LABELS[reviewStatus]}</Badge>
               </div>

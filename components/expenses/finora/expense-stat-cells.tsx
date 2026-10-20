@@ -1,7 +1,7 @@
 import { cache } from 'react'
 import { RiArrowLeftDownLine, RiArrowRightUpLine, RiCalendarScheduleLine, RiFileEditLine } from '@remixicon/react'
 
-import { countExpensesToReview, getExpenseMonthStats } from '@/lib/dashboard/expense-stats'
+import { countExpensesToReview, getExpenseMonthTotals, getRecurringExpenseStats } from '@/lib/dashboard/expense-stats'
 import { formatPlCompactMoney, formatPlInt, formatPlMoney } from '@/lib/format/pl'
 import { plural } from '@/lib/i18n/plural'
 import type { PageContext } from '@/lib/supabase/page-context'
@@ -12,9 +12,10 @@ import { StatsCardsFrame } from './stats-cards'
 /**
  * Kafle Wydatków (P8 ← Finora `transaction-stats-cards.tsx`: Money In /
  * Money Out / Net / Upcoming → Wydatki w miesiącu / VAT do odliczenia /
- * Do opisania / Stałe koszty). Kwoty z `getExpenseMonthStats` (§2.4 pkt 12),
- * nie z listy na stronie. Trzy kafle kosztów czytają jedno zapytanie przez
- * `cache()`; wyjątek i tak trafia osobno do każdego z nich.
+ * Do opisania / Stałe koszty). Kwoty z `getCosts` (§2.4 pkt 12), nie z listy
+ * na stronie. Brutto i VAT czytają przez `cache()` jedno zapytanie o miesiąc;
+ * „Stałe koszty” mają własne zapytanie z okna 4 miesięcy, żeby wadliwy koszt
+ * sprzed miesiąca nie zabierał kafli miesiąca (§2.4 pkt 15).
  */
 
 export interface ExpenseStatsProps {
@@ -24,8 +25,8 @@ export interface ExpenseStatsProps {
   month: string
 }
 
-const loadMonthStats = cache((supabase: PageContext['supabase'], tenantId: string, month: string) =>
-  getExpenseMonthStats(supabase, tenantId, month))
+const loadMonthTotals = cache((supabase: PageContext['supabase'], tenantId: string, month: string) =>
+  getExpenseMonthTotals(supabase, tenantId, month))
 
 const money = (n: number) => `${formatPlMoney(n)} zł`
 
@@ -33,7 +34,7 @@ export const EXPENSE_COSTS_NOTE = 'Tylko koszty w KPiR'
 
 export async function ExpensesGrossCell({ supabase, tenantId, month }: ExpenseStatsProps) {
   return loadStatCell('Wydatki w miesiącu', async () => {
-    const stats = await loadMonthStats(supabase, tenantId, month)
+    const stats = await loadMonthTotals(supabase, tenantId, month)
     return {
       value: formatPlCompactMoney(stats.gross),
       valueTitle: money(stats.gross),
@@ -45,7 +46,7 @@ export async function ExpensesGrossCell({ supabase, tenantId, month }: ExpenseSt
 
 export async function ExpensesVatCell({ supabase, tenantId, month }: ExpenseStatsProps) {
   return loadStatCell('VAT do odliczenia', async () => {
-    const stats = await loadMonthStats(supabase, tenantId, month)
+    const stats = await loadMonthTotals(supabase, tenantId, month)
     return {
       value: formatPlCompactMoney(stats.vatDeductible),
       valueTitle: money(stats.vatDeductible),
@@ -68,7 +69,7 @@ export async function ExpensesToReviewCell({ supabase, tenantId }: Omit<ExpenseS
 
 export async function ExpensesRecurringCell({ supabase, tenantId, month }: ExpenseStatsProps) {
   return loadStatCell('Stałe koszty', async () => {
-    const stats = await loadMonthStats(supabase, tenantId, month)
+    const stats = await getRecurringExpenseStats(supabase, tenantId, month)
     const count = stats.recurring.length
     if (count === 0) {
       return {

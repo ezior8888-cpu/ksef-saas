@@ -30,9 +30,18 @@ import type { Database } from '@/types/database';
  * Okno: sześć miesięcy kalendarzowych z bieżącym (wykres „Przychody
  * i koszty”) albo od 1 stycznia, jeśli to wcześniej (szacunek podatku), do
  * końca bieżącego roku. Miesiąc i rok w Europe/Warsaw (§2.4 pkt 10).
+ *
+ * Przychód czytamy dłużej — 12 miesięcy z bieżącym — bo „Średnio
+ * miesięcznie” w karcie „Ten miesiąc” to średnia z 11 pełnych miesięcy, jak
+ * na Pulpicie (plan Finora P1: te same komponenty i ta sama liczba). Strażniki
+ * faktur sprzedaży (PLN, środowisko) obejmują przez to te same 12 miesięcy
+ * co karta Pulpitu.
  */
 
 export const CASH_FLOW_KPIR_MONTHS = 6;
+
+/** Okno średniej miesięcznej: 11 pełnych miesięcy + bieżący (jak `SALES_MONTHS` Pulpitu). */
+export const CASH_FLOW_AVERAGE_MONTHS = 12;
 
 export type CashFlowInvoiceRow = Pick<
   Database['public']['Tables']['invoices']['Row'],
@@ -106,6 +115,10 @@ export async function getCashFlowData(
     const key = monthKey(year, month - 1 - (CASH_FLOW_KPIR_MONTHS - 1) + i);
     return { key, ...monthLabels(key) };
   });
+  const averageKeys = Array.from({ length: CASH_FLOW_AVERAGE_MONTHS }, (_, i) =>
+    monthKey(year, month - 1 - (CASH_FLOW_AVERAGE_MONTHS - 1) + i));
+  // 11 miesięcy wstecz to zawsze najpóźniej styczeń — wcześniej niż `dataFrom`.
+  const revenueFrom = `${averageKeys[0]!}-01`;
   const chartStart = `${months[0]!.key}-01`;
   // C-21: szacunek podatku liczy się od 1 stycznia, a wykres pokazuje sześć
   // miesięcy — dane od wcześniejszej z tych dat.
@@ -122,7 +135,7 @@ export async function getCashFlowData(
         .eq('direction', 'outgoing')
         .eq('ksef_status', 'accepted')
         .eq('ksef_environment', environment)
-        .gte('issue_date', dataFrom)
+        .gte('issue_date', revenueFrom)
         .lt('issue_date', endExclusive)
         .order('id', { ascending: true })
         .range(from, to)),
@@ -130,7 +143,7 @@ export async function getCashFlowData(
   ]);
   // Przyjęta faktura bez środowiska mogłaby być z TEST albo z produkcji —
   // zero zamiast niej ukryłoby niejasność (jak na Pulpicie).
-  await assertAcceptedEnvironmentKnown(supabase, tenantId, dataFrom, endExclusive);
+  await assertAcceptedEnvironmentKnown(supabase, tenantId, revenueFrom, endExclusive);
   invoices.sort((a, b) => a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
   // C-11: sumy w złotych — faktura sprzedaży w walucie obcej zatrzymuje odczyt.
   assertOutgoingInvoicesInPln(invoices);
@@ -138,13 +151,16 @@ export async function getCashFlowData(
   // Przychód jak w KPiR: ROZ bez zaliczek, które już są w przychodzie.
   // Błąd odczytu rzuca — zerowa suma zaliczek zawyżyłaby dochód i podatek.
   const settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices);
-  const invoiceRows: CashFlowInvoiceRow[] = invoices.map((inv) => ({
+  const allInvoiceRows: CashFlowInvoiceRow[] = invoices.map((inv) => ({
     ...inv,
     settled_advances_net: settled.get(inv.id) ?? null,
   }));
+  // Wykres i szacunek podatku — jak dotąd od `dataFrom`; starsze faktury
+  // służą tylko średniej miesięcznej.
+  const invoiceRows = allInvoiceRows.filter((inv) => inv.issue_date >= dataFrom);
 
   const revenueByMonth = new Map<string, number>();
-  for (const inv of invoiceRows) {
+  for (const inv of allInvoiceRows) {
     const key = inv.issue_date.slice(0, 7);
     revenueByMonth.set(
       key,
@@ -161,6 +177,11 @@ export async function getCashFlowData(
   const costs = months.map((m) => roundToCents(costByMonth.get(m.key) ?? 0) || 0);
   const profit = months.map((_, i) => roundToCents(revenue[i]! - costs[i]!) || 0);
 
+  // `buildMonthReport` bierze z kosztów tylko bieżący miesiąc (jest w oknie
+  // kosztów), a średnią liczy z przychodu — koszty sprzed `dataFrom` to zera.
+  const averageRevenue = averageKeys.map((key) => roundToCents(revenueByMonth.get(key) ?? 0) || 0);
+  const averageCosts = averageKeys.map((key) => roundToCents(costByMonth.get(key) ?? 0) || 0);
+
   const current = revenue[revenue.length - 1]!;
   const previous = revenue[revenue.length - 2]!;
 
@@ -170,7 +191,7 @@ export async function getCashFlowData(
     revenue,
     costs,
     profit,
-    report: buildMonthReport(revenue, costs),
+    report: buildMonthReport(averageRevenue, averageCosts),
     revenueChangePct: previous > 0 ? ((current - previous) / previous) * 100 : null,
     // PIT liczy się od 1 stycznia, nie z okna sześciu miesięcy wykresu.
     taxEstimate: estimateIncomeTaxThisYear(

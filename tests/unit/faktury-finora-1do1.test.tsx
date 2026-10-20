@@ -58,6 +58,8 @@ import InvoiceNotFound from '@/app/(dashboard)/invoices/[id]/not-found';
 import { EmailInvoiceButton } from '@/components/invoices/email-invoice-button';
 import type { InvoiceRow } from '@/components/invoices/invoice-row-types';
 import { StatusBadge } from '@/components/invoices/status-badge';
+import { BatchPdfDownload } from '@/components/invoices/batch-pdf-download';
+import { PaymentIndicator } from '@/app/(dashboard)/invoices/_components/payment-indicator';
 import { PULPIT_GENERIC_ERROR } from '@/components/dashboard/pulpit/pulpit-grid';
 import { formatPlCompactMoney, formatPlMoney } from '@/lib/format/pl';
 import { formatInvoiceDate } from '@/lib/invoices/display-date';
@@ -351,5 +353,37 @@ describe('„Wyślij e-mailem” — arkusz Finory', () => {
     await submit(sheet);
     expect(toast.error).toHaveBeenCalledWith('Osiągnięto limit 30 wysyłek faktur mailem na godzinę. Spróbuj później.');
     expect(document.body.querySelector('[data-slot="sheet-content"]')).not.toBeNull();
+  });
+});
+
+describe('dostępność poprawek E (WCAG)', () => {
+  it('paczka PDF: widoczny tekst przycisku opisuje cel (3.3.2), nie samo „ZIP”', () => {
+    const html = renderToStaticMarkup(<BatchPdfDownload />);
+    const button = html.match(/<button[\s\S]*?<\/button>/)?.[0] ?? '';
+    expect(button.replace(/<[^>]+>/g, '')).toContain('PDF za miesiąc');
+  });
+
+  it('ikony płatności w kółku: jasny motyw w odcieniu 700 (kontrast 1.4.11), dark bez zmian', () => {
+    const paid = renderToStaticMarkup(<PaymentIndicator state="paid" />);
+    const unpaid = renderToStaticMarkup(<PaymentIndicator state="unpaid" />);
+    expect(paid).toMatch(/\btext-green-700\b/);
+    expect(paid).not.toMatch(/\btext-green-600\b/);
+    expect(paid).toContain('dark:text-green-400');
+    expect(unpaid).toMatch(/\btext-amber-700\b/);
+    expect(unpaid).not.toMatch(/\btext-amber-600\b/);
+    expect(unpaid).toContain('dark:text-amber-400');
+  });
+
+  it('arkusz e-mail: pole „Do” nazwane widoczną etykietą, bez aria-label (2.5.3)', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const root = createRoot(host);
+    act(() => root.render(<EmailInvoiceButton invoiceId="inv-1" defaultEmail="a@b.pl" />));
+    act(() => (host.querySelector('button') as HTMLButtonElement).click());
+    const input = document.body.querySelector('input[type="email"]') as HTMLInputElement;
+    expect(input.getAttribute('aria-label')).toBeNull();
+    act(() => root.unmount());
+    host.remove();
   });
 });

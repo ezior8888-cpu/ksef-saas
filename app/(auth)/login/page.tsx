@@ -140,6 +140,11 @@ export default async function LoginPage({
             Utwórz konto
           </Link>
         </p>
+        {/* Pierwsze logowanie Google zakłada konto, więc zgoda musi być widoczna i tu. */}
+        <p className='text-center text-sm text-muted-foreground'>
+          Zakładając konto akceptujesz <Link href='/legal/regulamin' className='underline'>regulamin</Link> i{' '}
+          <Link href='/legal/polityka-prywatnosci' className='underline'>politykę prywatności</Link>.
+        </p>
       </div>
     </AuthSplitLayout>
   )

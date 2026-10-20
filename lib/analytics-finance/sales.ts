@@ -136,7 +136,9 @@ export interface RecentSale {
   date: string;
   name: string;
   number: string | null;
-  /** Brutto dokumentu. */
+  /** `invoice_kind` — korekta dostaje podpis „Korekta” na liście. */
+  kind: string | null;
+  /** Brutto dokumentu (korekta: różnica, może być ujemna). */
   amount: number;
 }
 
@@ -152,5 +154,12 @@ export function recentSales(
     .slice()
     .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.id.localeCompare(a.id))
     .slice(0, limit)
-    .map((inv) => ({ id: inv.id, date: inv.issueDate, name: nameOf(inv), number: inv.number, amount: inv.documentGross }));
+    .map((inv) => ({
+      id: inv.id,
+      date: inv.issueDate,
+      name: nameOf(inv),
+      number: inv.number,
+      kind: inv.kind,
+      amount: inv.documentGross,
+    }));
 }

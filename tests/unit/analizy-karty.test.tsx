@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { RiReceiptLine } from '@remixicon/react';
+import { RiArrowDownLine, RiArrowUpLine, RiReceiptLine } from '@remixicon/react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
@@ -153,6 +153,33 @@ describe('Listy', () => {
     expect(empty).toContain(ANALIZY_EMPTY.noSalesThisMonth.message);
   });
 
+  it('korekta in minus w „Ostatnich fakturach”: strzałka w dół, destructive, minus typograficzny', () => {
+    const down = renderToStaticMarkup(<RiArrowDownLine />).match(/ d="([^"]+)"/)?.[1];
+    const up = renderToStaticMarkup(<RiArrowUpLine />).match(/ d="([^"]+)"/)?.[1];
+    const out = html(
+      <RecentExpensesFeed title="Ostatnie faktury" description="d" direction="in"
+        items={[{ id: 'k', name: 'Klient', subtitle: 'Korekta · KOR/1 · 05.10.2026', amount: -1230 }]} empty={ANALIZY_EMPTY.noSalesThisMonth} />,
+    );
+    expect(out).toContain('\u22121230,00 zł');
+    expect(out).not.toContain('-1230,00 zł');
+    expect(out).toContain('text-destructive');
+    expect(out).not.toContain('text-green-700');
+    expect(out).toContain(down!);
+    expect(out).not.toContain(up!);
+  });
+
+  it('korekta zakupu in minus w „Ostatnich wydatkach”: strzałka w górę, zielony, minus typograficzny', () => {
+    const up = renderToStaticMarkup(<RiArrowUpLine />).match(/ d="([^"]+)"/)?.[1];
+    const out = html(
+      <RecentExpensesFeed title="Ostatnie wydatki" description="d" direction="out"
+        items={[{ id: 'k', name: 'Dostawca', subtitle: '05.10.2026', amount: -50 }]} empty={ANALIZY_EMPTY.noCostsThisMonth} />,
+    );
+    expect(out).toContain('\u221250,00 zł');
+    expect(out).toContain('text-green-700');
+    expect(out).not.toContain('text-destructive');
+    expect(out).toContain(up!);
+  });
+
   it('wiersze: tytuły i wartości', () => {
     const out = html(<SpendingStreaksCard title="VAT z wydatków" description="d"
       rows={[{ icon: RiReceiptLine, iconClassName: 'text-foreground', title: 'VAT naliczony', value: '23,00 zł' }]} />);
@@ -185,6 +212,8 @@ describe('Kalendarz', () => {
       days={[{ date: '2026-10-19', amount: 0 }, { date: '2026-10-20', amount: 50 }]} empty={ANALIZY_EMPTY.noCostsInWindow} />);
     expect(out).toContain('aria-label="20.10.2026 — 50,00 zł"');
     expect(out).toContain('title="poniedziałek"');
+    // Przewijany w bok kontener osiągalny klawiaturą (WCAG 2.1.1, axe `scrollable-region-focusable`).
+    expect(out).toMatch(/<div(?=[^>]*role="region")(?=[^>]*aria-label="Kalendarz wydatków")(?=[^>]*tabindex="0")[^>]*overflow-x-auto/);
     expect(out).toContain('bg-chart-1');
   });
 
@@ -201,6 +230,8 @@ describe('Klienci', () => {
     const out = html(<AssetAllocationCard data={slices} concentrated empty={ANALIZY_EMPTY.noSalesThisMonth} />);
     expect(out).toContain('Udział klientów w przychodach');
     expect(out).toContain(CONCENTRATION_WARNING);
+    // Odpowiednik tekstowy wykresu (WCAG 1.1.1): kwota i udział każdego wycinka.
+    expect(out).toMatch(/<ul[^>]*class="sr-only"[^>]*>.*Paliwo: 600,00 zł \(60%\).*Pozostałe: 400,00 zł \(40%\)/);
     expect(html(<AssetAllocationCard data={slices} concentrated={false} empty={ANALIZY_EMPTY.noSalesThisMonth} />))
       .not.toContain(CONCENTRATION_WARNING);
     expect(html(<AssetAllocationCard data={[]} concentrated={false} empty={ANALIZY_EMPTY.noInvoices} />))

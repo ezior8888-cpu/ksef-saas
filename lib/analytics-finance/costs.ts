@@ -1,4 +1,5 @@
 import type { CostEntry } from '@/lib/dashboard/costs';
+import { shortCompanyName } from '@/lib/format/company-name';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 import { changePct, sumBy, topWithOther, type BreakdownSlice } from './breakdown';
@@ -77,9 +78,15 @@ export function costCategoryBreakdown(
   monthKey: string,
   limit = 5,
 ): BreakdownSlice[] {
-  const byCategory = sumBy(entries.filter((e) => inMonth(e, monthKey)), categoryOf, (e) => e.outflow);
+  const current = entries.filter((e) => inMonth(e, monthKey));
+  // `category_label` to wolny tekst: „Paliwo” i „paliwo” to jedna kategoria
+  // (jak klucz w `recurringSuppliers`). Podpis — pierwsza pisownia z wpisów.
+  const normalized = (entry: CostEntry) => categoryOf(entry).trim().toLocaleLowerCase('pl');
+  const labels = new Map<string, string>();
+  for (const entry of current) if (!labels.has(normalized(entry))) labels.set(normalized(entry), categoryOf(entry).trim());
+  const byCategory = sumBy(current, normalized, (e) => e.outflow);
   return topWithOther(
-    [...byCategory].map(([label, amount]) => ({ key: `kat:${label.toLowerCase()}`, label, amount })),
+    [...byCategory].map(([key, amount]) => ({ key: `kat:${key}`, label: labels.get(key) ?? key, amount })),
     limit,
     OTHER_CATEGORIES_LABEL,
   );
@@ -99,7 +106,13 @@ export function recentCosts(entries: readonly CostEntry[], monthKey: string, lim
     .slice()
     .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.id.localeCompare(a.id))
     .slice(0, limit)
-    .map((e) => ({ id: e.id, date: e.issueDate, name: e.sellerName ?? e.sellerNip ?? 'Wydatek', amount: e.outflow }));
+    .map((e) => ({
+      id: e.id,
+      date: e.issueDate,
+      // Jak „Stałe koszty” (`recurringSuppliers`): skrócona forma prawna (§7.2), bez nazwy — „NIP …”.
+      name: shortCompanyName(e.sellerName ?? (e.sellerNip ? `NIP ${e.sellerNip}` : 'Wydatek')),
+      amount: e.outflow,
+    }));
 }
 
 export interface CostVatSummary {

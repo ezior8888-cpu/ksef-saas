@@ -64,7 +64,7 @@ export default async function InboxPage() {
             </Alert>
           ) : null}
           <Card>
-            <InboxTable rows={rows} />
+            <InboxTable rows={rows} statusUnavailable={links === null} />
           </Card>
         </>
       )}

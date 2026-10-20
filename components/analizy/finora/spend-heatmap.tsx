@@ -46,7 +46,14 @@ const SpendHeatmap = ({ title, description, days, empty, className }: SpendHeatm
         {sortedPositive.length === 0 ? (
           <PulpitEmptyState {...empty} />
         ) : (
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          // Odstępstwo od Finory (WCAG 2.1.1): siatka przewija się w bok, więc
+          // kontener jest regionem z fokusem — przewinie się go strzałkami.
+          <div
+            role="region"
+            aria-label={title}
+            tabIndex={0}
+            className="focus-visible:ring-ring/50 flex gap-2 overflow-x-auto rounded-sm pb-1 outline-none focus-visible:ring-[3px]"
+          >
             <div className="flex flex-col gap-3.5" aria-hidden="true">
               {WEEKDAY_LABELS.map((label, index) => (
                 <span

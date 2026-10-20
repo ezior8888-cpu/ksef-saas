@@ -103,8 +103,8 @@ const STATUS_LABELS: Record<RowStatus, string> = {
 
 // Kolory jak `REMINDER_STATUS_STYLES` / `TRANSACTION_STATUS_STYLES` w Finorze.
 const STATUS_STYLES: Record<RowStatus, string> = {
-  pending: 'bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400',
-  sent: 'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400',
+  pending: 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
+  sent: 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400',
   failed: 'bg-destructive/10 text-destructive',
   cancelled: 'bg-destructive/10 text-destructive',
   none: 'bg-muted text-muted-foreground',
@@ -189,7 +189,7 @@ function ReminderCell({ invoice }: { invoice: OverdueInvoice }) {
         Wysłane {invoice.reminders_sent_count}/3
       </span>
       {notice ? (
-        <span className={cn('text-xs', invoice.reminder_status === 'review' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+        <span className={cn('text-xs', invoice.reminder_status === 'review' ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
           {notice}
         </span>
       ) : null}
@@ -312,6 +312,76 @@ export function OverdueDashboardError({ message }: { message: string }) {
   );
 }
 
+/**
+ * Kolumny tabeli P7. `onPrepare` otwiera podgląd przypomnienia; eksport dla
+ * testu filtra „Status przypomnienia”.
+ */
+export function overdueColumns(onPrepare: (invoice: OverdueInvoice) => void): ColumnDef<OverdueInvoice>[] {
+  return [
+    {
+      header: 'Faktura',
+      accessorKey: 'internal_number',
+      cell: ({ row }) => (
+        <div className="flex flex-col">
+          <Link
+            href={`/invoices/${row.original.id}`}
+            className={cn('h-auto justify-start px-0! font-mono', buttonVariants({ variant: 'link' }))}
+          >
+            {row.original.internal_number || '—'}
+          </Link>
+          <span className="text-muted-foreground tabular-nums">Do zapłaty {money(row.original.amount_due)}</span>
+        </div>
+      ),
+      size: 160,
+    },
+    {
+      header: 'Kontrahent',
+      id: 'buyer',
+      accessorFn: (row) => row.buyer_name,
+      cell: ({ row }) => <BuyerCell invoice={row.original} />,
+      size: 260,
+    },
+    {
+      header: 'Termin płatności',
+      id: 'dueDate',
+      accessorFn: (row) => row.payment_due_date,
+      cell: ({ row }) => (
+        <div className="flex flex-col">
+          <span className="text-muted-foreground tabular-nums">{dueLabel(row.original)}</span>
+          <span className="text-destructive">{daysOverdueLabel(row.original.days_overdue)}</span>
+        </div>
+      ),
+    },
+    {
+      header: 'Przypomnienie',
+      id: 'remindOn',
+      accessorFn: (row) => {
+        const latest = row.latest_reminder;
+        return latest && latest !== 'unavailable' ? latest.scheduledFor : '';
+      },
+      cell: ({ row }) => <ReminderCell invoice={row.original} />,
+    },
+    {
+      header: 'Status',
+      id: 'status',
+      accessorFn: (row) => rowStatus(row),
+      filterFn: 'equalsString', // filtr select: cała wartość, jak w Finorze
+      cell: ({ row }) => <StatusAvatar status={rowStatus(row.original)} />,
+      size: 100,
+    },
+    {
+      id: 'actions',
+      header: () => 'Akcje',
+      cell: ({ row }) => (
+        <OverdueRowActions invoice={row.original} onPrepare={() => onPrepare(row.original)} />
+      ),
+      size: 120,
+      enableHiding: false,
+      enableSorting: false,
+    },
+  ];
+}
+
 export function OverdueDashboard({ overdueInvoices, stats, canManageSettings = false }: Props) {
   const router = useRouter();
   const [reminderInvoice, setReminderInvoice] = useState<OverdueInvoice | null>(null);
@@ -319,71 +389,7 @@ export function OverdueDashboard({ overdueInvoices, stats, canManageSettings = f
   const [globalFilter, setGlobalFilter] = useState('');
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
 
-  const columns: ColumnDef<OverdueInvoice>[] = useMemo(
-    () => [
-      {
-        header: 'Faktura',
-        accessorKey: 'internal_number',
-        cell: ({ row }) => (
-          <div className="flex flex-col">
-            <Link
-              href={`/invoices/${row.original.id}`}
-              className={cn('h-auto justify-start px-0! font-mono', buttonVariants({ variant: 'link' }))}
-            >
-              {row.original.internal_number || '—'}
-            </Link>
-            <span className="text-muted-foreground tabular-nums">Do zapłaty {money(row.original.amount_due)}</span>
-          </div>
-        ),
-        size: 160,
-      },
-      {
-        header: 'Kontrahent',
-        id: 'buyer',
-        accessorFn: (row) => row.buyer_name,
-        cell: ({ row }) => <BuyerCell invoice={row.original} />,
-        size: 260,
-      },
-      {
-        header: 'Termin płatności',
-        id: 'dueDate',
-        accessorFn: (row) => row.payment_due_date,
-        cell: ({ row }) => (
-          <div className="flex flex-col">
-            <span className="text-muted-foreground tabular-nums">{dueLabel(row.original)}</span>
-            <span className="text-destructive">{daysOverdueLabel(row.original.days_overdue)}</span>
-          </div>
-        ),
-      },
-      {
-        header: 'Przypomnienie',
-        id: 'remindOn',
-        accessorFn: (row) => {
-          const latest = row.latest_reminder;
-          return latest && latest !== 'unavailable' ? latest.scheduledFor : '';
-        },
-        cell: ({ row }) => <ReminderCell invoice={row.original} />,
-      },
-      {
-        header: 'Status',
-        id: 'status',
-        accessorFn: (row) => rowStatus(row),
-        cell: ({ row }) => <StatusAvatar status={rowStatus(row.original)} />,
-        size: 100,
-      },
-      {
-        id: 'actions',
-        header: () => 'Akcje',
-        cell: ({ row }) => (
-          <OverdueRowActions invoice={row.original} onPrepare={() => setReminderInvoice(row.original)} />
-        ),
-        size: 120,
-        enableHiding: false,
-        enableSorting: false,
-      },
-    ],
-    [],
-  );
+  const columns = useMemo(() => overdueColumns(setReminderInvoice), []);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- tanstack zwraca funkcje, których React Compiler nie zapamiętuje (jak w Finorze)
   const table = useReactTable({

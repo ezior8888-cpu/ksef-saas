@@ -582,9 +582,9 @@ function CcEmailsInput({
   );
 }
 
-const BADGE_OK = 'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400';
+const BADGE_OK = 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400';
 const BADGE_ERROR = 'bg-red-600/10 text-red-600 dark:bg-red-400/10 dark:text-red-400';
-const BADGE_WARN = 'bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400';
+const BADGE_WARN = 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400';
 
 function RecentJobRow({ job }: { job: ExportJobPreviewRow }) {
   const statusDefaults = {

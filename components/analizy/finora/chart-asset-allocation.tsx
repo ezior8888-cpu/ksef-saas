@@ -68,6 +68,13 @@ const AssetAllocationCard = ({ data, concentrated, empty, className }: AssetAllo
                 <ChartLegend content={<ChartLegendContent nameKey="slot" className="flex-wrap gap-x-4 gap-y-2" />} />
               </PieChart>
             </ChartContainer>
+            {/* Odstępstwo od Finory (WCAG 1.1.1): kwoty i udziały są w wykresie
+                tylko w podpowiedzi pod myszą — tu jako tekst dla czytnika. */}
+            <ul className="sr-only">
+              {data.map((slice) => (
+                <li key={slice.key}>{`${slice.label}: ${formatPlMoney(slice.amount)} zł (${Math.round(slice.percentage)}%)`}</li>
+              ))}
+            </ul>
             {concentrated ? <p className="text-destructive text-center text-sm font-medium">{CONCENTRATION_WARNING}</p> : null}
           </>
         )}

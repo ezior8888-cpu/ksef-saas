@@ -131,10 +131,16 @@ describe('układ logowania (AuthSplitLayout)', () => {
     expect(AUTH_SLOGAN_TITLE).toBe('Faktury w KSeF bez stresu.');
     expect(AUTH_SLOGAN_TEXT).toBe('FLO pilnuje terminów, płatności i VAT‑u za Ciebie.');
     expect(html.split(AUTH_SLOGAN_TITLE).length - 1).toBe(2); // telefon + karta
-    // Panel idzie za motywem: tło i tekst z tokenów, bez czerni i bieli na sztywno.
-    expect(html).toContain('background-color:var(--background)');
-    expect(html).not.toContain('text-white');
-    expect(html).not.toContain('#F5F5F5');
+    // Jak w Finorze: prawa połowa zawsze czarna, tekst jasny na czarnym
+    // (w obu motywach), karta z wycięciem biała z czarnym tekstem.
+    expect(html).toContain('background-color:#000000');
+    expect(html).not.toContain('background-color:var(--background)');
+    expect(html).toMatch(/text-4xl[^"]*text-white|text-white[^"]*text-4xl/);
+    expect(html).toContain('text-xl text-white');
+    expect(html).toContain('fill="#ffff"');
+    expect(html).toContain('#F5F5F5');
+    expect(html).toContain('text-black');
+    expect(html).not.toMatch(/text-foreground[^"]*xl:text-5xl/);
     expect(html).not.toMatch(OLD_LOOK);
   });
 
@@ -207,11 +213,12 @@ describe('tło ze znaków (LetterGlitch z Finory)', () => {
   });
 
   it('tło kontenera i winieta z koloru motywu; domyślnie zachowanie Finory', () => {
+    // Finora ma tło na sztywno (#000000) w obu motywach, więc nie idzie za motywem.
     const themed = renderToStaticMarkup(<AuthGlitchBackground />);
-    expect(themed).toContain('background-color:var(--background)');
-    expect(themed).toContain('color-mix(in oklab, var(--background) 90%, transparent)');
+    expect(themed).toContain('background-color:#000000');
+    expect(themed).not.toContain('var(--background)');
+    expect(themed).toContain('rgba(9, 11, 12, 0.5)');
     expect(themed).toContain('aria-hidden="true"');
-    expect(themed).not.toContain('#000000');
 
     const finora = renderToStaticMarkup(<LetterGlitch />);
     expect(finora).toContain('background-color:#000000');
@@ -276,6 +283,12 @@ describe('rejestracja (register/index.tsx Finory)', () => {
     expect(html).toContain('id="name"');
     expect(buttonsNamed(html, 'Utwórz konto')).toBe(1);
     expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Utwórz konto<\/button>/);
+  });
+
+  it('/login: informacja o regulaminie i polityce prywatności (Google zakłada konto)', async () => {
+    const html = await login();
+    expect(html).toContain('href="/legal/regulamin"');
+    expect(html).toContain('href="/legal/polityka-prywatnosci"');
   });
 
   it('regulamin w miejscu pola zgody, odsyłacz do logowania, bez angielskich tekstów', async () => {

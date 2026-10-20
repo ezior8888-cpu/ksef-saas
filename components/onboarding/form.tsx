@@ -204,7 +204,7 @@ function CreateOrgPanel() {
 
       {info && (
         <Alert role="status" className="border-amber-500/40">
-          <RiAlertLine className="text-amber-600 dark:text-amber-400" />
+          <RiAlertLine className="text-amber-700 dark:text-amber-400" />
           <AlertDescription className="space-y-2 text-sm/relaxed text-foreground">
             <p>{info}</p>
             {duplicates.length > 0 && (

@@ -126,7 +126,7 @@ const COLUMN_STYLES: Record<KpirEntry['kind'], string> = {
   cost: 'bg-primary/10 text-primary',
 };
 const AMOUNT_STYLES: Record<KpirEntry['kind'], string> = {
-  revenue: 'text-green-600 dark:text-green-400',
+  revenue: 'text-green-700 dark:text-green-400',
   cost: 'text-destructive',
 };
 
@@ -212,6 +212,101 @@ function ColumnBadge({ entry }: { entry: KpirEntry }) {
   return <Badge className={COLUMN_STYLES[entry.kind]}>Kol. {entry.column}</Badge>;
 }
 
+/** Kolumny tabeli KPiR (stałe). Eksport dla testu filtrów „Rodzaj” i „Kolumna”. */
+export const KPIR_COLUMNS: ColumnDef<KpirEntry>[] = [
+  {
+    header: 'Lp.',
+    accessorKey: 'lp',
+    cell: ({ row }) => <span className="text-muted-foreground tabular-nums">{row.original.lp}</span>,
+    size: 70,
+  },
+  {
+    header: 'Data',
+    accessorKey: 'date',
+    cell: ({ row }) => (
+      <div className="flex flex-col">
+        <span className="text-muted-foreground tabular-nums">{formatIsoDatePl(row.original.date)}</span>
+        {row.original.dateRemark ? (
+          <span className="text-xs text-amber-700 dark:text-amber-400">{row.original.dateRemark}</span>
+        ) : null}
+      </div>
+    ),
+    size: 120,
+  },
+  {
+    header: 'Nr dowodu',
+    id: 'documentNumber',
+    accessorFn: (row) => row.documentNumber ?? '',
+    cell: ({ row }) => <span className="font-mono">{row.original.documentNumber ?? '—'}</span>,
+    size: 150,
+  },
+  {
+    header: 'Kontrahent',
+    id: 'counterparty',
+    accessorKey: 'counterparty',
+    cell: ({ row }) => (
+      <div className="flex items-center gap-2">
+        <Avatar className="size-9 items-center justify-center">
+          <AvatarFallback className="text-xs">{companyInitials(row.original.counterparty)}</AvatarFallback>
+        </Avatar>
+        <div className="flex min-w-0 flex-col">
+          <span className="max-w-56 truncate font-medium" title={row.original.counterparty}>
+            {row.original.counterparty === '—' ? '—' : shortenLegalForm(row.original.counterparty)}
+          </span>
+          {row.original.counterpartyNip ? (
+            <span className="text-muted-foreground font-mono">{row.original.counterpartyNip}</span>
+          ) : null}
+        </div>
+      </div>
+    ),
+    size: 260,
+  },
+  {
+    header: 'Opis',
+    accessorKey: 'description',
+    cell: ({ row }) => <span className="text-muted-foreground">{row.original.description}</span>,
+    size: 180,
+  },
+  {
+    header: 'Kolumna',
+    id: 'column',
+    accessorFn: (row) => row.column,
+    filterFn: 'equalsString', // filtr select: cała wartość, jak w Finorze
+    cell: ({ row }) => <ColumnBadge entry={row.original} />,
+    size: 110,
+  },
+  {
+    header: 'Rodzaj',
+    id: 'kind',
+    accessorKey: 'kind',
+    filterFn: 'equalsString',
+    enableHiding: true,
+  },
+  {
+    header: 'Kwota',
+    id: 'amount',
+    accessorFn: (row) => (row.kind === 'revenue' ? row.amount : -row.amount),
+    cell: ({ row }) => (
+      <div className="flex flex-col">
+        <span className={cn('font-medium tabular-nums', AMOUNT_STYLES[row.original.kind])}>
+          {signedMoney(row.original)}
+        </span>
+        {row.original.amountRemark ? (
+          <span className="text-muted-foreground text-xs">{row.original.amountRemark}</span>
+        ) : null}
+      </div>
+    ),
+    size: 170,
+  },
+  {
+    id: 'actions',
+    header: () => 'Akcje',
+    enableSorting: false,
+    cell: ({ row }) => <EntryActions entry={row.original} />,
+    size: 90,
+  },
+];
+
 export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
   const router = useRouter();
   const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -233,105 +328,11 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
   const monthLabel = MONTHS[Math.min(12, Math.max(1, month)) - 1] ?? '';
   const exportHref = `/reports/exports?period=${year}-${String(month).padStart(2, '0')}&format=kpir_excel`;
 
-  const columns: ColumnDef<KpirEntry>[] = useMemo(
-    () => [
-      {
-        header: 'Lp.',
-        accessorKey: 'lp',
-        cell: ({ row }) => <span className="text-muted-foreground tabular-nums">{row.original.lp}</span>,
-        size: 70,
-      },
-      {
-        header: 'Data',
-        accessorKey: 'date',
-        cell: ({ row }) => (
-          <div className="flex flex-col">
-            <span className="text-muted-foreground tabular-nums">{formatIsoDatePl(row.original.date)}</span>
-            {row.original.dateRemark ? (
-              <span className="text-xs text-amber-600 dark:text-amber-400">{row.original.dateRemark}</span>
-            ) : null}
-          </div>
-        ),
-        size: 120,
-      },
-      {
-        header: 'Nr dowodu',
-        id: 'documentNumber',
-        accessorFn: (row) => row.documentNumber ?? '',
-        cell: ({ row }) => <span className="font-mono">{row.original.documentNumber ?? '—'}</span>,
-        size: 150,
-      },
-      {
-        header: 'Kontrahent',
-        id: 'counterparty',
-        accessorKey: 'counterparty',
-        cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            <Avatar className="size-9 items-center justify-center">
-              <AvatarFallback className="text-xs">{companyInitials(row.original.counterparty)}</AvatarFallback>
-            </Avatar>
-            <div className="flex min-w-0 flex-col">
-              <span className="max-w-56 truncate font-medium" title={row.original.counterparty}>
-                {row.original.counterparty === '—' ? '—' : shortenLegalForm(row.original.counterparty)}
-              </span>
-              {row.original.counterpartyNip ? (
-                <span className="text-muted-foreground font-mono">{row.original.counterpartyNip}</span>
-              ) : null}
-            </div>
-          </div>
-        ),
-        size: 260,
-      },
-      {
-        header: 'Opis',
-        accessorKey: 'description',
-        cell: ({ row }) => <span className="text-muted-foreground">{row.original.description}</span>,
-        size: 180,
-      },
-      {
-        header: 'Kolumna',
-        id: 'column',
-        accessorFn: (row) => row.column,
-        cell: ({ row }) => <ColumnBadge entry={row.original} />,
-        size: 110,
-      },
-      {
-        header: 'Rodzaj',
-        id: 'kind',
-        accessorKey: 'kind',
-        enableHiding: true,
-      },
-      {
-        header: 'Kwota',
-        id: 'amount',
-        accessorFn: (row) => (row.kind === 'revenue' ? row.amount : -row.amount),
-        cell: ({ row }) => (
-          <div className="flex flex-col">
-            <span className={cn('font-medium tabular-nums', AMOUNT_STYLES[row.original.kind])}>
-              {signedMoney(row.original)}
-            </span>
-            {row.original.amountRemark ? (
-              <span className="text-muted-foreground text-xs">{row.original.amountRemark}</span>
-            ) : null}
-          </div>
-        ),
-        size: 170,
-      },
-      {
-        id: 'actions',
-        header: () => 'Akcje',
-        enableSorting: false,
-        cell: ({ row }) => <EntryActions entry={row.original} />,
-        size: 90,
-      },
-    ],
-    [],
-  );
 
   // eslint-disable-next-line react-hooks/incompatible-library -- tanstack zwraca funkcje, których React Compiler nie zapamiętuje (jak w Finorze)
   const table = useReactTable({
     data: entries,
-    columns,
+    columns: KPIR_COLUMNS,
     state: { columnFilters, globalFilter, pagination, columnVisibility: { kind: false } },
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
@@ -364,7 +365,7 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
       label: profit >= 0 ? 'Dochód' : 'Strata',
       value: `${formatPlMoney(profit)} zł`,
       icon: RiScales3Line,
-      valueClassName: profit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-destructive',
+      valueClassName: profit >= 0 ? 'text-green-700 dark:text-green-400' : 'text-destructive',
     },
     { label: 'Wpisy w księdze', value: formatPlInt(entries.length), icon: RiBook2Line },
   ];
@@ -448,7 +449,7 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
                         <ColumnBadge entry={entry} />
                         <span>{entry.description}</span>
                         {entry.dateRemark ? (
-                          <span className="text-amber-600 dark:text-amber-400">{entry.dateRemark}</span>
+                          <span className="text-amber-700 dark:text-amber-400">{entry.dateRemark}</span>
                         ) : null}
                       </>
                     }

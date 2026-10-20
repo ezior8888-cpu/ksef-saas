@@ -111,6 +111,17 @@ describe('karty analizy sprzedaży', () => {
     expect(costs).not.toContain('Raport wstrzymany');
   });
 
+  it('korekta in minus w „Ostatnich fakturach”: podpis „Korekta” i minus typograficzny', async () => {
+    const p = props({
+      invoices: [invoice('kor', { invoice_kind: 'correction', internal_number: 'KOR/1', net_total: -1000, gross_total: -1230 })],
+      invoice_line_items: [],
+    });
+    const recent = html(await sprzedaz.RecentSalesSlot(p));
+    expect(recent).toContain('Korekta · KOR/1 · 05.10.2026');
+    expect(recent).toContain('\u22121230,00 zł');
+    expect(recent).toContain('text-destructive');
+  });
+
   it('przyjęta faktura bez środowiska: komunikat strażnika na karcie', async () => {
     const p = props({ invoices: [invoice('x', { ksef_environment: null })] });
     expect(html(await sprzedaz.SalesTrendSlot(p))).toContain('Przyjęte faktury wymagają uzgodnienia środowiska KSeF');

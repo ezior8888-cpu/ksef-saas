@@ -97,8 +97,8 @@ export function PasswordChangeCard() {
         </Field>
 
         {result?.ok && (
-          <Alert role="status" className="border-none bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400">
-            <AlertDescription className="text-green-600/80 dark:text-green-400/80">Hasło zmienione.</AlertDescription>
+          <Alert role="status" className="border-none bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400">
+            <AlertDescription className="text-green-800 dark:text-green-400/80">Hasło zmienione.</AlertDescription>
           </Alert>
         )}
         {failure && (

@@ -42,7 +42,8 @@ const SettingsNav = ({ tabs, onSelect }: SettingsNavProps) => {
               buttonVariants({ variant: 'ghost' }),
               'justify-between',
               active &&
-                'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary dark:hover:bg-primary/30 dark:bg-primary/20'
+                // Jasny motyw: text-chart-3 (5,4:1 na primary/15; sam primary 4,13:1 < AA), jak w app-sidebar.
+                'bg-primary/15 text-chart-3 hover:bg-primary/20 hover:text-chart-3 dark:bg-primary/20 dark:text-primary dark:hover:bg-primary/30 dark:hover:text-primary'
             )}
           >
             {item.label}

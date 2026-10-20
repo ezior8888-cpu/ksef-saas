@@ -29,9 +29,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 // Hook Imports
 import { usePagination } from '@/hooks/use-pagination'
 
-// Utils Imports
-import { cn } from '@/lib/utils'
-
 /**
  * Port tabeli Finora `src/views/pages/transactions/transaction-table/data-table.tsx`
  * (plan Finora P8 Wydatki i P9 Skrzynka KSeF — „ten sam komponent tabeli”).
@@ -46,7 +43,9 @@ import { cn } from '@/lib/utils'
  *   i stronicowaniu) rysuje `renderCards` — karty jak dziś (plan §7.2:
  *   przewijanie tabeli w bok na 375 px to błąd);
  * - bez kolumny zaznaczania: w Finorze nic z zaznaczeniem nie robi, u nas też
- *   nie ma akcji zbiorczej.
+ *   nie ma akcji zbiorczej;
+ * - nagłówek sortowalny to `<button>` zamiast fokusowalnego `<div>`, a <th>
+ *   ma `aria-sort` (WCAG 4.1.2 i 1.3.1); wygląd bez zmian.
  */
 
 declare module '@tanstack/react-table' {
@@ -216,33 +215,32 @@ export function TransactionDatatable<T>({
                   {table.getHeaderGroups().map(headerGroup => (
                     <TableRow key={headerGroup.id} className='h-14 border-t'>
                       {headerGroup.headers.map(header => {
+                        const canSort = !header.isPlaceholder && header.column.getCanSort()
+                        const sorted = header.column.getIsSorted()
+
                         return (
                           <TableHead
                             key={header.id}
                             style={{ width: `${header.getSize()}px` }}
                             className='text-muted-foreground first:pl-4 last:px-4 last:text-center'
+                            aria-sort={
+                              canSort ? (sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : 'none') : undefined
+                            }
                           >
-                            {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                              <div
-                                className={cn(
-                                  header.column.getCanSort() &&
-                                    'flex h-full cursor-pointer items-center justify-between gap-2 select-none'
-                                )}
+                            {header.isPlaceholder ? null : canSort ? (
+                              // Finora: `<div onClick tabIndex>`; u nas przycisk (WCAG 4.1.2),
+                              // stan sortowania ogłasza `aria-sort` na <th>.
+                              <button
+                                type='button'
+                                className='flex h-full w-full cursor-pointer items-center justify-between gap-2 text-left select-none'
                                 onClick={header.column.getToggleSortingHandler()}
-                                onKeyDown={e => {
-                                  if (header.column.getCanSort() && (e.key === 'Enter' || e.key === ' ')) {
-                                    e.preventDefault()
-                                    header.column.getToggleSortingHandler()?.(e)
-                                  }
-                                }}
-                                tabIndex={header.column.getCanSort() ? 0 : undefined}
                               >
                                 {flexRender(header.column.columnDef.header, header.getContext())}
                                 {{
                                   asc: <RiArrowUpSLine className='shrink-0 opacity-60' size={16} aria-hidden='true' />,
                                   desc: <RiArrowDownSLine className='shrink-0 opacity-60' size={16} aria-hidden='true' />
-                                }[header.column.getIsSorted() as string] ?? null}
-                              </div>
+                                }[sorted as string] ?? null}
+                              </button>
                             ) : (
                               flexRender(header.column.columnDef.header, header.getContext())
                             )}

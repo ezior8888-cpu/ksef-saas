@@ -128,7 +128,9 @@ export async function RecentSalesSlot({ supabase, tenantId, nowIso, month, class
         items={recentSales(invoices, month, saleBuyerName).map((s) => ({
           id: s.id,
           name: s.name,
-          subtitle: s.number ? `${s.number} · ${isoDatePl(s.date)}` : isoDatePl(s.date),
+          subtitle: [s.kind === 'correction' ? 'Korekta' : null, s.number, isoDatePl(s.date)]
+            .filter(Boolean)
+            .join(' · '),
           amount: s.amount,
         }))}
         direction="in"

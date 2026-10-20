@@ -103,9 +103,9 @@ export function FileImportDialog({ source, tenantId, onClose }: Props) {
             accept={FILE_ACCEPT[source]}
             disabled={isUploading}
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="sr-only"
+            className="peer sr-only"
           />
-          <div className="border-2 border-dashed p-8 text-center transition-colors hover:border-primary/50">
+          <div className="border-2 border-dashed p-8 text-center transition-colors hover:border-primary/50 peer-focus-visible:border-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring/50">
             <RiFileExcel2Line className="mx-auto mb-3 size-8 text-muted-foreground" />
             {file ? (
               <>

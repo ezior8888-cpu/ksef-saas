@@ -94,7 +94,7 @@ export function BatchPdfDownload() {
         ) : (
           <RiFileZipLine />
         )}
-        ZIP
+        PDF za miesiąc (ZIP)
       </Button>
     </div>
   );

@@ -409,3 +409,37 @@ describe('Powiadomienia e-mail: przełączniki Finory', () => {
     expect(html.match(/aria-checked="true"/g)).toHaveLength(3);
   });
 });
+
+describe('dostępność ustawień (WCAG AA)', () => {
+  const read = (f: string) => readFileSync(join(process.cwd(), f), 'utf8');
+
+  it('jasny motyw: tekst odznak i alertów bez green-600/amber-600 (kontrast < 4,5:1)', () => {
+    const files = [
+      'app/(dashboard)/settings/ksef/page.tsx',
+      'app/(dashboard)/settings/billing/page.tsx',
+      'app/(dashboard)/settings/billing/_components/plan-cards.tsx',
+      'app/(dashboard)/settings/security/_components/two-factor-card.tsx',
+      'app/(dashboard)/settings/security/_components/password-change-card.tsx',
+      'app/(dashboard)/settings/account/_components/gdpr-section.tsx',
+      'components/settings/accountant-list.tsx',
+      'components/settings/complete-nip-form.tsx',
+      'components/onboarding/form.tsx',
+    ];
+    for (const f of files) {
+      expect(read(f), f).not.toMatch(/(?<!dark:)text-(green|amber)-600/);
+    }
+  });
+
+  it('aktywna zakładka: w jasnym motywie text-chart-3 (primary/15 daje 4,13:1)', () => {
+    const src = read('components/settings/finora/settings-nav.tsx');
+    expect(src).toContain('text-chart-3');
+    expect(src).toContain('dark:text-primary');
+    expect(src).not.toMatch(/(?<!dark:)(?<!dark:hover:)(?<!-)\btext-primary\b/);
+  });
+
+  it('okno importu z pliku: pole pliku daje widoczny fokus strefie upuszczania', () => {
+    const src = read('components/onboarding/file-import-dialog.tsx');
+    expect(src).toMatch(/className="sr-only peer"|className="peer sr-only"/);
+    expect(src).toContain('peer-focus-visible:ring');
+  });
+});

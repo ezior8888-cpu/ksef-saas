@@ -24,7 +24,7 @@ const STATUS_CONFIG: Record<
     icon: CheckCircle2,
     // Kolory statusów Finory (`INVOICE_STATUS_STYLES`, plakietka „Paid”).
     className:
-      'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400',
+      'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400',
   },
   exempt: {
     label: 'Zwolniony VAT',
@@ -72,7 +72,7 @@ export function VatStatusBadge({
   const isWarning = Boolean(warning) && status === 'active';
 
   const finalClassName = isWarning
-    ? 'bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400'
+    ? 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400'
     : config.className;
 
   const sizeClass =

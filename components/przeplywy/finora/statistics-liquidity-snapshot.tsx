@@ -25,10 +25,12 @@ type Props = {
   total: number
   /** Najstarsza zaległość w dniach; `null`, gdy nic nie jest po terminie. */
   oldestOverdueDays: number | null
+  /** Podpis sumy należności (§2.4 pkt 11) — ten sam co na karcie „Należności”. */
+  note: string
   className?: string
 }
 
-const StatisticsLiquiditySnapshot = ({ overdue, total, oldestOverdueDays, className }: Props) => {
+const StatisticsLiquiditySnapshot = ({ overdue, total, oldestOverdueDays, note, className }: Props) => {
   const overduePercentage = total > 0 ? Math.round((overdue / total) * 100) : 0
 
   return (
@@ -69,6 +71,7 @@ const StatisticsLiquiditySnapshot = ({ overdue, total, oldestOverdueDays, classN
             ) : null}
           </>
         )}
+        <p className='text-muted-foreground text-xs'>{note}</p>
       </CardContent>
     </Card>
   )

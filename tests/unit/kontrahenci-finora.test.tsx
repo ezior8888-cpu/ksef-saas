@@ -217,7 +217,10 @@ describe('ContractorsTable — układ Finory', () => {
       expect(html).toContain(text);
     }
     expect(html).toContain('role="switch"');
-    expect(html).toContain('aria-label="Przypomnienia włączone"');
+    // Nazwa przełącznika z kontrahentem (WCAG 2.4.6), bez stanu — stan ogłasza rola switch.
+    expect(html).toContain('aria-label="Przypomnienia dla Klient S.A."');
+    expect(html).toContain('aria-checked="true"');
+    expect(html).not.toContain('aria-label="Przypomnienia włączone"');
     expect(html).toContain('aria-label="Edytuj kontrahenta"');
     expect(html).toContain('name="q"');
     expect(html).not.toContain('ff-glass-pane');
@@ -229,7 +232,8 @@ describe('ContractorsTable — układ Finory', () => {
       <ContractorsTable contractors={[row({ receivables: null, reminder_excluded: true })]} q="" emptyText="Brak wyników." />,
     );
     expect(html).not.toContain('2460,00 zł');
-    expect(html).toContain('aria-label="Przypomnienia wyłączone"');
+    expect(html).toContain('aria-label="Przypomnienia dla Klient S.A."');
+    expect(html).toContain('aria-checked="false"');
     expect(html).toContain('—');
   });
 
@@ -258,6 +262,32 @@ describe('ContractorsTable — układ Finory', () => {
     const html = renderToStaticMarkup(await ContractorsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('1000,00 zł');
     expect(html).toContain('1 faktura');
+  });
+
+  it('faktura w walucie obcej: strona i kafel mówią, że ją pominięto (nie udają zera)', async () => {
+    const contractor = {
+      id: 'c1', tenant_id: TENANT, nip: '1234567890', name: 'Klient z EUR', address: null, email: null,
+      vat_status: 'active', validation_warning: null, last_used_at: null, reminder_excluded: false,
+    };
+    const eur = {
+      id: 'inv-eur', tenant_id: TENANT, direction: 'outgoing', origin: 'app', ksef_status: 'accepted',
+      ksef_environment: 'production', invoice_kind: 'regular', invoice_type: 'VAT', currency: 'EUR',
+      gross_total: 500, paid_amount: 0, payment_data: null, payment_due_date: '2020-01-10',
+      payment_status: 'unpaid', buyer_nip: '1234567890', buyer_data: { name: 'Klient z EUR' }, internal_number: 'FV/EUR/1',
+      parent_invoice_id: null, advance_invoice_ids: [], issue_date: '2020-01-01',
+    };
+    const db = database({ contractors: [contractor], invoices: [eur] });
+    ctx.get.mockResolvedValue({ supabase: db, tenantId: TENANT });
+    const html = renderToStaticMarkup(await ContractorsPage({ searchParams: Promise.resolve({}) }));
+    expect(html).toContain('Pominięto 1 fakturę w walucie obcej');
+    const tile = renderToStaticMarkup(await OverdueContractorsTile({ supabase: db, tenantId: TENANT }));
+    expect(tile).toContain('Pominięto 1 fakturę w walucie obcej');
+  });
+
+  it('bez waluty obcej: brak dopisku o pominięciu', async () => {
+    ctx.get.mockResolvedValue({ supabase: database({ contractors: [{ id: 'c1', tenant_id: TENANT, nip: '1234567890', name: 'K' }], invoices: [] }), tenantId: TENANT });
+    const html = renderToStaticMarkup(await ContractorsPage({ searchParams: Promise.resolve({}) }));
+    expect(html).not.toContain('w walucie obcej');
   });
 
   it('brak wyników wyszukiwania: komunikat i „Wyczyść”', () => {

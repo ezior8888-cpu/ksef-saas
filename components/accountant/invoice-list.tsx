@@ -5,7 +5,8 @@ import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/ca
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { AccountantPortalData } from '@/lib/accountant/load-accountant-portal';
 import { formatIsoDatePl } from '@/lib/format/iso-date';
-import { formatPlMoney } from '@/lib/format/pl';
+import { formatPlInt, formatPlMoney } from '@/lib/format/pl';
+import { plural } from '@/lib/i18n/plural';
 import { cn } from '@/lib/utils';
 
 type InvoiceRow = AccountantPortalData['invoices'][number];
@@ -18,9 +19,9 @@ const STATUS_LABELS: Record<string, string> = {
 
 // Kolory statusów Finory (`INVOICE_STATUS_STYLES`): przyjęta/odebrana zielono, offline bursztynowo.
 const STATUS_STYLES: Record<string, string> = {
-  accepted: 'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400',
-  received: 'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400',
-  offline_queued: 'bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400',
+  accepted: 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400',
+  received: 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400',
+  offline_queued: 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
 };
 
 function statusLabel(status: string | null): string {
@@ -87,7 +88,9 @@ export function AccountantInvoiceList({
     <Card className="gap-0 py-0 shadow-none">
       <CardHeader className="border-b py-4">
         <CardTitle className="text-sm font-medium">Dokumenty</CardTitle>
-        <CardDescription>{invoices.length} pozycji · najnowsze na górze</CardDescription>
+        <CardDescription>
+          {`${formatPlInt(invoices.length)} ${plural(invoices.length, ['pozycja', 'pozycje', 'pozycji'])} · najnowsze na górze`}
+        </CardDescription>
       </CardHeader>
 
       <div data-view="table" className="hidden lg:block">

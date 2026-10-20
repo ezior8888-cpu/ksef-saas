@@ -22,7 +22,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_email: 'Twoje konto nie ma przypisanego emaila.',
   request_failed: 'Nie udało się potwierdzić operacji. Odśwież stronę i sprawdź stan żądania.',
   not_pending: 'Żądanie zostało zakończone albo usuwanie konta już się rozpoczęło. Odśwież stronę.',
-  active_subscription: 'Jesteś jedyną osobą, która może zarządzać subskrypcją firmy. Po usunięciu konta opłaty pobierałyby się dalej, a nikt nie mógłby ich zatrzymać. Najpierw anuluj subskrypcję w „Subskrypcja i rozliczenia” albo nadaj innej osobie rolę właściciela lub administratora.',
+  active_subscription: 'Jesteś jedyną osobą, która może zarządzać subskrypcją firmy. Po usunięciu konta opłaty pobierałyby się dalej, a nikt nie mógłby ich zatrzymać. Najpierw anuluj subskrypcję w Ustawienia → Abonament albo nadaj innej osobie rolę właściciela lub administratora.',
 };
 const blockedOrganizations = (result: GdprDeletionResult | null) =>
   result && !result.ok && result.organizations?.length ? ` Dotyczy: ${result.organizations.join(', ')}.` : '';
@@ -78,8 +78,8 @@ export function GdprSection({ initialRequest = null }: { initialRequest?: Schedu
       </div>
 
       {cancellation?.ok && (
-        <Alert role="status" className="border-none bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400">
-          <AlertDescription className="text-green-600/80 dark:text-green-400/80">
+        <Alert role="status" className="border-none bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400">
+          <AlertDescription className="text-green-800 dark:text-green-400/80">
             Usunięcie konta zostało anulowane. Konto pozostaje aktywne.
           </AlertDescription>
         </Alert>

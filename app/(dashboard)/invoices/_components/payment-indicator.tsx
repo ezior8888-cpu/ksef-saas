@@ -14,12 +14,12 @@ import { cn } from '@/lib/utils';
 const STATES = {
   paid: {
     Icon: RiCheckLine,
-    avatar: 'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400',
+    avatar: 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400',
     tone: 'text-green-700 dark:text-green-400',
   },
   unpaid: {
     Icon: RiTimeLine,
-    avatar: 'bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400',
+    avatar: 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
     tone: 'text-amber-700 dark:text-amber-400',
   },
   overdue: {

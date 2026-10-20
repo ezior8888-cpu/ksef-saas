@@ -14,7 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const stats = vi.hoisted(() => ({
-  getExpenseMonthStats: vi.fn(),
+  getExpenseMonthTotals: vi.fn(),
+  getRecurringExpenseStats: vi.fn(),
   getInboxMonthCosts: vi.fn(),
   countExpensesToReview: vi.fn(),
   getLastInboxFetchAt: vi.fn(),
@@ -23,7 +24,10 @@ const stats = vi.hoisted(() => ({
 const router = vi.hoisted(() => ({ refresh: vi.fn(), push: vi.fn() }));
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 
+const pageContext = vi.hoisted(() => ({ get: vi.fn() }));
+
 vi.mock('@/lib/dashboard/expense-stats', () => stats);
+vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: pageContext.get }));
 vi.mock('@/lib/dashboard-shell-data', () => ({ getDashboardActiveOrgVerified: stats.verified }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
 vi.mock('sonner', () => ({ toast }));
@@ -58,6 +62,8 @@ import {
 } from '@/app/(dashboard)/inbox/_components/inbox-stat-cells';
 import { inboxAmount, inboxColumns, InboxTable } from '@/app/(dashboard)/inbox/_components/inbox-table';
 import { RiArrowRightUpLine } from '@remixicon/react';
+import ExpensesPage from '@/app/(dashboard)/expenses/page';
+import InboxPage from '@/app/(dashboard)/inbox/page';
 
 const supabase = {} as PageContext['supabase'];
 const TENANT = 'firma-a';
@@ -115,6 +121,23 @@ function invoice(id: string, fields: Partial<InboxInvoiceRow> = {}): InboxInvoic
 
 const html = (node: ReactElement) => renderToStaticMarkup(node);
 
+type QueryResult = { data: unknown; error: { message: string } | null };
+
+/** Atrapa klienta: każdy łańcuch zapytań do tabeli kończy się podanym wynikiem. */
+function supabaseReturning(results: Record<string, QueryResult>): PageContext['supabase'] {
+  return {
+    from(table: string) {
+      const result = results[table] ?? { data: [], error: null };
+      const chain: Record<string, unknown> = {};
+      for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'lt', 'order', 'limit', 'range']) {
+        chain[method] = () => chain;
+      }
+      chain.then = (resolve: (v: QueryResult) => unknown) => Promise.resolve(result).then(resolve);
+      return chain;
+    },
+  } as unknown as PageContext['supabase'];
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   stats.verified.mockResolvedValue(true);
@@ -136,10 +159,8 @@ describe('kafle P8 — StatsCards Finory z komórkami w granicach błędu', () =
   });
 
   it('kafle z danymi: kwoty skrócone z pełną w title, liczba do opisania, stałe koszty', async () => {
-    stats.getExpenseMonthStats.mockResolvedValue({
-      month: '2026-10',
-      gross: 45678.9,
-      vatDeductible: 1234.56,
+    stats.getExpenseMonthTotals.mockResolvedValue({ month: '2026-10', gross: 45678.9, vatDeductible: 1234.56 });
+    stats.getRecurringExpenseStats.mockResolvedValue({
       recurring: [{ sellerNip: '1', sellerName: 'Hosting', months: 3, averageAmount: 99.99, typicalDay: 5 }],
       recurringTotal: 99.99,
     });
@@ -164,13 +185,13 @@ describe('kafle P8 — StatsCards Finory z komórkami w granicach błędu', () =
     expect(recurring).toContain('Stałe koszty');
     expect(recurring).toContain('100 zł');
     expect(recurring).toContain('1 dostawca');
-    expect(stats.getExpenseMonthStats).toHaveBeenCalledWith(supabase, TENANT, '2026-10');
+    expect(stats.getExpenseMonthTotals).toHaveBeenCalledWith(supabase, TENANT, '2026-10');
+    expect(stats.getRecurringExpenseStats).toHaveBeenCalledWith(supabase, TENANT, '2026-10');
   });
 
   it('stan pusty: zero wydatków i brak stałych kosztów — bez udawanej kwoty', async () => {
-    stats.getExpenseMonthStats.mockResolvedValue({
-      month: '2026-10', gross: 0, vatDeductible: 0, recurring: [], recurringTotal: 0,
-    });
+    stats.getExpenseMonthTotals.mockResolvedValue({ month: '2026-10', gross: 0, vatDeductible: 0 });
+    stats.getRecurringExpenseStats.mockResolvedValue({ recurring: [], recurringTotal: 0 });
     stats.countExpensesToReview.mockResolvedValue(0);
     const props = { supabase, tenantId: TENANT, month: '2026-10' };
 
@@ -182,7 +203,7 @@ describe('kafle P8 — StatsCards Finory z komórkami w granicach błędu', () =
   });
 
   it('wyjątek strażnika zabiera jeden kafel z polską treścią, bez ogona PostgREST-a', async () => {
-    stats.getExpenseMonthStats.mockRejectedValue(new KsefExpenseCurrencyNotSupportedError());
+    stats.getExpenseMonthTotals.mockRejectedValue(new KsefExpenseCurrencyNotSupportedError());
     stats.countExpensesToReview.mockRejectedValue(new Error('Nie można policzyć wydatków do opisania: connection reset'));
     const props = { supabase, tenantId: TENANT, month: '2026-10' };
 
@@ -193,6 +214,23 @@ describe('kafle P8 — StatsCards Finory z komórkami w granicach błędu', () =
     const review = html((await ExpensesToReviewCell(props)) as ReactElement);
     expect(review).toContain('Nie można policzyć wydatków do opisania');
     expect(review).not.toContain('connection reset');
+  });
+
+  it('wyjątek z okna stałych kosztów (koszt sprzed miesiąca) zabiera tylko kafel „Stałe koszty”', async () => {
+    stats.getExpenseMonthTotals.mockResolvedValue({ month: '2026-10', gross: 123, vatDeductible: 23 });
+    stats.getRecurringExpenseStats.mockRejectedValue(new KsefExpenseCurrencyNotSupportedError());
+    const props = { supabase, tenantId: TENANT, month: '2026-10' };
+
+    const gross = html((await ExpensesGrossCell(props)) as ReactElement);
+    expect(gross).toContain('title="123,00 zł"');
+    expect(gross).not.toContain('role="status"');
+    const vat = html((await ExpensesVatCell(props)) as ReactElement);
+    expect(vat).toContain('title="23,00 zł"');
+    expect(vat).not.toContain('role="status"');
+
+    const recurring = html((await ExpensesRecurringCell(props)) as ReactElement);
+    expect(recurring).toContain('role="status"');
+    expect(recurring).toContain(new KsefExpenseCurrencyNotSupportedError().message);
   });
 
   it('karta kafli: cztery sloty w jednej karcie Finory', () => {
@@ -232,6 +270,26 @@ describe('tabela P8 — Finora Transactions na naszych wydatkach', () => {
     // Suma dnia w kartach: 4 października = 615 + 40,50.
     expect(markup).toContain('655,50 zł');
     expect(markup).not.toMatch(/\$[0-9]/);
+  });
+
+  it('nagłówek sortowalny: przycisk z aria-sort na <th> (WCAG 4.1.2), nie fokusowalny div', () => {
+    const markup = html(<ExpensesTable expenses={rows} listVariant="month" />);
+    expect(markup).not.toMatch(/<div[^>]*tabindex="0"/);
+    expect(markup).toMatch(/<th[^>]*aria-sort="none"[^>]*>\s*<button type="button"[^>]*>Data/);
+    // Kolumna bez sortowania (Akcje) nie ogłasza stanu sortowania.
+    expect(markup).not.toMatch(/<th[^>]*aria-sort[^>]*>Akcje</);
+  });
+
+  it('błąd odczytu listy: „+ Dodaj wydatek” zostaje także na komputerze (od lg)', async () => {
+    pageContext.get.mockResolvedValue({
+      supabase: supabaseReturning({ expenses: { data: null, error: { message: 'connection reset' } } }),
+      tenantId: TENANT,
+    });
+    const markup = html((await ExpensesPage({ searchParams: Promise.resolve({}) })) as ReactElement);
+    expect(markup).toContain('Nie udało się pobrać wydatków');
+    // Przycisk pływający (lg:hidden) i przycisk przy komunikacie (max-lg:hidden).
+    expect(markup.match(/\+ Dodaj wydatek/g)).toHaveLength(2);
+    expect(markup).toMatch(/max-lg:hidden[^"]*"[^>]*>(?:(?!<\/div>)[\s\S])*\+ Dodaj wydatek/);
   });
 
   it('stan pusty: nasz komunikat raz, bez tabeli', () => {
@@ -352,6 +410,44 @@ describe('Skrzynka KSeF P9', () => {
     expect(inboxAmount({ gross: 1, currency: 'PLN' })).toBe('1,00 zł');
   });
 
+  it('data otrzymania z KSeF (z godziną, Europe/Warsaw) w kartach i w tabeli — po niej sortujemy', () => {
+    const rows = buildInboxRows(
+      [invoice('inv-1', { issue_date: '2026-09-01' }), invoice('inv-2', { ksef_accepted_at: null })],
+      [],
+    );
+    const markup = html(<InboxTable rows={rows} />);
+    // 10:00 UTC = 12:00 czasu polskiego; raz w tabeli, raz w karcie.
+    expect(markup.match(/05\.10\.2026, 12:00/g)).toHaveLength(2);
+    expect(markup).toContain('01.09.2026');
+    expect(markup).toContain('Otrzymana');
+  });
+
+  it('błąd odczytu wydatków: kolumny „Status” i „Akcje” naprawdę ukryte, bez „jeszcze powstaje”', () => {
+    const rows = buildInboxRows([invoice('inv-1')], null);
+    const markup = html(<InboxTable rows={rows} statusUnavailable />);
+    expect(markup).toContain('615,00 zł');
+    expect(markup).not.toContain('>Status<');
+    expect(markup).not.toContain('>Akcje<');
+    expect(markup).not.toContain('Wszystkie statusy');
+    expect(markup).not.toContain('jeszcze powstaje');
+  });
+
+  it('strona skrzynki: błąd odczytu wydatków → komunikat zgodny z ekranem (kolumna ukryta)', async () => {
+    pageContext.get.mockResolvedValue({
+      supabase: supabaseReturning({
+        invoices: { data: [invoice('inv-1')], error: null },
+        expenses: { data: null, error: { message: 'connection reset' } },
+      }),
+      tenantId: TENANT,
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const markup = html((await InboxPage()) as ReactElement);
+    error.mockRestore();
+    expect(markup).toContain('Nie udało się sprawdzić statusu faktur');
+    expect(markup).not.toContain('>Status<');
+    expect(markup).not.toContain('jeszcze powstaje');
+  });
+
   it('stan pusty: tekst z e2e 04 dokładnie raz (getByText w trybie ścisłym)', () => {
     const markup = html(<InboxTable rows={[]} />);
     expect(markup.match(/Brak faktur przychodzących/g)).toHaveLength(1);
@@ -414,6 +510,30 @@ describe('/expenses/[id] — karta szczegółów Finory, logika formularza bez z
     expect(markup).toContain('Brak potwierdzonego kursu');
     expect(markup).toContain('Zapisz poza KPiR');
     expect(markup).not.toContain('>Usuń<');
+  });
+
+  it('kwota w karcie szczegółów: kod waluty bez kursu, „zł” z kursem, bez „zł” przy nieznanej walucie', () => {
+    const ksef = { source: 'ksef_inbox' as const, ksef_invoice_id: 'inv-1', gross_amount: 1000 };
+    const noRate = html(<ExpenseEditForm expense={expense('e-1', ksef)} photoUrl={null} ksefCurrency="EUR" />);
+    expect(noRate).toContain('1000,00 EUR');
+    expect(noRate).not.toContain('1000,00 zł');
+
+    const fx = { currency: 'EUR', mid: 4.25, tableNo: '200/A/NBP/2026', effectiveDate: '2026-10-02', appliedFor: '2026-10-05' };
+    const withRate = html(
+      <ExpenseEditForm
+        expense={expense('e-1', { ...ksef, gross_amount: 4250, ocr_extracted_data: { source: 'ksef_inbox', currency: 'EUR', fx } })}
+        photoUrl={null}
+        ksefCurrency="EUR"
+      />,
+    );
+    expect(withRate).toContain('4250,00 zł');
+
+    const unknown = html(<ExpenseEditForm expense={expense('e-1', ksef)} photoUrl={null} ksefCurrency={null} />);
+    expect(unknown).not.toContain('1000,00 zł');
+    expect(unknown).toContain('waluta do wyjaśnienia');
+
+    const pln = html(<ExpenseEditForm expense={expense('e-1', ksef)} photoUrl={null} ksefCurrency="PLN" />);
+    expect(pln).toContain('1000,00 zł');
   });
 
   it('zdjęcie paragonu w karcie Finory', () => {

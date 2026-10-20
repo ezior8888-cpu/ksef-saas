@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import type { ColumnDef, ColumnFiltersState, PaginationState } from '@tanstack/react-table';
 import {
@@ -61,6 +61,11 @@ const VAT_LABELS: Record<VatStatus, string> = {
 
 const money = (n: number) => `${formatPlMoney(n)} zł`;
 
+/** Nazwa jak w wierszu (skrócona forma prawna); bez nazwy — NIP. */
+function displayName(row: Pick<ContractorTableRow, 'name' | 'nip'>): string {
+  return row.name ? shortenLegalForm(row.name) : row.nip ? `NIP ${row.nip}` : 'kontrahenta';
+}
+
 function overdueBadge(count: number) {
   return (
     <Badge variant="destructive">
@@ -84,6 +89,85 @@ function OverdueCell({ row }: { row: ContractorTableRow }) {
 }
 
 /**
+ * Kolumny tabeli (stałe — bez zależności od stanu komponentu). Eksport dla
+ * testu filtra „Status VAT”.
+ */
+export const CONTRACTOR_COLUMNS: ColumnDef<ContractorTableRow>[] = [
+  {
+    header: 'Nazwa',
+    id: 'name',
+    accessorFn: (row) => row.name ?? '',
+    cell: ({ row }) => (
+      <div className="flex items-center gap-2">
+        <Avatar className="size-9">
+          <AvatarFallback className="bg-primary/10 text-accent-foreground text-xs">
+            {companyInitials(row.original.name)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex min-w-0 flex-col">
+          <span className="max-w-64 truncate font-medium" title={row.original.name ?? undefined}>
+            {row.original.name ? shortenLegalForm(row.original.name) : '—'}
+          </span>
+          <span className="text-muted-foreground max-w-64 truncate">
+            {row.original.address?.addressLine2 || row.original.email || '—'}
+          </span>
+        </div>
+      </div>
+    ),
+    size: 300,
+  },
+  {
+    header: 'NIP',
+    accessorKey: 'nip',
+    cell: ({ row }) => <span className="text-muted-foreground font-mono">{row.original.nip ?? '—'}</span>,
+    size: 130,
+  },
+  {
+    header: 'Status VAT',
+    id: 'vat',
+    accessorFn: (row) => row.vat_status ?? 'unknown',
+    // Dokładne dopasowanie jak w Finorze: domyślny includesString dla 'active' łapał też 'inactive'.
+    filterFn: 'equalsString',
+    cell: ({ row }) => (
+      <VatStatusBadge status={row.original.vat_status ?? 'unknown'} warning={row.original.validation_warning} />
+    ),
+    size: 150,
+  },
+  {
+    header: 'Należności',
+    id: 'outstanding',
+    accessorFn: (row) => row.receivables?.outstanding ?? -1,
+    cell: ({ row }) => <OutstandingCell row={row.original} />,
+  },
+  {
+    header: 'Po terminie',
+    id: 'overdue',
+    accessorFn: (row) => row.receivables?.overdueCount ?? -1,
+    cell: ({ row }) => <OverdueCell row={row.original} />,
+  },
+  {
+    header: 'Przypomnienia',
+    id: 'reminders',
+    enableSorting: false,
+    cell: ({ row }) => (
+      <ContractorReminderToggle
+        contractorId={row.original.id}
+        contractorName={displayName(row.original)}
+        excluded={row.original.reminder_excluded ?? false}
+      />
+    ),
+    size: 120,
+  },
+  {
+    id: 'actions',
+    header: () => 'Akcje',
+    enableSorting: false,
+    cell: ({ row }) => <ContractorRowActions contractor={row.original} />,
+    size: 110,
+  },
+];
+
+/**
  * Tabela kontrahentów w układzie data-table Finory (Invoice List): „Pokaż N”,
  * „Sprawdź wszystkich”, wyszukiwarka i filtr statusu VAT; karty poniżej `lg`.
  *
@@ -105,82 +189,11 @@ export function ContractorsTable({
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
 
-  const columns: ColumnDef<ContractorTableRow>[] = useMemo(
-    () => [
-      {
-        header: 'Nazwa',
-        id: 'name',
-        accessorFn: (row) => row.name ?? '',
-        cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            <Avatar className="size-9">
-              <AvatarFallback className="bg-primary/10 text-accent-foreground text-xs">
-                {companyInitials(row.original.name)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex min-w-0 flex-col">
-              <span className="max-w-64 truncate font-medium" title={row.original.name ?? undefined}>
-                {row.original.name ? shortenLegalForm(row.original.name) : '—'}
-              </span>
-              <span className="text-muted-foreground max-w-64 truncate">
-                {row.original.address?.addressLine2 || row.original.email || '—'}
-              </span>
-            </div>
-          </div>
-        ),
-        size: 300,
-      },
-      {
-        header: 'NIP',
-        accessorKey: 'nip',
-        cell: ({ row }) => <span className="text-muted-foreground font-mono">{row.original.nip ?? '—'}</span>,
-        size: 130,
-      },
-      {
-        header: 'Status VAT',
-        id: 'vat',
-        accessorFn: (row) => row.vat_status ?? 'unknown',
-        cell: ({ row }) => (
-          <VatStatusBadge status={row.original.vat_status ?? 'unknown'} warning={row.original.validation_warning} />
-        ),
-        size: 150,
-      },
-      {
-        header: 'Należności',
-        id: 'outstanding',
-        accessorFn: (row) => row.receivables?.outstanding ?? -1,
-        cell: ({ row }) => <OutstandingCell row={row.original} />,
-      },
-      {
-        header: 'Po terminie',
-        id: 'overdue',
-        accessorFn: (row) => row.receivables?.overdueCount ?? -1,
-        cell: ({ row }) => <OverdueCell row={row.original} />,
-      },
-      {
-        header: 'Przypomnienia',
-        id: 'reminders',
-        enableSorting: false,
-        cell: ({ row }) => (
-          <ContractorReminderToggle contractorId={row.original.id} excluded={row.original.reminder_excluded ?? false} />
-        ),
-        size: 120,
-      },
-      {
-        id: 'actions',
-        header: () => 'Akcje',
-        enableSorting: false,
-        cell: ({ row }) => <ContractorRowActions contractor={row.original} />,
-        size: 110,
-      },
-    ],
-    [],
-  );
 
   // eslint-disable-next-line react-hooks/incompatible-library -- tanstack zwraca funkcje, których React Compiler nie zapamiętuje (jak w Finorze)
   const table = useReactTable({
     data: contractors,
-    columns,
+    columns: CONTRACTOR_COLUMNS,
     state: { columnFilters, pagination },
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
@@ -252,8 +265,13 @@ export function ContractorsTable({
                 meta={<VatStatusBadge status={contractor.vat_status ?? 'unknown'} warning={contractor.validation_warning} />}
                 actions={
                   <>
-                    <span className="text-muted-foreground text-xs">Przypomnienia</span>
-                    <ContractorReminderToggle contractorId={contractor.id} excluded={contractor.reminder_excluded ?? false} />
+                    {/* Nazwę przełącznika daje aria-label z kontrahentem — napis tylko dla oka. */}
+                    <span className="text-muted-foreground text-xs" aria-hidden>Przypomnienia</span>
+                    <ContractorReminderToggle
+                      contractorId={contractor.id}
+                      contractorName={displayName(contractor)}
+                      excluded={contractor.reminder_excluded ?? false}
+                    />
                     <div className="ml-auto">
                       <ContractorRowActions contractor={contractor} />
                     </div>

@@ -80,24 +80,24 @@ function statusLabel(status: ActiveSubscription['status']): {
   }
 }
 
-// Kolory odznak i komunikatów jak w Finorze (`bg-green-600/10 text-green-600`…).
+// Kolory odznak i komunikatów jak w Finorze (`bg-green-600/10 text-green-800`…).
 const TONE_BADGE: Record<Tone, string | undefined> = {
-  success: 'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400',
-  warning: 'bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400',
+  success: 'bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400',
+  warning: 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
   danger: 'bg-red-600/10 text-red-600 dark:bg-red-400/10 dark:text-red-400',
   default: undefined,
 };
 
 const TONE_ALERT: Record<Tone, string | undefined> = {
-  success: 'border-none bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400',
-  warning: 'border-none bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400',
+  success: 'border-none bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400',
+  warning: 'border-none bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
   danger: undefined,
   default: undefined,
 };
 
 const TONE_ALERT_TEXT: Record<Tone, string | undefined> = {
-  success: 'text-green-600/80 dark:text-green-400/80',
-  warning: 'text-amber-600/80 dark:text-amber-400/80',
+  success: 'text-green-800 dark:text-green-400/80',
+  warning: 'text-amber-800 dark:text-amber-400/80',
   danger: undefined,
   default: undefined,
 };
@@ -329,7 +329,7 @@ function StatRow({
       <span
         className={cn(
           'text-sm font-medium',
-          tone === 'warning' && 'text-amber-600 dark:text-amber-400',
+          tone === 'warning' && 'text-amber-700 dark:text-amber-400',
         )}
       >
         {value}

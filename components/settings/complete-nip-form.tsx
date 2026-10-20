@@ -112,7 +112,7 @@ export function CompleteNipForm() {
       {company && (
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 border p-3">
-            <Badge className="bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400">
+            <Badge className="bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400">
               Znaleziono w bazie GUS
             </Badge>
             <dl className="grid grid-cols-1 gap-3 text-sm">

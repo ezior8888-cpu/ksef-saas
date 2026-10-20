@@ -54,7 +54,7 @@ const ACCESS_LEVEL_OPTIONS: { label: string; value: 'read_only' | 'download' }[]
   { label: 'Podgląd + pobieranie XML', value: 'download' },
 ];
 
-const BADGE_OK = 'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400';
+const BADGE_OK = 'bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400';
 const BADGE_ERROR = 'bg-red-600/10 text-red-600 dark:bg-red-400/10 dark:text-red-400';
 
 const plDate = formatSettingsDate;
@@ -267,10 +267,10 @@ function GeneratedTokenCard({
   return (
     <Alert
       role="status"
-      className="border-none bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400"
+      className="border-none bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400"
     >
       <AlertTitle>Link wygenerowany pomyślnie</AlertTitle>
-      <AlertDescription className="flex flex-col gap-3 text-green-600/80 dark:text-green-400/80">
+      <AlertDescription className="flex flex-col gap-3 text-green-800 dark:text-green-400/80">
         <div className="flex items-start justify-between gap-3">
           <span>Skopiuj poniższy URL i wyślij emailem do księgowej</span>
           <Button variant="ghost" size="icon-xs" onClick={onClose} aria-label="Zamknij">

@@ -16,12 +16,19 @@ export const SOURCE_LABELS: Record<ExpenseSource, string> = {
   import: 'Import'
 }
 
-/** Kolory plakietek jak `TRANSACTION_GROUP_STYLES` Finory. */
+/**
+ * Kolory plakietek jak `TRANSACTION_GROUP_STYLES` Finory (tło `…/10` koloru
+ * grupy). Tekst o odcień ciemniejszy w jasnym motywie i jaśniejszy
+ * w ciemnym, bo w naszym presecie `chart-2`/`chart-3` to niebieskie, nie
+ * zielenie Finory: same dawały na karcie 4,4:1 (jasny), 3,6:1 i 2,7:1
+ * (ciemny), poniżej WCAG AA dla tekstu 12 px. Pilnuje
+ * `tests/unit/wydatki-skrzynka-kontrast.test.ts`.
+ */
 export const SOURCE_STYLES: Record<ExpenseSource, string> = {
-  ksef_inbox: 'bg-primary/10 text-primary',
-  ocr_photo: 'bg-chart-2/10 text-chart-2',
+  ksef_inbox: 'bg-primary/10 text-chart-3 dark:text-primary',
+  ocr_photo: 'bg-chart-2/10 text-chart-4 dark:text-accent-foreground',
   manual: 'bg-muted text-muted-foreground',
-  import: 'bg-chart-3/10 text-chart-3'
+  import: 'bg-chart-3/10 text-chart-3 dark:bg-chart-3/20 dark:text-foreground'
 }
 
 export function sourceLabel(source: string): string {

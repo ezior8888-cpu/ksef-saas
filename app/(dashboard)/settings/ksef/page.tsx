@@ -20,10 +20,10 @@ import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
 
-const AMBER_ALERT = 'border-none bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400';
-const AMBER_TEXT = 'text-amber-600/80 dark:text-amber-400/80';
-const BADGE_OK = 'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400';
-const BADGE_WARN = 'bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400';
+const AMBER_ALERT = 'border-none bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400';
+const AMBER_TEXT = 'text-amber-800 dark:text-amber-400/80';
+const BADGE_OK = 'bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400';
+const BADGE_WARN = 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400';
 
 /**
  * Zakładka „KSeF” = Connected Accounts z Finory (`views/settings/

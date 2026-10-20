@@ -147,10 +147,15 @@ const VatSummaryCard = ({
             </Badge>
           </div>
 
-          {noSales ? (
+          {noSales && !hasPrevSeries ? (
             <PulpitEmptyState message={PULPIT_EMPTY.noInvoices} action={PULPIT_EMPTY.issueInvoice} />
           ) : (
             <>
+              {/* Bez sprzedaży w 6 miesiącach, ale z rokiem poprzednim: wykres
+                  zostaje dla porównania rok do roku, jak w dawnym SalesChartCard. */}
+              {noSales ? (
+                <p className='text-muted-foreground text-sm'>Brak przyjętych faktur w tym okresie</p>
+              ) : null}
               <span className='sr-only'>
                 {`Wykres sprzedaży brutto ostatnich 6 miesięcy na tle roku ${sales.year - 1}`}
               </span>

@@ -40,6 +40,15 @@ describe('portal księgowej — wygląd Finory', () => {
     expect(html).not.toContain('bg-mesh-surface');
   });
 
+  it.each([[1, '1 pozycja'], [2, '2 pozycje'], [5, '5 pozycji'], [12, '12 pozycji'], [22, '22 pozycje']])(
+    'opis listy: %i dokumentów → „%s”', async (count, text) => {
+      const data = portal('download');
+      data.invoices = Array.from({ length: count }, (_, i) => ({ ...data.invoices[0], id: `i${i}`, internal_number: `FV/${i}` }));
+      st.load.mockResolvedValue(data);
+      const html = renderToStaticMarkup(await AccountantPortalPage({ params: Promise.resolve({ token: 't' }) }));
+      expect(html).toMatch(new RegExp(`${text.split(' ')[0]} (<!-- -->)?${text.split(' ')[1]} (<!-- -->)?· najnowsze na górze`));
+    });
+
   it('tylko podgląd: bez eksportu i bez „Pobierz XML”', async () => {
     st.load.mockResolvedValue(portal('read_only'));
     const html = renderToStaticMarkup(await AccountantPortalPage({ params: Promise.resolve({ token: 't' }) }));

@@ -313,6 +313,13 @@ describe('TransactionDatatable (Wszystkie operacje)', () => {
     noTemplateData(out);
   });
 
+  it('nagłówki sortowania: rola przycisku i aria-sort na komórce (WCAG 4.1.2)', () => {
+    const out = html(<TransactionDatatable data={rows} />);
+    const sortable = out.match(/<th[^>]*aria-sort="none"[^>]*>\s*<div[^>]*role="button"[^>]*tabindex="0"/g) ?? [];
+    expect(sortable.length).toBeGreaterThan(0);
+    expect(out).not.toMatch(/<div(?![^>]*role="button")[^>]*tabindex="0"/);
+  });
+
   it('pusty stan', () => {
     const out = html(<TransactionDatatable data={[]} />);
     expect(out).toContain('Brak wyników.');
@@ -343,7 +350,8 @@ describe('StatisticsAssetsLiabilities (Należności)', () => {
 
 describe('StatisticsLiquiditySnapshot (Zaległości)', () => {
   it('procent po terminie, kwota, najstarsza zaległość', () => {
-    const out = html(<StatisticsLiquiditySnapshot overdue={2500} total={10_000} oldestOverdueDays={1} />);
+    const out = html(<StatisticsLiquiditySnapshot overdue={2500} total={10_000} oldestOverdueDays={1} note="Bez importów i faktur skorygowanych" />);
+    expect(out).toContain('Bez importów i faktur skorygowanych');
     expect(out).toContain('Po terminie: 25% należności');
     expect(out).toContain('>25%<');
     expect(out).toContain(`title="${zl(2500)}"`);
@@ -352,8 +360,9 @@ describe('StatisticsLiquiditySnapshot (Zaległości)', () => {
   });
 
   it('zero należności: pusty stan, nie „0%”', () => {
-    const out = html(<StatisticsLiquiditySnapshot overdue={0} total={0} oldestOverdueDays={null} />);
+    const out = html(<StatisticsLiquiditySnapshot overdue={0} total={0} oldestOverdueDays={null} note="Bez importów i faktur skorygowanych" />);
     expect(out).toContain('Brak otwartych należności');
+    expect(out).toContain('Bez importów i faktur skorygowanych');
     expect(out).not.toContain('0%');
   });
 });
@@ -409,10 +418,18 @@ describe('VatSummaryCard (Podsumowanie podatku VAT)', () => {
     expect(out).toContain('(brak przyjętych w poprzednim miesiącu)');
   });
 
-  it('bez sprzedaży w 6 miesiącach: pusty stan zamiast wykresu', () => {
-    const out = html(<VatSummaryCard {...props} sales={{ ...props.sales, currentSeries: [0, 0] }} />);
+  it('bez sprzedaży w 6 miesiącach i rok wcześniej: pusty stan zamiast wykresu', () => {
+    const out = html(<VatSummaryCard {...props} sales={{ ...props.sales, currentSeries: [0, 0], prevSeries: [0, 0] }} />);
     expect(out).toContain(PULPIT_EMPTY.noInvoices);
     expect(out).not.toContain('data-slot="chart"');
+  });
+
+  it('bez sprzedaży w 6 miesiącach, ale rok wcześniej była: wykres z linią roku poprzedniego i dopisek', () => {
+    const out = html(<VatSummaryCard {...props} sales={{ ...props.sales, currentSeries: [0, 0] }} />);
+    expect(out).not.toContain(PULPIT_EMPTY.noInvoices);
+    expect(out).toContain('data-slot="chart"');
+    expect(out).toContain('Brak przyjętych faktur w tym okresie');
+    expect(out).toContain('Wykres sprzedaży brutto ostatnich 6 miesięcy na tle roku 2025');
   });
 });
 

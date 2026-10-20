@@ -41,8 +41,8 @@ function MagicImportCardBody({ ready }: { ready: boolean }) {
           className={cn(
             'font-normal',
             ready
-              ? 'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400'
-              : 'bg-amber-600/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400',
+              ? 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400'
+              : 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
           )}
         >
           {ready ? 'Gotowy' : 'Wymaga certyfikatu KSeF'}
