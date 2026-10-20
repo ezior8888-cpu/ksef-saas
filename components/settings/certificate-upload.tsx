@@ -1,17 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
 
+import { Field, FieldContent, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 import { uploadCertificateAction } from './actions';
 
-const fileInputClasses =
-  'cursor-pointer file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-foreground file:text-background file:text-xs file:font-medium hover:file:bg-foreground/90 file:cursor-pointer file:transition-colors';
-
+/**
+ * Wgranie certyfikatu KSeF. Wygląd: pola jak w `change-password-card.tsx`
+ * Finory (etykieta nad polem na całą szerokość, przycisk pod spodem).
+ */
 export function CertificateUpload() {
   const [certFile, setCertFile] = useState<File | null>(null);
   const [keyFile, setKeyFile] = useState<File | null>(null);
@@ -40,41 +42,41 @@ export function CertificateUpload() {
   };
 
   return (
-    <div className="space-y-5">
-      <label className="block">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
-          Plik certyfikatu (cert.pem lub .crt)
-        </span>
-        <Input
-          type="file"
-          accept=".pem,.crt,.cer"
-          onChange={(e) => setCertFile(e.target.files?.[0] ?? null)}
-          className={fileInputClasses}
-        />
-      </label>
+    <FieldGroup>
+      <Field orientation="responsive" className="flex-col!">
+        <FieldContent>
+          <FieldLabel htmlFor="ksef-cert-file">Plik certyfikatu (cert.pem lub .crt)</FieldLabel>
+        </FieldContent>
+        <div className="w-full!">
+          <Input
+            id="ksef-cert-file"
+            type="file"
+            accept=".pem,.crt,.cer"
+            onChange={(e) => setCertFile(e.target.files?.[0] ?? null)}
+          />
+        </div>
+      </Field>
 
-      <label className="block">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
-          Plik klucza prywatnego (key.pem)
-        </span>
-        <Input
-          type="file"
-          accept=".pem,.key"
-          onChange={(e) => setKeyFile(e.target.files?.[0] ?? null)}
-          className={fileInputClasses}
-        />
-      </label>
+      <Field orientation="responsive" className="flex-col!">
+        <FieldContent>
+          <FieldLabel htmlFor="ksef-key-file">Plik klucza prywatnego (key.pem)</FieldLabel>
+        </FieldContent>
+        <div className="w-full!">
+          <Input
+            id="ksef-key-file"
+            type="file"
+            accept=".pem,.key"
+            onChange={(e) => setKeyFile(e.target.files?.[0] ?? null)}
+          />
+        </div>
+      </Field>
 
-      <Button
-        onClick={handleUpload}
-        disabled={!certFile || !keyFile || isUploading}
-        variant="glass-primary"
-        size="lg"
-        className="w-full"
-      >
-        {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Wgraj i zweryfikuj certyfikat
-      </Button>
-    </div>
+      <div>
+        <Button onClick={handleUpload} disabled={!certFile || !keyFile || isUploading}>
+          {isUploading && <RiLoader4Line className="animate-spin" aria-hidden />}
+          Wgraj i zweryfikuj certyfikat
+        </Button>
+      </div>
+    </FieldGroup>
   );
 }

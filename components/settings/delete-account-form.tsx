@@ -3,22 +3,27 @@
 import { useState, useTransition } from 'react';
 
 import { requestAccountDeletionAction } from '@/components/settings/account-actions';
+import { Field, FieldContent, FieldLabel } from '@/components/settings/finora/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 
 interface DeleteAccountFormProps {
   /** NIP tenanta (podpowiedź w etykiecie). */
   tenantNipHint: string;
 }
 
+/**
+ * Usunięcie firmy. Wygląd: potwierdzenie jak w `privacy/delete-account-dialog.tsx`
+ * Finory (pole z frazą do wpisania, przycisk destrukcyjny) — u nas frazą jest
+ * NIP firmy, w miejscu, bez okna.
+ */
 export function DeleteAccountForm({ tenantNipHint }: DeleteAccountFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   return (
     <form
-      className="space-y-4"
+      className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
         setError(null);
@@ -44,10 +49,12 @@ export function DeleteAccountForm({ tenantNipHint }: DeleteAccountFormProps) {
         });
       }}
     >
-      <div className="space-y-2">
-        <Label htmlFor="nipConfirm">
-          Wpisz NIP firmy ({tenantNipHint}), aby potwierdzić usunięcie
-        </Label>
+      <Field data-invalid={error ? true : undefined}>
+        <FieldContent>
+          <FieldLabel htmlFor="nipConfirm">
+            Wpisz NIP firmy ({tenantNipHint}), aby potwierdzić usunięcie
+          </FieldLabel>
+        </FieldContent>
         <Input
           id="nipConfirm"
           name="nipConfirm"
@@ -60,22 +67,18 @@ export function DeleteAccountForm({ tenantNipHint }: DeleteAccountFormProps) {
           disabled={isPending}
           className="max-w-xs font-mono"
         />
+        {error && (
+          <p className="text-destructive text-xs" role="alert">
+            {error}
+          </p>
+        )}
+      </Field>
+
+      <div>
+        <Button type="submit" variant="destructive" disabled={isPending}>
+          {isPending ? 'Przetwarzanie…' : 'Usuń konto'}
+        </Button>
       </div>
-
-      {error && (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      )}
-
-      <Button
-        type="submit"
-        variant="destructive"
-        disabled={isPending}
-        className="w-full max-w-xs"
-      >
-        {isPending ? 'Przetwarzanie…' : 'Usuń konto'}
-      </Button>
     </form>
   );
 }

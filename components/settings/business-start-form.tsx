@@ -1,18 +1,22 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Loader2, Save } from 'lucide-react';
+import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { updateBusinessStartAction } from '@/app/actions/business-start';
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/settings/finora/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { BUSINESS_START_MIN, businessStartSchema } from '@/lib/invoices/business-start';
 
 /**
  * Data rozpoczęcia działalności — do limitu zwolnienia z VAT na Pulpicie.
  * Walidacja w przeglądarce tym samym schematem co w akcji serwerowej.
+ *
+ * Wygląd: wiersz Finory z `general/index.tsx` (etykieta i opis po lewej,
+ * pole `sm:w-64` po prawej). Komponent oddaje jedno `Field`, więc stoi
+ * w `FieldGroup` strony.
  */
 export function BusinessStartForm({
   initialStartedOn,
@@ -66,14 +70,18 @@ export function BusinessStartForm({
   };
 
   return (
-    <div className="space-y-3">
-      <div>
-        <Label
-          htmlFor="business-started-on"
-          className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground"
-        >
-          Data rozpoczęcia działalności
-        </Label>
+    <Field orientation="responsive">
+      <FieldContent>
+        <FieldLabel htmlFor="business-started-on">Data rozpoczęcia działalności</FieldLabel>
+        <FieldDescription id="business-started-on-help">
+          Potrzebna do limitu zwolnienia z VAT: firma, która rozpoczęła działalność w trakcie roku, ma limit
+          proporcjonalny do dni działalności. Puste pole — data nieznana, a Pulpit pokaże samą sprzedaż.
+        </FieldDescription>
+        {canEdit ? null : (
+          <FieldDescription>Zmienić to może właściciel albo administrator firmy.</FieldDescription>
+        )}
+      </FieldContent>
+      <div className="flex w-full flex-col gap-2 sm:w-64">
         <Input
           id="business-started-on"
           type="date"
@@ -88,34 +96,26 @@ export function BusinessStartForm({
           }}
           aria-invalid={fieldError ? true : undefined}
           aria-describedby={fieldError ? 'business-started-on-error business-started-on-help' : 'business-started-on-help'}
-          className="max-w-xs"
         />
         {fieldError ? (
-          <p id="business-started-on-error" role="alert" className="mt-1.5 text-xs text-destructive">
+          <p id="business-started-on-error" role="alert" className="text-destructive text-xs">
             {fieldError}
           </p>
         ) : null}
-        <p id="business-started-on-help" className="mt-1.5 text-xs text-muted-foreground">
-          Potrzebna do limitu zwolnienia z VAT: firma, która rozpoczęła działalność w trakcie roku, ma limit
-          proporcjonalny do dni działalności. Puste pole — data nieznana, a Pulpit pokaże samą sprzedaż.
-        </p>
-      </div>
-
-      {canEdit ? (
-        <div className="flex items-center gap-3">
-          <Button type="button" onClick={() => submit(value)} disabled={pending} className="gap-2">
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Zapisz
-          </Button>
-          {saved ? (
-            <Button type="button" variant="ghost" onClick={() => submit('', true)} disabled={pending}>
-              Wyczyść
+        {canEdit ? (
+          <div className="flex items-center gap-2">
+            <Button type="button" onClick={() => submit(value)} disabled={pending}>
+              {pending ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
+              Zapisz
             </Button>
-          ) : null}
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">Zmienić to może właściciel albo administrator firmy.</p>
-      )}
-    </div>
+            {saved ? (
+              <Button type="button" variant="ghost" onClick={() => submit('', true)} disabled={pending}>
+                Wyczyść
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </Field>
   );
 }
