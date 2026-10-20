@@ -1,9 +1,10 @@
 import type { CostEntry } from '@/lib/dashboard/costs';
+import { clientIdentity } from '@/lib/dashboard/rankings';
 import { shortCompanyName } from '@/lib/format/company-name';
 import { canSetAsRecurring } from '@/lib/invoices/recurring/visibility';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
-import { clientKeyOf, clientNames } from './clients';
+import { clientNames } from './clients';
 import type { SaleInvoice } from './sales';
 
 /**
@@ -128,8 +129,9 @@ export function recurringClients(
   const names = clientNames(invoices);
   const entries: RecurringEntry[] = [];
   for (const inv of invoices) {
-    const key = clientKeyOf(inv);
-    if (key === null) continue;
+    const identity = clientIdentity(inv);
+    if (identity === null) continue;
+    const key = identity.key;
     entries.push({
       key,
       name: names.get(key) ?? '',
@@ -137,7 +139,9 @@ export function recurringClients(
       amount: inv.net,
       // N1: `getSalesInvoices` zwraca tylko przyjęte faktury sprzedaży w PLN, więc o wzorze
       // rozstrzygają rodzaj, typ i pochodzenie — te same warunki co akcja tworzenia.
-      templateInvoiceId: canSetAsRecurring({
+      // „Konsumenci” to wielu różnych nabywców pod jednym kluczem: faktura jednego z nich
+      // nie jest wzorem dla „klienta”, więc przy tej pozycji przycisku nie ma.
+      templateInvoiceId: !identity.consumers && canSetAsRecurring({
         direction: 'outgoing',
         origin: inv.origin,
         invoice_kind: inv.kind,

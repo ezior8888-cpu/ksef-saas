@@ -53,13 +53,19 @@ export function issueNowHref(id: string): string {
  * „Wystaw teraz” dla wstrzymanej pozycji jest nieaktywne (jak w Finorze:
  * `disabled={!isActive}`): strona formularza odmówiłaby i tak. Żadna z akcji
  * nie tworzy faktury — fakturę wystawia człowiek w formularzu.
+ *
+ * `layout='card'` (karta poniżej `lg`): „Wystaw teraz” jako przycisk z
+ * napisem — na telefonie nie ma podpowiedzi po najechaniu, a to główna akcja
+ * wiersza. Usuń i „⋯” zostają ikonami jak w tabeli.
  */
 export function RecurringRowActions({
   item,
   onEdit,
+  layout = 'table',
 }: {
   item: RecurringInvoiceListItem;
   onEdit: (item: RecurringInvoiceListItem) => void;
+  layout?: 'table' | 'card';
 }) {
   const router = useRouter();
   const [togglePending, startToggle] = useTransition();
@@ -68,7 +74,7 @@ export function RecurringRowActions({
 
   const issueLabel = item.active
     ? `Wystaw teraz fakturę „${item.name}”`
-    : `„${item.name}” jest wstrzymana — wznów ją, żeby wystawić fakturę`;
+    : `Wystaw teraz — „${item.name}” jest wstrzymana, wznów ją, żeby wystawić fakturę`;
 
   const toggle = () => {
     startToggle(async () => {
@@ -98,27 +104,45 @@ export function RecurringRowActions({
   };
 
   return (
-    <div className='flex items-center justify-center gap-1'>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            item.active ? (
-              <Link
-                href={issueNowHref(item.id)}
-                className={buttonVariants({ variant: 'ghost', size: 'icon' })}
-                aria-label={issueLabel}
-              />
-            ) : (
-              <Button variant='ghost' size='icon' disabled aria-label={issueLabel} />
-            )
-          }
-        >
-          <RiFlashlightLine className='size-4.5' />
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>Wystaw teraz</p>
-        </TooltipContent>
-      </Tooltip>
+    <div className={layout === 'card' ? 'flex items-center gap-1' : 'flex items-center justify-center gap-1'}>
+      {layout === 'card' ? (
+        item.active ? (
+          <Link
+            href={issueNowHref(item.id)}
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            aria-label={issueLabel}
+          >
+            <RiFlashlightLine aria-hidden='true' />
+            Wystaw teraz
+          </Link>
+        ) : (
+          <Button variant='outline' size='sm' disabled aria-label={issueLabel}>
+            <RiFlashlightLine aria-hidden='true' />
+            Wystaw teraz
+          </Button>
+        )
+      ) : (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              item.active ? (
+                <Link
+                  href={issueNowHref(item.id)}
+                  className={buttonVariants({ variant: 'ghost', size: 'icon' })}
+                  aria-label={issueLabel}
+                />
+              ) : (
+                <Button variant='ghost' size='icon' disabled aria-label={issueLabel} />
+              )
+            }
+          >
+            <RiFlashlightLine className='size-4.5' aria-hidden='true' />
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Wystaw teraz</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
 
       <Tooltip>
         <TooltipTrigger
@@ -131,7 +155,7 @@ export function RecurringRowActions({
             />
           }
         >
-          <RiDeleteBinLine className='size-4.5' />
+          <RiDeleteBinLine className='size-4.5' aria-hidden='true' />
         </TooltipTrigger>
         <TooltipContent>
           <p>Usuń</p>

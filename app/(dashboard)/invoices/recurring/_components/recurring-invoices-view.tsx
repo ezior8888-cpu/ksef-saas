@@ -49,7 +49,7 @@ const STATUS_ORDER: Record<RecurringStatus, number> = { due: 0, active: 1, pause
 
 function ContractorCell({ item }: { item: RecurringInvoiceListItem }) {
   return (
-    <div className='flex items-center gap-2'>
+    <div className='flex min-w-0 items-center gap-2'>
       <Avatar className='size-9'>
         <AvatarFallback className='bg-primary/10 text-accent-foreground text-xs'>
           {companyInitials(item.contractorName)}
@@ -200,7 +200,7 @@ export function RecurringInvoicesView({
     () =>
       recurringColumns((item) => {
         setEditing(item);
-        setSheetOpen(true);
+            setSheetOpen(true);
       }),
     [],
   );
@@ -278,7 +278,7 @@ export function RecurringInvoicesView({
                   <ColumnSelectFilter
                     column={table.getColumn('status')!}
                     labels={RECURRING_STATUS_LABELS}
-                    allLabel='Wszystkie statusy'
+                    allLabel='Wszystkie'
                     label='Status faktury cyklicznej'
                   />
                 </div>
@@ -312,7 +312,7 @@ export function RecurringInvoicesView({
                           <RecurringStatusBadge status={item.status} />
                         </>
                       }
-                      actions={<RecurringRowActions item={item} onEdit={openEdit} />}
+                      actions={<RecurringRowActions item={item} onEdit={openEdit} layout='card' />}
                     />
                   );
                 }}
@@ -331,6 +331,7 @@ export function RecurringInvoicesView({
         candidatesError={candidatesError}
         initialTemplate={editing ? null : initialTemplate}
         editing={editing}
+        templateNotice={templateNotice}
       />
     </div>
   );

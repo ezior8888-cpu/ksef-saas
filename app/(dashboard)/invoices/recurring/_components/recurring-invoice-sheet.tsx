@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import {
   Sheet,
   SheetContent,
@@ -78,6 +79,11 @@ export interface RecurringInvoiceSheetProps {
   initialTemplate?: RecurringTemplateCandidate | null;
   /** Edycja istniejącej pozycji; bez niej arkusz tworzy nową. */
   editing?: RecurringInvoiceListItem | null;
+  /**
+   * `?wzor=<id>` nie dał wzoru (faktura nie spełnia warunków albo jej nie ma) —
+   * ten sam komunikat co nad tabelą, bo arkusz otwiera się na nim.
+   */
+  templateNotice?: string | null;
 }
 
 function emptyValues(
@@ -111,93 +117,103 @@ function emptyValues(
  * Błędy akcji (odmowa wzoru, równoległa zmiana) pokazujemy w formularzu,
  * po polsku, nad polami.
  */
-export function RecurringInvoiceSheet({
-  open,
+export function RecurringInvoiceSheet(props: RecurringInvoiceSheetProps) {
+  // Finora: Select mierzy `--anchor-width` z żywego prostokąta wyzwalacza; w trakcie
+  // animacji wejścia arkusza rozmiar jest pośredni i popup potrafi rozepchnąć arkusz.
+  const [sheetReady, setSheetReady] = useState(false);
+
+  // Treść arkusza (stan formularza) żyje w `SheetContent`, który Base UI odmontowuje
+  // po zamknięciu — każde otwarcie startuje z czystym formularzem z props. Finora robi
+  // to `reset` w efekcie na `open`; u nas bez setState w efekcie (React Compiler).
+  return (
+    <Sheet open={props.open} onOpenChange={props.onOpenChange} onOpenChangeComplete={setSheetReady}>
+      <SheetContent className='data-[side=right]:sm:max-w-2xl'>
+        {/* `key`: ponowne otwarcie w trakcie animacji zamykania nie zostawia formularza innej pozycji. */}
+        <RecurringInvoiceSheetBody
+          key={props.editing ? `edytuj:${props.editing.id}` : `nowa:${props.initialTemplate?.id ?? ''}`}
+          {...props}
+          sheetReady={sheetReady}
+        />
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function RecurringInvoiceSheetBody({
   onOpenChange,
   today,
   candidates,
   candidatesError = null,
   initialTemplate = null,
   editing = null,
-}: RecurringInvoiceSheetProps) {
+  templateNotice = null,
+  sheetReady,
+}: RecurringInvoiceSheetProps & { sheetReady: boolean }) {
   const router = useRouter();
   const isEditing = editing !== null;
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
 
-  // Finora: Select mierzy `--anchor-width` z żywego prostokąta wyzwalacza; w trakcie
-  // animacji wejścia arkusza rozmiar jest pośredni i popup potrafi rozepchnąć arkusz.
-  const [sheetReady, setSheetReady] = useState(false);
-
   // Wybór wzoru: lista startowa albo wynik szukania; wybrany wzór zostaje na liście.
-  const [options, setOptions] = useState<RecurringTemplateCandidate[]>(candidates);
   const [selected, setSelected] = useState<RecurringTemplateCandidate | null>(initialTemplate);
   const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<RecurringTemplateCandidate[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const needle = query.trim();
+  const options = needle === '' ? candidates : (searchResults ?? candidates);
 
   const {
     register,
     handleSubmit,
     control,
     setValue,
-    reset,
     formState: { errors, dirtyFields },
   } = useForm<RecurringInvoiceFormValues>({
     resolver: zodResolver(recurringInvoiceSchema),
-    defaultValues: emptyValues(today, initialTemplate),
+    defaultValues: editing
+      ? {
+          templateInvoiceId: editing.template_invoice_id,
+          name: editing.name,
+          frequency: editing.frequency,
+          dayOfMonth: editing.day_of_month,
+        }
+      : emptyValues(today, initialTemplate),
   });
 
   const frequency = useWatch({ control, name: 'frequency' });
   const dayOfMonth = useWatch({ control, name: 'dayOfMonth' });
 
-  // Każde otwarcie zaczyna od czystego stanu (Finora: `reset` w efekcie na `open`).
-  useEffect(() => {
-    if (!open) return;
-    setServerError(null);
-    setQuery('');
-    setSearchError(null);
-    setOptions(candidates);
-    setSelected(initialTemplate);
-    reset(
-      editing
-        ? {
-            templateInvoiceId: editing.template_invoice_id,
-            name: editing.name,
-            frequency: editing.frequency,
-            dayOfMonth: editing.day_of_month,
-          }
-        : emptyValues(today, initialTemplate),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, editing?.id, initialTemplate?.id]);
-
   // Szukanie starszych wzorów po fragmencie numeru (po przerwie w pisaniu).
+  // Odpowiedź starsza niż ostatnia zmiana pola (`requestSeq`) przepada.
   const requestSeq = useRef(0);
-  useEffect(() => {
-    if (!open || isEditing) return;
-    const needle = query.trim();
-    const seq = ++requestSeq.current;
-    if (needle === '') {
-      setOptions(candidates);
-      setSearchError(null);
+  const onQueryChange = (value: string) => {
+    setQuery(value);
+    if (value.trim() === '') {
+      requestSeq.current += 1;
       setSearching(false);
-      return;
+      setSearchError(null);
+      setSearchResults(null);
+    } else {
+      setSearching(true);
     }
-    setSearching(true);
+  };
+  useEffect(() => {
+    if (isEditing || needle === '') return;
+    const seq = ++requestSeq.current;
     const timer = setTimeout(async () => {
       const result = await searchRecurringTemplatesAction(needle).catch(() => null);
-      if (seq !== requestSeq.current) return; // starsza odpowiedź niż ostatnie pisanie
+      if (seq !== requestSeq.current) return;
       setSearching(false);
       if (!result || !result.success) {
         setSearchError(result?.error ?? 'Nie udało się wyszukać faktur. Spróbuj ponownie za chwilę.');
         return;
       }
       setSearchError(null);
-      setOptions(result.candidates);
+      setSearchResults(result.candidates);
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [query, open, isEditing, candidates]);
+  }, [needle, isEditing]);
 
   const items = useMemo(() => {
     const all = selected && !options.some((o) => o.id === selected.id) ? [selected, ...options] : options;
@@ -243,195 +259,204 @@ export function RecurringInvoiceSheet({
   const formId = 'recurring-invoice-form';
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} onOpenChangeComplete={setSheetReady}>
-      <SheetContent className='data-[side=right]:sm:max-w-lg'>
-        <SheetHeader>
-          <SheetTitle>{isEditing ? 'Edytuj fakturę cykliczną' : 'Nowa faktura cykliczna'}</SheetTitle>
-          <SheetDescription>
-            Faktura nie wystawia się sama. W wybranym dniu FaktWay przypomni o wystawieniu i wypełni formularz
-            danymi z faktury-wzoru — sprawdzasz je i wysyłasz do KSeF.
-          </SheetDescription>
-        </SheetHeader>
-        <form
-          id={formId}
-          onSubmit={handleSubmit(onSubmit)}
-          className='flex flex-1 flex-col gap-6 overflow-y-auto px-4'
-          noValidate
-        >
-          <FieldGroup>
-            {serverError ? (
-              <Alert variant='destructive'>
-                <AlertDescription>{serverError}</AlertDescription>
-              </Alert>
-            ) : null}
+    <>
+      <SheetHeader>
+        <SheetTitle>{isEditing ? 'Edytuj fakturę cykliczną' : 'Nowa faktura cykliczna'}</SheetTitle>
+        <SheetDescription>
+          Faktura nie wystawia się sama. W wybranym dniu FaktWay przypomni o wystawieniu i wypełni formularz
+          danymi z faktury-wzoru — sprawdzasz je i wysyłasz do KSeF.
+        </SheetDescription>
+      </SheetHeader>
+      <form
+        id={formId}
+        onSubmit={handleSubmit(onSubmit)}
+        className='flex flex-1 flex-col gap-6 overflow-y-auto px-4'
+        noValidate
+      >
+        <FieldGroup>
+          {serverError ? (
+            <Alert variant='destructive'>
+              <AlertDescription>{serverError}</AlertDescription>
+            </Alert>
+          ) : null}
 
-            {isEditing ? (
-              <Field>
-                <FieldLabel htmlFor={`${formId}-template-readonly`}>Faktura-wzór</FieldLabel>
-                <FieldContent>
-                  <Input
-                    id={`${formId}-template-readonly`}
-                    readOnly
-                    value={[
-                      editing.templateNumber ?? '(bez numeru)',
-                      editing.contractorName ? shortenLegalForm(editing.contractorName) : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  />
-                  <FieldDescription>
-                    Wzoru nie zmieniasz tutaj. Treść faktury poprawisz w formularzu przy wystawianiu.
-                  </FieldDescription>
-                </FieldContent>
-              </Field>
-            ) : (
-              <Field data-invalid={!!errors.templateInvoiceId}>
-                <FieldLabel htmlFor={`${formId}-template`}>Faktura-wzór</FieldLabel>
-                <FieldContent>
-                  <Input
-                    id={`${formId}-search`}
-                    type='search'
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder='Szukaj po numerze faktury'
-                    aria-label='Szukaj faktury-wzoru po numerze'
-                  />
-                  <Select
-                    items={items.map(({ value, label }) => ({ value, label }))}
-                    value={templateId || null}
-                    onValueChange={chooseTemplate}
-                  >
-                    <SelectTrigger
-                      id={`${formId}-template`}
-                      className='w-full'
-                      disabled={!sheetReady}
-                      aria-invalid={!!errors.templateInvoiceId}
-                    >
-                      <SelectValue placeholder={items.length === 0 ? 'Brak faktur do wyboru' : 'Wybierz fakturę'} />
-                    </SelectTrigger>
-                    <SelectContent alignItemWithTrigger={false}>
-                      <SelectGroup>
-                        {items.map((item) => (
-                          <SelectItem key={item.value} value={item.value}>
-                            {item.label}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <FieldError errors={[errors.templateInvoiceId]} />
-                  {candidatesError ? (
-                    <FieldDescription role='status'>{candidatesError}</FieldDescription>
-                  ) : searchError ? (
-                    <FieldDescription role='status'>{searchError}</FieldDescription>
-                  ) : searching ? (
-                    <FieldDescription role='status'>Szukam…</FieldDescription>
-                  ) : items.length === 0 ? (
-                    <FieldDescription role='status'>
-                      {query.trim() ? 'Żadna faktura nie pasuje do tego numeru.' : NO_TEMPLATES_TEXT}
-                    </FieldDescription>
-                  ) : (
-                    <FieldDescription>
-                      Pokazujemy najnowsze faktury, które mogą być wzorem. Starszą znajdziesz po numerze.
-                    </FieldDescription>
-                  )}
-                </FieldContent>
-              </Field>
-            )}
+          {!isEditing && templateNotice && !selected ? (
+            <Alert>
+              <AlertDescription>{templateNotice}</AlertDescription>
+            </Alert>
+          ) : null}
 
-            <Field data-invalid={!!errors.name}>
-              <FieldLabel htmlFor={`${formId}-name`}>Nazwa</FieldLabel>
-              <FieldContent>
-                <Input
-                  id={`${formId}-name`}
-                  maxLength={RECURRING_NAME_MAX}
-                  aria-invalid={!!errors.name}
-                  {...register('name')}
-                />
-                <FieldError errors={[errors.name]} />
-              </FieldContent>
-            </Field>
-
-            <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
-              <Field data-invalid={!!errors.frequency}>
-                <FieldLabel htmlFor={`${formId}-frequency`}>Częstotliwość</FieldLabel>
-                <FieldContent>
-                  <Controller
-                    control={control}
-                    name='frequency'
-                    render={({ field }) => (
-                      <Select
-                        items={RECURRING_FREQUENCIES.map((value) => ({
-                          value,
-                          label: RECURRING_FREQUENCY_LABELS[value],
-                        }))}
-                        value={field.value}
-                        onValueChange={(value) => field.onChange((value ?? 'monthly') as RecurringFrequency)}
-                      >
-                        <SelectTrigger id={`${formId}-frequency`} className='w-full' disabled={!sheetReady}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent alignItemWithTrigger={false}>
-                          <SelectGroup>
-                            {RECURRING_FREQUENCIES.map((value) => (
-                              <SelectItem key={value} value={value}>
-                                {RECURRING_FREQUENCY_LABELS[value]}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                  <FieldError errors={[errors.frequency]} />
-                </FieldContent>
-              </Field>
-
-              <Field data-invalid={!!errors.dayOfMonth}>
-                <FieldLabel htmlFor={`${formId}-day`}>Dzień miesiąca</FieldLabel>
-                <FieldContent>
-                  <Input
-                    id={`${formId}-day`}
-                    type='number'
-                    inputMode='numeric'
-                    min={RECURRING_DAY_MIN}
-                    max={RECURRING_DAY_MAX}
-                    step={1}
-                    aria-invalid={!!errors.dayOfMonth}
-                    {...register('dayOfMonth', { valueAsNumber: true })}
-                  />
-                  <FieldError errors={[errors.dayOfMonth]} />
-                </FieldContent>
-              </Field>
-            </div>
-
+          {isEditing ? (
             <Field>
-              <FieldLabel htmlFor={`${formId}-next`}>Następne wystawienie</FieldLabel>
+              <FieldLabel htmlFor={`${formId}-template-readonly`}>Faktura-wzór</FieldLabel>
               <FieldContent>
                 <Input
-                  id={`${formId}-next`}
+                  id={`${formId}-template-readonly`}
                   readOnly
-                  value={preview ? formatIsoDatePl(preview.date) : '—'}
+                  value={[
+                    editing.templateNumber ?? '(bez numeru)',
+                    editing.contractorName ? shortenLegalForm(editing.contractorName) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 />
                 <FieldDescription>
-                  {preview
-                    ? `Faktura za ${preview.periodLabel}. Dni 29–31 są niedostępne, bo nie ma ich w każdym miesiącu.`
-                    : `Podaj dzień miesiąca od ${RECURRING_DAY_MIN} do ${RECURRING_DAY_MAX}.`}
+                  Wzoru nie zmieniasz tutaj. Treść faktury poprawisz w formularzu przy wystawianiu.
                 </FieldDescription>
               </FieldContent>
             </Field>
-          </FieldGroup>
-        </form>
-        <SheetFooter className='flex-row'>
-          <Button type='submit' form={formId} disabled={isPending}>
-            {isPending ? <RiLoader4Line className='animate-spin' /> : null}
-            {isEditing ? 'Zapisz zmiany' : 'Dodaj fakturę cykliczną'}
-          </Button>
-          <Button type='button' variant='outline' onClick={() => onOpenChange(false)} disabled={isPending}>
-            Anuluj
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+          ) : (
+            <Field data-invalid={!!errors.templateInvoiceId}>
+              <FieldLabel htmlFor={`${formId}-template`}>Faktura-wzór</FieldLabel>
+              <FieldContent>
+                <Input
+                  id={`${formId}-search`}
+                  type='search'
+                  value={query}
+                  onChange={(e) => onQueryChange(e.target.value)}
+                  placeholder='Szukaj po numerze faktury'
+                  aria-label='Szukaj faktury-wzoru po numerze'
+                />
+                <Select
+                  items={items.map(({ value, label }) => ({ value, label }))}
+                  value={templateId || null}
+                  onValueChange={chooseTemplate}
+                >
+                  <SelectTrigger
+                    id={`${formId}-template`}
+                    className='w-full'
+                    disabled={!sheetReady}
+                    aria-invalid={!!errors.templateInvoiceId}
+                  >
+                    <SelectValue placeholder={items.length === 0 ? 'Brak faktur do wyboru' : 'Wybierz fakturę'} />
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    <SelectGroup>
+                      {items.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldError errors={[errors.templateInvoiceId]} />
+                {candidatesError ? (
+                  <FieldDescription role='status'>{candidatesError}</FieldDescription>
+                ) : searchError ? (
+                  <FieldDescription role='status'>{searchError}</FieldDescription>
+                ) : searching ? (
+                  <FieldDescription role='status'>Szukam…</FieldDescription>
+                ) : items.length === 0 ? (
+                  <FieldDescription role='status'>
+                    {needle ? 'Żadna faktura nie pasuje do tego numeru.' : NO_TEMPLATES_TEXT}
+                  </FieldDescription>
+                ) : (
+                  <FieldDescription>
+                    Pokazujemy najnowsze faktury, które mogą być wzorem. Starszą znajdziesz po numerze.
+                  </FieldDescription>
+                )}
+              </FieldContent>
+            </Field>
+          )}
+
+          <Field data-invalid={!!errors.name}>
+            <FieldLabel htmlFor={`${formId}-name`}>Nazwa</FieldLabel>
+            <FieldContent>
+              <Input
+                id={`${formId}-name`}
+                maxLength={RECURRING_NAME_MAX}
+                aria-invalid={!!errors.name}
+                {...register('name')}
+              />
+              <FieldError errors={[errors.name]} />
+            </FieldContent>
+          </Field>
+
+          {/* Finora: `<Separator />` + `<h6>Schedule</h6>`; u nas h3 pod tytułem arkusza (h2), żeby nie przeskakiwać poziomów. */}
+          <Separator />
+
+          <h3 className='font-medium'>Harmonogram</h3>
+
+          <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+            <Field data-invalid={!!errors.frequency}>
+              <FieldLabel htmlFor={`${formId}-frequency`}>Częstotliwość</FieldLabel>
+              <FieldContent>
+                <Controller
+                  control={control}
+                  name='frequency'
+                  render={({ field }) => (
+                    <Select
+                      items={RECURRING_FREQUENCIES.map((value) => ({
+                        value,
+                        label: RECURRING_FREQUENCY_LABELS[value],
+                      }))}
+                      value={field.value}
+                      onValueChange={(value) => field.onChange((value ?? 'monthly') as RecurringFrequency)}
+                    >
+                      <SelectTrigger id={`${formId}-frequency`} className='w-full' disabled={!sheetReady}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          {RECURRING_FREQUENCIES.map((value) => (
+                            <SelectItem key={value} value={value}>
+                              {RECURRING_FREQUENCY_LABELS[value]}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <FieldError errors={[errors.frequency]} />
+              </FieldContent>
+            </Field>
+
+            <Field data-invalid={!!errors.dayOfMonth}>
+              <FieldLabel htmlFor={`${formId}-day`}>Dzień miesiąca</FieldLabel>
+              <FieldContent>
+                <Input
+                  id={`${formId}-day`}
+                  type='number'
+                  inputMode='numeric'
+                  min={RECURRING_DAY_MIN}
+                  max={RECURRING_DAY_MAX}
+                  step={1}
+                  aria-invalid={!!errors.dayOfMonth}
+                  {...register('dayOfMonth', { valueAsNumber: true })}
+                />
+                <FieldError errors={[errors.dayOfMonth]} />
+              </FieldContent>
+            </Field>
+          </div>
+
+          <Field>
+            <FieldLabel htmlFor={`${formId}-next`}>Następne wystawienie</FieldLabel>
+            <FieldContent>
+              <Input
+                id={`${formId}-next`}
+                readOnly
+                value={preview ? formatIsoDatePl(preview.date) : '—'}
+              />
+              <FieldDescription>
+                {preview
+                  ? `Faktura za ${preview.periodLabel}. Dni 29–31 są niedostępne, bo nie ma ich w każdym miesiącu.`
+                  : `Podaj dzień miesiąca od ${RECURRING_DAY_MIN} do ${RECURRING_DAY_MAX}.`}
+              </FieldDescription>
+            </FieldContent>
+          </Field>
+        </FieldGroup>
+      </form>
+      <SheetFooter className='flex-row'>
+        <Button type='submit' form={formId} disabled={isPending}>
+          {isPending ? <RiLoader4Line className='animate-spin' /> : null}
+          {isEditing ? 'Zapisz zmiany' : 'Dodaj fakturę cykliczną'}
+        </Button>
+        <Button type='button' variant='outline' onClick={() => onOpenChange(false)} disabled={isPending}>
+          Anuluj
+        </Button>
+      </SheetFooter>
+    </>
   );
 }

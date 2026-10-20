@@ -114,9 +114,14 @@ describe('P6 — tabela faktur cyklicznych', () => {
     expect(html).toContain('>Aktywna<');
     expect(html).toContain('>Do wystawienia<');
     expect(html).toContain('>Wstrzymana<');
-    // Jasny motyw: tekst `*-800`, nie `*-600` z szablonu (kontrast na przyciemnionym tle plakietki).
+    // Jasny motyw: tło Finory (`*-600/10`), tekst ciemniejszy niż `*-600` z szablonu — kontrast AA
+    // policzony w komentarzu `recurring-status-badge.tsx` (green-700 daje tam 4,41:1, więc 800).
+    expect(RECURRING_STATUS_STYLES.active).toContain('bg-green-600/10');
     expect(RECURRING_STATUS_STYLES.active).toContain('text-green-800');
-    expect(RECURRING_STATUS_STYLES.paused).toContain('text-amber-800');
+    expect(RECURRING_STATUS_STYLES.paused).toContain('bg-amber-600/10');
+    expect(RECURRING_STATUS_STYLES.paused).toContain('text-amber-700');
+    // „Do wystawienia” (stanu nie ma w Finorze): pełny kolor główny, biały tekst 5,10:1.
+    expect(RECURRING_STATUS_STYLES.due).toContain('bg-primary text-primary-foreground');
     for (const style of Object.values(RECURRING_STATUS_STYLES)) expect(style).not.toMatch(/(^|\s)text-\w+-600/);
     expect(renderToStaticMarkup(<RecurringStatusBadge status="due" />)).toContain('Do wystawienia');
   });
@@ -127,7 +132,15 @@ describe('P6 — tabela faktur cyklicznych', () => {
     expect(html).toContain(`href="/invoices/new/regular?cykliczna=${ID_B}"`);
     expect(html).not.toContain(`cykliczna=${ID_C}`);
     expect(html).toContain('aria-label="Wystaw teraz fakturę „Abonament Acme”"');
-    expect(html).toMatch(/<button[^>]*disabled[^>]*aria-label="„Licencja roczna” jest wstrzymana/);
+    expect(html).toMatch(/<button[^>]*disabled[^>]*aria-label="Wystaw teraz — „Licencja roczna” jest wstrzymana/);
+  });
+
+  it('karta na telefonie: „Wystaw teraz” z widocznym napisem (bez podpowiedzi po najechaniu), nazwa dostępna zawiera ten napis', () => {
+    const html = view([item()]);
+    const cards = html.slice(html.indexOf('lg:hidden'));
+    expect(cards).toContain(`href="/invoices/new/regular?cykliczna=${ID_A}"`);
+    expect(cards).toContain('aria-label="Wystaw teraz fakturę „Abonament Acme”"');
+    expect(cards).toMatch(/<\/svg>Wystaw teraz<\/a>/);
   });
 
   it('akcje: Usuń i menu „⋯” z nazwami dostępnymi dla czytnika', () => {
