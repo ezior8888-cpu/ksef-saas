@@ -15,7 +15,7 @@ import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import type { Database, Json } from '@/types/database';
 import type { RecurringInvoiceRow, RecurringStatus } from '@/types/recurring-invoice';
 
-import { recurringDb } from './db';
+import { recurringDb, toRecurringRow, type RecurringInvoiceDbRow } from './db';
 import { coveredThroughDate, recurringPeriodKey, statusOf, type IssuedPeriod } from './schedule';
 import { TEMPLATE_FILTERS } from './template';
 
@@ -62,21 +62,7 @@ function buyerName(buyerData: Json | null): string | null {
   return typeof name === 'string' && name.trim() ? name.trim() : null;
 }
 
-function toRow(raw: RecurringInvoiceRow): RecurringInvoiceRow {
-  return {
-    id: raw.id,
-    tenant_id: raw.tenant_id,
-    template_invoice_id: raw.template_invoice_id,
-    name: raw.name,
-    frequency: raw.frequency,
-    day_of_month: Number(raw.day_of_month),
-    next_run_date: raw.next_run_date,
-    active: raw.active,
-    created_by: raw.created_by,
-    created_at: raw.created_at,
-    updated_at: raw.updated_at,
-  };
-}
+const toRow = toRecurringRow;
 
 /**
  * Wszystkie pozycje firmy (pełne strony, `readCompletePages` — §2.4 pkt 7),
@@ -91,7 +77,7 @@ export async function listRecurringInvoices(
   const db = recurringDb(supabase);
   let rows: RecurringInvoiceRow[];
   try {
-    rows = await readCompletePages<RecurringInvoiceRow>('Faktury cykliczne', (from, to) =>
+    const raw = await readCompletePages<RecurringInvoiceDbRow>('Faktury cykliczne', (from, to) =>
       db
         .from('recurring_invoices')
         .select(RECURRING_COLUMNS, { count: 'exact' })
@@ -99,6 +85,7 @@ export async function listRecurringInvoices(
         .order('id', { ascending: true })
         .range(from, to),
     );
+    rows = raw.map(toRecurringRow);
   } catch {
     throw new Error('Nie udało się wczytać faktur cyklicznych. Odśwież stronę za chwilę.');
   }
@@ -121,7 +108,6 @@ export async function listRecurringInvoices(
   const issued = await readIssuedPeriods(db, tenantId, rows.map((r) => r.id));
 
   return rows
-    .map(toRow)
     .map((row) => {
       const t = templates.get(row.template_invoice_id);
       const ownIssued = issued?.get(row.id) ?? [];
