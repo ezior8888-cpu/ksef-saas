@@ -87,8 +87,12 @@ describe('przycisk e-maila — bez wariantu glass', () => {
 
     const open = host.querySelector('button');
     act(() => open!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(host.querySelector('input[type="email"]')).not.toBeNull();
-    expect(host.textContent).toContain('Anuluj');
+    // E3b: formularz jest w arkuszu Finory (`send-invoice-sheet.tsx`), czyli w portalu poza `host`.
+    const sheet = document.body.querySelector('[data-slot="sheet-content"]');
+    expect(sheet, 'arkusz „Wyślij e-mailem” się nie otworzył').not.toBeNull();
+    expect(sheet!.querySelector('input[type="email"]')).not.toBeNull();
+    expect(sheet!.textContent).toContain('Anuluj');
+    expect(sheet!.innerHTML).not.toMatch(SZKLO);
     expect(host.innerHTML).not.toMatch(SZKLO);
   });
 });

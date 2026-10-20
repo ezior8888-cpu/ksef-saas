@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +16,7 @@ import { KsefDuplicateDecision } from '@/components/invoices/ksef-duplicate-deci
 import { RetiredDraftBanner } from '@/components/invoices/retired-draft-banner';
 import { UpoDownload } from '@/components/invoices/upo-download';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
+import { formatInvoiceDate } from '@/lib/invoices/display-date';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { automaticResendExpected } from '@/lib/invoices/ksef-send-policy';
 import { vatSummaryAgreesWithGross, vatSummaryByRate } from '@/lib/invoices/vat-summary';
@@ -329,18 +329,13 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
   };
 
   return (
-    <div className="space-y-4">
-      <Link
-        href="/invoices"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center text-sm print:hidden"
-      >
-        <ArrowLeft className="mr-1 h-4 w-4" /> Powrót do listy
-      </Link>
-
+    <div>
       {/*
-        Układ Finory (`invoices-view/index.tsx`): dokument po lewej, dwie karty po prawej od `lg`.
-        Kolejność w DOM = kolejność na telefonie: karta „Status” NAD dokumentem, karta „Dokument”
-        (e-mail, PDF, Drukuj, XML, Korekta) pod nim. Każda akcja jest w DOM raz.
+        Układ Finory (`invoices-view/index.tsx`): dokument po lewej, kolumna 18rem po prawej od `lg`.
+        Prawa kolumna = karta akcji Finory (`invoice-actions.tsx`: Wyślij e-mailem, Pobierz PDF,
+        Drukuj + nasze XML i Korekta) i — nad nią — karta „Status” KSeF (P4). Kolejność w DOM =
+        kolejność na telefonie: karta „Status” NAD dokumentem, karta akcji pod nim. Każda akcja
+        jest w DOM raz.
       */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_18rem] lg:grid-rows-[auto_1fr] print:block">
         <Card
@@ -442,17 +437,16 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           data-testid="dokument-faktury"
           className="gap-6 py-0 shadow-none lg:col-start-1 lg:row-span-2 lg:row-start-1 print:ring-0"
         >
+          {/* Nagłówek dokumentu Finory (`invoice-document.tsx`): wystawca po lewej, numer i daty po prawej. */}
           <div className="bg-muted/50 flex flex-wrap items-start justify-between gap-6 p-6">
-            <div className="min-w-0 space-y-2">
-              <p className="text-xl font-semibold">{seller.name ?? '—'}</p>
+            <div className="min-w-0 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl font-semibold uppercase">{seller.name ?? '—'}</span>
+              </div>
               <div className="text-muted-foreground space-y-1 text-sm">
+                {seller.address?.addressLine1 && <p>{seller.address.addressLine1}</p>}
+                {seller.address?.addressLine2 && <p>{seller.address.addressLine2}</p>}
                 {seller.nip && <p>NIP: {seller.nip}</p>}
-                <p className="whitespace-pre-line">
-                  {seller.address?.addressLine1 ?? ''}
-                  {seller.address?.addressLine2
-                    ? '\n' + seller.address.addressLine2
-                    : ''}
-                </p>
               </div>
             </div>
             <div className="space-y-4 sm:text-right">
@@ -460,9 +454,9 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
                 {documentTitle(inv.invoice_type, inv.invoice_kind)} nr {inv.internal_number ?? '(bez numeru)'}
               </h1>
               <div className="text-muted-foreground space-y-1 text-sm">
-                <p>Data wystawienia: {inv.issue_date ?? '—'}</p>
-                {inv.sale_date && <p>Data sprzedaży: {inv.sale_date}</p>}
-                {payment?.dueDate && <p>Termin płatności: {payment.dueDate}</p>}
+                <p>Data wystawienia: {formatInvoiceDate(inv.issue_date)}</p>
+                {inv.sale_date && <p>Data sprzedaży: {formatInvoiceDate(inv.sale_date)}</p>}
+                {payment?.dueDate && <p>Termin płatności: {formatInvoiceDate(payment.dueDate)}</p>}
               </div>
             </div>
           </div>
@@ -470,15 +464,11 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           <CardContent className="space-y-6 px-6 pb-6">
             <div className="flex flex-wrap justify-between gap-6">
               <div className="min-w-0">
-                <h2 className="font-medium">Nabywca</h2>
+                <h2 className="font-medium">Nabywca:</h2>
                 <div className="text-muted-foreground mt-2 space-y-1 text-sm">
                   <p className="text-foreground">{buyer.name ?? '—'}</p>
-                  <p className="whitespace-pre-line">
-                    {buyer.address?.addressLine1 ?? ''}
-                    {buyer.address?.addressLine2
-                      ? '\n' + buyer.address.addressLine2
-                      : ''}
-                  </p>
+                  {buyer.address?.addressLine1 && <p>{buyer.address.addressLine1}</p>}
+                  {buyer.address?.addressLine2 && <p>{buyer.address.addressLine2}</p>}
                   {buyer.nip ? (
                     <p>NIP: {buyer.nip}</p>
                   ) : buyer.vatUeNumber ? (
@@ -488,40 +478,41 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
                 </div>
               </div>
               <div className="min-w-0">
-                <h2 className="font-medium">Płatność</h2>
-                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-                  <dt>Do zapłaty</dt>
+                <h2 className="font-medium">Płatność:</h2>
+                <dl className="text-muted-foreground mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                  <dt className="text-foreground">Do zapłaty:</dt>
                   <dd className="font-medium tabular-nums">{money(inv.amount_due)}</dd>
                   {payment?.method && (
                     <>
-                      <dt>Forma</dt>
-                      <dd className="text-muted-foreground">
-                        {PAYMENT_METHOD_LABEL[payment.method] ?? payment.method}
-                      </dd>
+                      <dt className="text-foreground">Forma płatności:</dt>
+                      <dd>{PAYMENT_METHOD_LABEL[payment.method] ?? payment.method}</dd>
                     </>
                   )}
                   {payment?.bankAccount && (
                     <>
-                      <dt>Rachunek</dt>
-                      <dd className="text-muted-foreground font-mono text-xs break-all">{payment.bankAccount}</dd>
+                      <dt className="text-foreground">Rachunek:</dt>
+                      <dd className="break-all">{payment.bankAccount}</dd>
                     </>
                   )}
                   {payment?.bankName && (
                     <>
-                      <dt>Bank</dt>
-                      <dd className="text-muted-foreground">{payment.bankName}</dd>
+                      <dt className="text-foreground">Bank:</dt>
+                      <dd>{payment.bankName}</dd>
                     </>
                   )}
                   {currency !== 'PLN' && payment?.swift && (
                     <>
-                      <dt>SWIFT</dt>
-                      <dd className="text-muted-foreground font-mono text-xs">{payment.swift}</dd>
+                      <dt className="text-foreground">SWIFT:</dt>
+                      <dd>{payment.swift}</dd>
+                    </>
+                  )}
+                  {inv.split_payment && (
+                    <>
+                      <dt className="text-foreground">MPP:</dt>
+                      <dd>Mechanizm podzielonej płatności</dd>
                     </>
                   )}
                 </dl>
-                {inv.split_payment && (
-                  <p className="mt-2 text-sm font-medium">Mechanizm podzielonej płatności</p>
-                )}
               </div>
             </div>
 
@@ -564,7 +555,12 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               </TableBody>
             </Table>
 
-            <div className="flex flex-wrap items-start justify-between gap-6">
+            {/*
+              Stopka dokumentu Finory: po lewej (zamiast „Salesperson”) podsumowanie VAT per stawka,
+              po prawej sumy. Kolumna sum szersza niż w Finorze (`max-w-64`, nie `max-w-56`):
+              „Razem brutto:” i kwota z kodem waluty nie mieszczą się w 14rem (§7.2).
+            */}
+            <div className="flex flex-wrap items-end justify-between gap-6">
               <div className="min-w-0 flex-1 basis-72">
                 {showVatRows && vatRows && (
                   <div data-testid="podsumowanie-vat">
@@ -593,17 +589,17 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
               </div>
               <div className="w-full max-w-64 space-y-1.5 text-sm">
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Razem netto</span>
+                  <span className="text-muted-foreground">Razem netto:</span>
                   <span className="font-medium tabular-nums">{money(inv.net_total)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">VAT</span>
+                  <span className="text-muted-foreground">VAT:</span>
                   <span className="font-medium tabular-nums">{money(inv.vat_total)}</span>
                 </div>
                 <Separator className="my-2" />
                 <div className="flex items-center justify-between gap-4">
-                  <span className="font-medium">Razem brutto</span>
-                  <span className="font-semibold tabular-nums">{money(inv.gross_total)}</span>
+                  <span className="font-medium">Razem brutto:</span>
+                  <span className="font-medium tabular-nums">{money(inv.gross_total)}</span>
                 </div>
               </div>
             </div>
@@ -638,18 +634,17 @@ export function InvoiceDetailView({ initial }: { initial: InvoiceDetailInitial }
           </CardContent>
         </Card>
 
+        {/* Karta akcji Finory (`invoice-actions.tsx`): `h-max shadow-none print:hidden`, przyciski na całą szerokość. */}
         <Card
           data-testid="karta-dokumentu"
-          className="h-max gap-4 shadow-none lg:col-start-2 lg:row-start-2 print:hidden"
+          className="h-max shadow-none lg:col-start-2 lg:row-start-2 print:hidden"
         >
-          <CardHeader>
-            <CardTitle>Dokument</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <InvoiceActions
               section="secondary"
               invoice={actionsInvoice}
               canManageSend={inv.can_manage_send}
+              buyerEmail={buyer.email ?? null}
             />
           </CardContent>
         </Card>

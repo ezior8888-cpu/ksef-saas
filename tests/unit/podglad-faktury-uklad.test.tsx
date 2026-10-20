@@ -218,9 +218,9 @@ describe('P4: dokument faktury', () => {
     expect(t).toContain('Faktura VAT nr FV/7/10/2026');
     expect(t).toContain('Moja Firma');
     expect(t).toContain('NIP: 5260001246');
-    expect(t).toContain('Data wystawienia: 2026-10-02');
-    expect(t).toContain('Data sprzedaży: 2026-10-01');
-    expect(t).toContain('Termin płatności: 2026-10-16');
+    expect(t).toContain('Data wystawienia: 02.10.2026');
+    expect(t).toContain('Data sprzedaży: 01.10.2026');
+    expect(t).toContain('Termin płatności: 16.10.2026');
     act(() => root?.unmount());
     host?.remove();
     expect(norm(mount({ ...base, payment_data: null }).textContent)).not.toContain('Termin płatności');
@@ -248,8 +248,8 @@ describe('P4: dokument faktury', () => {
 
   it('ROZ: „Do zapłaty” to `amount_due` (reszta po zaliczkach), nie brutto zamówienia', () => {
     const t = norm(mount({ ...base, invoice_type: 'ROZ', invoice_kind: 'final', gross_total: '4000', amount_due: 1000 }).textContent);
-    expect(t).toMatch(/Do zapłaty\s*1000,00 PLN/);
-    expect(t).not.toMatch(/Do zapłaty\s*4000,00/);
+    expect(t).toMatch(/Do zapłaty:\s*1000,00 PLN/);
+    expect(t).not.toMatch(/Do zapłaty:?\s*4000,00/);
   });
 
   it('MPP tylko przy `split_payment`; SWIFT tylko dla waluty obcej i tylko gdy dane go mają', () => {
@@ -302,9 +302,9 @@ describe('P4: podsumowanie VAT per stawka i waluta', () => {
       ['8%', '50,00', '4,00', '54,00'],
     ]);
     const t = norm(host?.textContent);
-    expect(t).toMatch(/Razem netto\s*1150,00 PLN/);
-    expect(t).toMatch(/VAT\s*257,00 PLN/);
-    expect(t).toMatch(/Razem brutto\s*1407,00 PLN/);
+    expect(t).toMatch(/Razem netto:\s*1150,00 PLN/);
+    expect(t).toMatch(/VAT:\s*257,00 PLN/);
+    expect(t).toMatch(/Razem brutto:\s*1407,00 PLN/);
   });
 
   it('korekta pokazuje różnice: ujemne stawki i ujemne Razem (nagłówek korekty to różnica, 00200)', () => {
@@ -326,19 +326,19 @@ describe('P4: podsumowanie VAT per stawka i waluta', () => {
       ['8%', '-50,00', '-4,00', '-54,00'],
     ]);
     const t = norm(host?.textContent);
-    expect(t).toMatch(/Razem brutto\s*-177,00 PLN/);
+    expect(t).toMatch(/Razem brutto:\s*-177,00 PLN/);
   });
 
   it('kwoty pozycji niezgodne z nagłówkiem (np. stan PO w korekcie before_after): bez wierszy stawek, samo Razem — nie pokazujemy złych liczb', () => {
     mount({ ...base, gross_total: '9999', net_total: '8000', vat_total: '1999' });
     expect(host?.querySelector('[data-testid="podsumowanie-vat"]')).toBeNull();
-    expect(norm(host?.textContent)).toMatch(/Razem brutto\s*9999,00 PLN/);
+    expect(norm(host?.textContent)).toMatch(/Razem brutto:\s*9999,00 PLN/);
   });
 
   it('pozycje bez kwot netto/VAT (stare rekordy): bez wierszy stawek, samo Razem', () => {
     mount({ ...base, lines: base.lines.map((l) => ({ ...l, net_amount: null, vat_amount: null })) });
     expect(host?.querySelector('[data-testid="podsumowanie-vat"]')).toBeNull();
-    expect(norm(host?.textContent)).toMatch(/Razem brutto\s*1407,00 PLN/);
+    expect(norm(host?.textContent)).toMatch(/Razem brutto:\s*1407,00 PLN/);
   });
 
   it('waluta z faktury: EUR jako EUR w podsumowaniu i „Do zapłaty”, bez „PLN” na sztywno', () => {
@@ -348,9 +348,9 @@ describe('P4: podsumowanie VAT per stawka i waluta', () => {
       payment_data: { method: 'transfer', dueDate: '2026-10-16', bankAccount: 'DE89370400440532013000', currency: 'EUR', amountDue: 1407 },
     });
     const t = norm(host?.textContent);
-    expect(t).toMatch(/Razem brutto\s*1407,00 EUR/);
-    expect(t).toMatch(/Razem netto\s*1150,00 EUR/);
-    expect(t).toMatch(/Do zapłaty\s*1407,00 EUR/);
+    expect(t).toMatch(/Razem brutto:\s*1407,00 EUR/);
+    expect(t).toMatch(/Razem netto:\s*1150,00 EUR/);
+    expect(t).toMatch(/Do zapłaty:\s*1407,00 EUR/);
     expect(t).not.toContain('PLN');
   });
 });
