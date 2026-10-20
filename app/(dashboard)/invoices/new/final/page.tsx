@@ -38,9 +38,6 @@ export default async function NewFinalInvoicePage() {
     // celowo: patrz komentarz wyżej
   }
 
-  return (
-    <div className="max-w-4xl">
-      <FinalInvoiceForm initialSeller={seller} advanceInvoices={available} />
-    </div>
-  );
+  // P5: szerokość daje siatka Finory w formularzu (dokument + kolumna 18rem).
+  return <FinalInvoiceForm initialSeller={seller} advanceInvoices={available} />;
 }

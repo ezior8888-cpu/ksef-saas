@@ -42,13 +42,24 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import Link from 'next/link';
-import { AlertCircle, ChevronLeft, Plus, Trash2, Loader2 } from 'lucide-react';
+import { AlertCircle, ChevronLeft, Trash2, Loader2 } from 'lucide-react';
+import { RiAddLine, RiCloseLine } from '@remixicon/react';
 import { InvoiceTotals } from '@/components/invoices/invoice-totals';
 import { suggestsSplitPayment } from '@/lib/invoices/annotations';
 import { formatPlMoney } from '@/lib/format/pl';
 import { dueDateFrom, todayInWarsaw } from '@/lib/format/warsaw-date';
-import { ffSettingsPanel } from '@/lib/dashboard/ff-surface-classes';
-import { BUYER_ID_TYPE_LABELS } from '@/types/invoice-types';
+import { BUYER_ID_TYPE_LABELS, type SellerData } from '@/types/invoice-types';
+import { Separator } from '@/components/ui/separator';
+import { InvoiceCreateActions } from '@/components/invoices/finora/invoice-create-actions';
+import {
+  DocumentColumns,
+  DocumentHeaderRow,
+  DocumentSection,
+  InvoiceCreateGrid,
+  InvoiceCreatePageHeading,
+  InvoiceDocumentCard,
+  InvoiceDocumentHeader,
+} from '@/components/invoices/finora/invoice-document';
 
 const defaultLine: InvoiceFormValues['lines'][number] = {
   name: '',
@@ -79,26 +90,20 @@ function firstValidationMessage(errors: FieldErrors<InvoiceFormValues>): string 
   return walk(errors) ?? 'Sprawdź pola formularza (czerwone podpowiedzi).';
 }
 
-const labelClass =
-  'text-xs font-medium text-[var(--ff-text-muted)] uppercase tracking-wider mb-1.5 block';
+/** Etykieta pola w stylu Finory (`FieldLabel`): mały tekst nad polem. */
+const labelClass = 'mb-2';
 
 /**
- * Sekcja formularza.
- *
- * DO WRZEŚNIA 2026 TO BYŁ OSTATNI EKRAN NA STARYM „SZKLE”. Pięć sekcji miało
- * wpisane na sztywno `bg-white/45 backdrop-blur-[24px] border-white/55` razem
- * z wariantami `dark:` — czyli paletę sprzed przemalowania panelu na biało
- * (30.08.2026). W jasnym motywie ratował je wyłącznie zestaw łatek
- * `html:not(.dark) .ff-dashboard [class*='bg-white/5']` w `globals.css`.
- *
- * Teraz to jest zwykły panel na tokenach, taki sam jak w ustawieniach
- * i w tabelach. Odstęp wewnętrzny schodzi na telefonie z 28 px do 16 px —
- * przy szerokości 375 px stare `p-7` zabierało siódmą część ekranu.
+ * Tailwind `xl` — od tej szerokości pozycje idą wierszami siatki (Finora:
+ * `invoice-line-items.tsx`), poniżej kartami. Do P5 próg był `lg`, ale od
+ * `lg` obok dokumentu stoi kolumna akcji 18rem i wiersz z siedmioma polami
+ * nie mieścił się w karcie (przewijałby się w bok).
  */
-const sectionClass = `${ffSettingsPanel} space-y-5 p-4 sm:p-6 lg:p-8`;
+const LINES_LAYOUT_MEDIA = '(min-width: 1280px)';
 
-/** Tailwind `lg` — musi być zgodne z breakpointem ukrywania/pokazywania pozycji. */
-const LINES_LAYOUT_LG_MEDIA = '(min-width: 1024px)';
+/** Kolumny wiersza pozycji: Nazwa · J.m. · Ilość · Cena netto · VAT · Brutto · usuń. */
+const LINE_GRID =
+  'grid grid-cols-[minmax(8rem,1fr)_3.5rem_4.5rem_6rem_5.5rem_6.5rem_2rem] gap-2';
 
 /**
  * Rodzaj nabywcy (AUD-70). W schemacie to dwie flagi — `buyerIsConsumer`
@@ -141,7 +146,13 @@ export function InvoiceForm({
   prefill = null,
   vatExempt = false,
   suggestedNumber = null,
+  seller = null,
 }: {
+  /**
+   * Dane sprzedawcy do nagłówka dokumentu (P5) — tylko do wyświetlenia.
+   * Faktura i tak bierze sprzedawcę z profilu firmy po stronie serwera.
+   */
+  seller?: SellerData | null;
   /** Podkład z ostatniej faktury — `null`, gdy tenant nie ma jeszcze żadnej. */
   prefill?: PrefillFromLastInvoice | null;
   /** Podpowiedź kolejnego numeru (F-015) — pole pozostaje edytowalne. */
@@ -179,7 +190,7 @@ export function InvoiceForm({
   const [linesDesktopLayout, setLinesDesktopLayout] = useState(false);
 
   useEffect(() => {
-    const mql = window.matchMedia(LINES_LAYOUT_LG_MEDIA);
+    const mql = window.matchMedia(LINES_LAYOUT_MEDIA);
     const sync = () => setLinesDesktopLayout(mql.matches);
     sync();
     mql.addEventListener('change', sync);
@@ -494,58 +505,59 @@ export function InvoiceForm({
   // eslint-disable-next-line react-hooks/incompatible-library -- RHF watch dla warunkowego UI
   const paymentMethod = form.watch('paymentMethod');
 
+  const busy = isSaving || isSending;
+
+  /** Pole stawki VAT — ten sam zestaw opcji co przed P5, w obu układach pozycji. */
+  const vatSelectClass =
+    'border-input bg-background dark:bg-input/30 h-8 w-full min-w-0 rounded-none border px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 aria-invalid:border-destructive [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:text-[16px]';
+
   return (
-    <form onSubmit={(e) => e.preventDefault()} className="space-y-8 pb-32">
+    <form onSubmit={(e) => e.preventDefault()} className="space-y-6 pb-32 lg:pb-10">
       {/* NAGŁÓWEK — dwa układy.
           Na telefonie pasek z makiety: strzałka wstecz, tytuł z podtytułem,
           „Szkic” po prawej. Zapis szkicu wchodzi tu z dolnego paska, żeby
           zostawić mu miejsce na dwa przyciski zamiast trzech.
-          Od `sm` zostaje duży tytuł, jak było. */}
+          Od `sm` nagłówek strony jak na liście faktur (P3). */}
       <div className="flex items-center gap-2 sm:hidden">
         <Link
           href="/invoices/new"
           aria-label="Wróć do wyboru rodzaju faktury"
-          className="-ml-2 flex size-10 shrink-0 items-center justify-center rounded-lg text-[var(--ff-text-muted)] transition-colors hover:bg-[var(--ff-row-hover)]"
+          className="text-muted-foreground hover:bg-muted -ml-2 flex size-10 shrink-0 items-center justify-center transition-colors"
         >
           <ChevronLeft className="h-5 w-5" />
         </Link>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[20px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-            Nowa faktura
-          </h1>
-          <p className="truncate text-[13px] text-[var(--ff-text-muted)]">
-            {miesiacRok} · KSeF
-          </p>
+          <h1 className="truncate text-xl font-semibold tracking-tight">Nowa faktura</h1>
+          <p className="text-muted-foreground truncate text-sm">{miesiacRok} · KSeF</p>
         </div>
         <button
           type="button"
           onClick={handleSaveDraft}
-          disabled={isSaving || isSending}
-          className="shrink-0 rounded-lg px-2 py-2 text-sm font-semibold text-[var(--ff-accent)] transition-opacity disabled:opacity-50"
+          disabled={busy}
+          className="text-primary shrink-0 px-2 py-2 text-sm font-semibold transition-opacity disabled:opacity-50"
         >
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Szkic'}
         </button>
       </div>
 
-      <div className="hidden sm:block">
-        <h1 className="text-4xl font-semibold tracking-tight">Nowa faktura</h1>
-        <p className="mt-2 text-muted-foreground">
-          Wystaw fakturę B2B lub B2C i wyślij do KSeF jednym kliknięciem
-        </p>
-      </div>
+      <InvoiceCreatePageHeading
+        className="hidden sm:block"
+        title="Nowa faktura"
+        description="Wystaw fakturę B2B lub B2C i wyślij do KSeF jednym kliknięciem"
+      />
 
       {/* PODPOWIEDŹ FLO — tylko gdy jest z czego wypełniać.
           Zniknie po użyciu: baner, który po kliknięciu zostaje, wygląda jakby
           nic się nie stało, a formularz jest już wypełniony. */}
       {prefill && !prefillUzyty ? (
-        <div className="flex items-start gap-3 rounded-2xl border border-[var(--ff-accent)]/25 bg-[var(--ff-accent-tint)] p-4">
+        <div className="flex items-start gap-3 border border-[var(--ff-accent)]/25 bg-[var(--ff-accent-tint)] p-4">
           <span
             aria-hidden
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--ff-primary)] text-sm font-semibold text-[var(--ff-on-primary)]"
+            className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center text-sm font-semibold"
           >
             F
           </span>
-          <p className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-[var(--ff-text)]">
+          <p className="min-w-0 flex-1 text-sm leading-relaxed">
             Mogę wypełnić to za Ciebie na podstawie ostatniej faktury dla{' '}
             <span className="font-semibold">{prefill.contractorName}</span>.{' '}
             <button
@@ -559,705 +571,647 @@ export function InvoiceForm({
         </div>
       ) : null}
 
-      {/* SECTION: Dane faktury */}
-      <section className={sectionClass}>
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Dane faktury</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Numer i data wystawienia
-          </p>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="internalNumber" className={labelClass}>
-              Numer faktury
-            </Label>
-            <Input
-              id="internalNumber"
-              placeholder="FV/2026/04/001"
-              {...form.register('internalNumber')}
-            />
-            {form.formState.errors.internalNumber && (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1.5">
-                <AlertCircle className="h-3 w-3" />
-                {form.formState.errors.internalNumber.message}
-              </p>
-            )}
-          </div>
-          <div>
-            <Label className={labelClass}>Data wystawienia</Label>
-            <Input
-              type="date"
-              className="h-12 text-base"
-              {...form.register('issueDate')}
-            />
-          </div>
-        </div>
-        <div className="max-w-md">
-          <Label className={labelClass}>Data sprzedaży / dostawy</Label>
-          <p className="-mt-0.5 mb-2 text-xs text-muted-foreground">
-            Opcjonalnie, gdy jest inna od daty wystawienia (pole P_6 w KSeF); identyczna data nie jest duplikowana w XML.
-          </p>
-          <Input type="date" className="h-12 text-base" {...form.register('saleDate')} />
-          {form.formState.errors.saleDate ? (
-            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
-              <AlertCircle className="h-3 w-3" />
-              {form.formState.errors.saleDate.message}
-            </p>
-          ) : null}
-        </div>
-      </section>
-
-      {/* SECTION: Nabywca */}
-      <section className={sectionClass}>
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Nabywca</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            {buyerKind === 'consumer'
-              ? 'Dane osoby fizycznej (bez NIP podatnika)'
-              : buyerKind === 'eu'
-                ? 'Firma z innego kraju UE — identyfikuje ją numer VAT-UE'
-                : 'Wyszukaj po NIP w bazie GUS lub wprowadź ręcznie'}
-          </p>
-        </div>
-        {/* Rodzaj nabywcy — trzy wykluczające się opcje (AUD-70). Natywne
-            pola radio: grupa z klawiatury (strzałki) i czytnik ekranu bez
-            dodatkowej biblioteki; kółko zostaje widoczne, bo klika w nie e2e. */}
-        <fieldset>
-          <legend className={labelClass}>Rodzaj nabywcy</legend>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {BUYER_KINDS.map((opcja) => {
-              const wybrana = buyerKind === opcja.kind;
-              return (
-                <label
-                  key={opcja.kind}
-                  htmlFor={opcja.id}
-                  className={cn(
-                    'flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50',
-                    wybrana
-                      ? 'border-[var(--ff-accent)] bg-[var(--ff-accent-tint)]'
-                      : 'border-[var(--ff-border)] bg-[var(--ff-surface-container-low)] hover:border-[var(--ff-border-strong)]',
-                  )}
-                >
-                  <input
-                    type="radio"
-                    id={opcja.id}
-                    name="buyerKind"
-                    value={opcja.kind}
-                    checked={wybrana}
-                    onChange={() => zmienRodzajNabywcy(opcja.kind)}
-                    className="mt-0.5 size-4 shrink-0 accent-[var(--ff-accent)]"
-                  />
-                  <span className="min-w-0 flex-1 space-y-1">
-                    <span className="block text-sm font-medium leading-none">{opcja.label}</span>
-                    <span className="block text-xs text-muted-foreground">{opcja.hint}</span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-          {form.formState.errors.buyerIsEu ? (
-            <p className={errorTextClass}>
-              <AlertCircle className="h-3 w-3" />
-              {form.formState.errors.buyerIsEu.message}
-            </p>
-          ) : null}
-        </fieldset>
-        {buyerKind === 'eu' ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="buyer-vat-ue" className={labelClass}>
-                Numer VAT-UE nabywcy
-              </Label>
-              <Input
-                id="buyer-vat-ue"
-                autoComplete="off"
-                autoCapitalize="characters"
-                spellCheck={false}
-                placeholder="DE123456789"
-                className="uppercase"
-                aria-invalid={form.formState.errors.buyerVatUe ? true : undefined}
-                aria-describedby="buyer-vat-ue-hint"
-                {...form.register('buyerVatUe', {
-                  onChange: (e: ChangeEvent<HTMLInputElement>) =>
-                    onVatUeChange(buyerVatUeWatch, e.target.value),
-                })}
-              />
-              {form.formState.errors.buyerVatUe ? (
-                <p id="buyer-vat-ue-hint" className={errorTextClass}>
-                  <AlertCircle className="h-3 w-3" />
-                  {form.formState.errors.buyerVatUe.message}
-                </p>
-              ) : (
-                <p
-                  id="buyer-vat-ue-hint"
-                  aria-live="polite"
-                  className={cn(
-                    'mt-1.5 text-xs',
-                    vatUeHint.tone === 'warn'
-                      ? 'text-amber-700 dark:text-amber-400'
-                      : vatUeHint.tone === 'ok'
-                        ? 'text-[var(--ff-text)]'
-                        : 'text-muted-foreground',
-                  )}
-                >
-                  {vatUeHint.text}
-                </p>
-              )}
-            </div>
-            <div>
-              <Label htmlFor="buyer-country" className={labelClass}>
-                Kraj nabywcy
-              </Label>
-              <Select
-                value={buyerCountryCode}
-                items={EU_COUNTRY_ITEMS}
-                onValueChange={(v) => {
-                  if (v == null) return
-                  form.setValue('buyerCountryCode', v, {
-                    shouldDirty: true,
-                    shouldValidate: wyslanoRaz,
-                  })
-                }}
-              >
-                <SelectTrigger
-                  id="buyer-country"
-                  className="w-full"
-                  aria-invalid={form.formState.errors.buyerCountryCode ? true : undefined}
-                >
-                  <SelectValue placeholder="Wybierz kraj UE" />
-                </SelectTrigger>
-                <SelectContent>
-                  {EU_COUNTRY_ITEMS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.buyerCountryCode ? (
-                <p className={errorTextClass}>
-                  <AlertCircle className="h-3 w-3" />
-                  {form.formState.errors.buyerCountryCode.message}
-                </p>
-              ) : (
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  Ustawiamy go z prefiksu numeru — zmień, jeśli adres jest w innym kraju UE.
-                </p>
-              )}
-            </div>
-          </div>
-        ) : null}
-        {buyerKind === 'pl' ? (
-          <div className="space-y-2">
-            <Label className={labelClass}>NIP nabywcy</Label>
-            <BuyerLookup
-              nip={buyerNipWatch ?? ''}
-              onNipChange={(digits) => {
-                form.setValue('buyerNip', digits, { shouldDirty: true });
-                if (digits.length === 10) void form.trigger('buyerNip');
-              }}
-              onSelected={handleBuyerSelected}
-              nipError={form.formState.errors.buyerNip?.message}
-              onValidationComplete={(result) => {
-                setBuyerVatStatus(result);
-                if (
-                  result?.legalName &&
-                  !form.getValues('buyerName')?.trim()
-                ) {
-                  form.setValue('buyerName', result.legalName, {
-                    shouldDirty: true,
-                  });
+      <InvoiceCreateGrid>
+        <InvoiceDocumentCard
+          header={
+            <InvoiceDocumentHeader seller={seller}>
+              <DocumentHeaderRow
+                label="Numer faktury"
+                htmlFor="internalNumber"
+                error={
+                  form.formState.errors.internalNumber ? (
+                    <p className={errorTextClass}>
+                      <AlertCircle className="h-3 w-3" />
+                      {form.formState.errors.internalNumber.message}
+                    </p>
+                  ) : null
                 }
-              }}
-            />
-            {buyerVatStatus ? (
-              <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                <VatStatusBadge
-                  status={buyerVatStatus.vatStatus}
-                  source={buyerVatStatus.source}
-                  fromCache={buyerVatStatus.fromCache}
-                  warning={buyerVatStatus.warning ?? null}
-                  size="sm"
-                />
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {buyerKind === 'consumer' ? (
-          <div className="space-y-2">
-            <Label className={labelClass}>Typ identyfikatora</Label>
-            <Select
-              value={buyerConsumerIdType ?? 'pesel'}
-              items={BUYER_ID_TYPE_ITEMS}
-              onValueChange={(v) => {
-                if (v == null) return
-                form.setValue(
-                  'buyerConsumerIdType',
-                  v as InvoiceFormValues['buyerConsumerIdType'],
-                  { shouldDirty: true },
-                );
-                form.setValue('buyerPesel', '', { shouldDirty: true });
-                form.setValue('buyerIdDocument', '', { shouldDirty: true });
-                void form.trigger(['buyerConsumerIdType', 'buyerPesel', 'buyerIdDocument']);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Wybierz typ" />
-              </SelectTrigger>
-              <SelectContent>
-                {BUYER_ID_TYPE_ITEMS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {form.formState.errors.buyerConsumerIdType ? (
-              <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
-                <AlertCircle className="h-3 w-3" />
-                {form.formState.errors.buyerConsumerIdType.message}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-        {buyerKind === 'consumer' && buyerConsumerIdType === 'pesel' ? (
-          <div>
-            <Label className={labelClass}>PESEL</Label>
-            <Input
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="11 cyfr"
-              {...form.register('buyerPesel')}
-            />
-            {form.formState.errors.buyerPesel ? (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1.5">
-                <AlertCircle className="h-3 w-3" />
-                {form.formState.errors.buyerPesel.message}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-        {buyerKind === 'consumer' &&
-        (buyerConsumerIdType === 'id_card' || buyerConsumerIdType === 'passport') ? (
-          <div>
-            <Label className={labelClass}>Numer dokumentu</Label>
-            <Input
-              autoComplete="off"
-              placeholder={
-                buyerConsumerIdType === 'id_card' ? 'Seria i numer dowodu' : 'Numer paszportu'
-              }
-              {...form.register('buyerIdDocument')}
-            />
-            {form.formState.errors.buyerIdDocument ? (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1.5">
-                <AlertCircle className="h-3 w-3" />
-                {form.formState.errors.buyerIdDocument.message}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label className={labelClass}>Nazwa firmy</Label>
-            <Input {...form.register('buyerName')} />
-          </div>
-          <div>
-            <Label className={labelClass}>Adres (linia 1)</Label>
-            <Input {...form.register('buyerAddressLine1')} />
-          </div>
-          <div>
-            <Label className={labelClass}>Adres (linia 2)</Label>
-            <Input {...form.register('buyerAddressLine2')} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label className={labelClass}>Email (opcjonalnie)</Label>
-            <Input
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              className="h-12 text-base"
-              {...form.register('buyerEmail')}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION: Pozycje — tabela vs karty wg `linesDesktopLayout` (1024px, jak Tailwind lg) */}
-      <section
-        className={sectionClass}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="font-display text-lg font-semibold tracking-tighter-text">
-              Pozycje
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Towary i usługi na fakturze
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="glass"
-            size="sm"
-            onClick={() => append(newLine)}
-            className="shrink-0"
-          >
-            <Plus className="mr-1.5 h-4 w-4" />
-            <span className="hidden sm:inline">Dodaj pozycję</span>
-            <span className="sm:hidden">Dodaj</span>
-          </Button>
-        </div>
-
-        {/* Tylko jeden wariant layoutu naraz — patrz `linesDesktopLayout` powyżej. */}
-        {linesDesktopLayout ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--ff-border)] text-left text-[var(--ff-text-muted)]">
-                <th className="w-8 py-3 text-xs font-medium uppercase tracking-wider">
-                  #
-                </th>
-                <th className="py-3 text-xs font-medium uppercase tracking-wider">
-                  Nazwa
-                </th>
-                <th className="w-20 py-3 text-xs font-medium uppercase tracking-wider">
-                  J.m.
-                </th>
-                <th className="w-24 py-3 text-xs font-medium uppercase tracking-wider">
-                  Ilość
-                </th>
-                <th className="w-32 py-3 text-xs font-medium uppercase tracking-wider">
-                  Cena netto
-                </th>
-                <th className="w-24 py-3 text-xs font-medium uppercase tracking-wider">
-                  VAT
-                </th>
-                <th className="w-28 py-3 text-right text-xs font-medium uppercase tracking-wider">
-                  Netto
-                </th>
-                <th className="w-28 py-3 text-right text-xs font-medium uppercase tracking-wider">
-                  Brutto
-                </th>
-                <th className="w-10 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {fields.map((field, index) => {
-                const w = watchedLines?.[index];
-                const calc = calculateLineItem({
-                  quantity: Number(w?.quantity) || 0,
-                  unitPriceNet: Number(w?.unitPriceNet) || 0,
-                  vatRate: w?.vatRate ?? '23',
-                });
-                return (
-                  <tr
-                    key={field.id}
-                    className="border-b border-[var(--ff-row-divider)] last:border-0"
-                  >
-                    <td className="py-3 text-muted-foreground">{index + 1}</td>
-                    <td className="py-3 pr-2">
-                      <Input
-                        className="h-9"
-                        {...form.register(`lines.${index}.name`)}
-                      />
-                    </td>
-                    <td className="py-3 pr-2">
-                      <Input
-                        className="h-9"
-                        {...form.register(`lines.${index}.unit`)}
-                      />
-                    </td>
-                    <td className="py-3 pr-2">
-                      <Input
-                        type="number"
-                        step="0.0001"
-                        inputMode="decimal"
-                        className="h-9 text-right tabular-nums"
-                        {...form.register(`lines.${index}.quantity`, {
-                          valueAsNumber: true,
-                        })}
-                      />
-                    </td>
-                    <td className="py-3 pr-2">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        inputMode="decimal"
-                        className="h-9 text-right tabular-nums"
-                        {...form.register(`lines.${index}.unitPriceNet`, {
-                          valueAsNumber: true,
-                        })}
-                      />
-                    </td>
-                    <td className="py-3 pr-2">
-                      <select
-                        className="h-9 w-full rounded-lg border border-[var(--ff-border)] bg-[var(--ff-surface)] px-2 text-sm text-[var(--ff-text)] aria-invalid:border-red-500/60"
-                        aria-label={`Stawka VAT pozycji ${index + 1}`}
-                        aria-invalid={bladStawki(index) ? true : undefined}
-                        title={bladStawki(index)}
-                        {...form.register(`lines.${index}.vatRate`)}
-                      >
-                        <option value="23">23%</option>
-                        <option value="8">8%</option>
-                        <option value="5">5%</option>
-                        <option value="0">0%</option>
-                        <option value="zw">zw</option>
-                        <option value="oo">oo</option>
-                        <option value="np">np</option>
-                        <option value="np_ii">np. II (usługa dla firmy z UE)</option>
-                      </select>
-                    </td>
-                    <td className="py-3 text-right tabular-nums">
-                      {formatPlMoney(calc.netAmount)}
-                    </td>
-                    <td className="py-3 text-right tabular-nums font-medium">
-                      {formatPlMoney(calc.grossAmount)}
-                    </td>
-                    <td className="py-3">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={fields.length === 1}
-                        onClick={() => remove(index)}
-                        className="h-9 w-9 rounded-lg hover:bg-red-500/10 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {/* Komórka stawki jest za wąska na komunikat — jeden pod tabelą. */}
-          {fields.some((_, i) => bladStawki(i)) ? (
-            <p className={errorTextClass}>
-              <AlertCircle className="h-3 w-3" />
-              {fields.map((_, i) => bladStawki(i)).find(Boolean)}
-            </p>
-          ) : null}
-        </div>
-        ) : (
-        <div className="space-y-3">
-          {fields.map((field, index) => {
-            const w = watchedLines?.[index];
-            const calc = calculateLineItem({
-              quantity: Number(w?.quantity) || 0,
-              unitPriceNet: Number(w?.unitPriceNet) || 0,
-              vatRate: w?.vatRate ?? '23',
-            });
-            return (
-              <div
-                key={field.id}
-                className="space-y-3 rounded-2xl border border-[var(--ff-border)] bg-[var(--ff-surface-container-low)] p-4"
               >
-                <div className="flex items-center justify-between">
-                  <span
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-xs font-medium text-background"
-                  >
-                    {index + 1}
+                <Input
+                  id="internalNumber"
+                  placeholder="FV/2026/04/001"
+                  {...form.register('internalNumber')}
+                />
+              </DocumentHeaderRow>
+              <DocumentHeaderRow label="Data wystawienia" htmlFor="issue-date">
+                <Input id="issue-date" type="date" {...form.register('issueDate')} />
+              </DocumentHeaderRow>
+              <DocumentHeaderRow
+                label="Data sprzedaży / dostawy"
+                htmlFor="sale-date"
+                hint="Opcjonalnie, gdy jest inna od daty wystawienia (pole P_6 w KSeF); identyczna data nie jest duplikowana w XML."
+                error={
+                  form.formState.errors.saleDate ? (
+                    <p className={errorTextClass}>
+                      <AlertCircle className="h-3 w-3" />
+                      {form.formState.errors.saleDate.message}
+                    </p>
+                  ) : null
+                }
+              >
+                <Input id="sale-date" type="date" {...form.register('saleDate')} />
+              </DocumentHeaderRow>
+              <DocumentHeaderRow
+                label="Termin płatności"
+                htmlFor="payment-due-date"
+                hint={
+                  /* Skróty zamiast kalendarza: na telefonie wybranie daty
+                     z natywnego okna to cztery dotknięcia, a „14 dni” jedno.
+                     Liczone od daty WYSTAWIENIA, nie od dzisiaj. */
+                  <span className="flex flex-wrap gap-2 sm:justify-end">
+                    {[7, 14, 30].map((dni) => (
+                      <button
+                        key={dni}
+                        type="button"
+                        onClick={() => ustawTermin(dni)}
+                        className="border-border text-muted-foreground hover:text-foreground hover:bg-muted min-h-8 border px-3 text-xs transition-colors"
+                      >
+                        {dni} dni
+                      </button>
+                    ))}
                   </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    disabled={fields.length === 1}
-                    onClick={() => remove(index)}
-                    className="h-9 w-9 rounded-lg hover:bg-red-500/10 hover:text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                }
+              >
+                <Input id="payment-due-date" type="date" {...form.register('paymentDueDate')} />
+              </DocumentHeaderRow>
+            </InvoiceDocumentHeader>
+          }
+        >
+          <DocumentColumns>
+            {/* NABYWCA (Finora: „Invoice To:”) */}
+            <DocumentSection
+              title="Nabywca"
+              testId="sekcja-nabywca"
+              description={
+                buyerKind === 'consumer'
+                  ? 'Dane osoby fizycznej (bez NIP podatnika)'
+                  : buyerKind === 'eu'
+                    ? 'Firma z innego kraju UE — identyfikuje ją numer VAT-UE'
+                    : 'Wyszukaj po NIP w bazie GUS lub wprowadź ręcznie'
+              }
+            >
+              {/* Rodzaj nabywcy — trzy wykluczające się opcje (AUD-70). Natywne
+                  pola radio: grupa z klawiatury (strzałki) i czytnik ekranu bez
+                  dodatkowej biblioteki; kółko zostaje widoczne, bo klika w nie e2e. */}
+              <fieldset>
+                <legend className={cn(labelClass, 'text-muted-foreground')}>Rodzaj nabywcy</legend>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
+                  {BUYER_KINDS.map((opcja) => {
+                    const wybrana = buyerKind === opcja.kind;
+                    return (
+                      <label
+                        key={opcja.kind}
+                        htmlFor={opcja.id}
+                        className={cn(
+                          'flex cursor-pointer items-start gap-3 border p-3 transition-colors has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50',
+                          wybrana
+                            ? 'border-primary/40 bg-primary/5 dark:bg-primary/10'
+                            : 'border-border hover:bg-muted/50',
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          id={opcja.id}
+                          name="buyerKind"
+                          value={opcja.kind}
+                          checked={wybrana}
+                          onChange={() => zmienRodzajNabywcy(opcja.kind)}
+                          className="accent-primary mt-0.5 size-4 shrink-0"
+                        />
+                        <span className="min-w-0 flex-1 space-y-1">
+                          <span className="block text-sm font-medium leading-none">{opcja.label}</span>
+                          <span className="text-muted-foreground block text-xs">{opcja.hint}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
-
-                <div>
-                  <Label className={labelClass}>Nazwa pozycji</Label>
-                  <Input
-                    placeholder="np. Usługa programistyczna"
-                    className="h-12 text-base"
-                    {...form.register(`lines.${index}.name`)}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
+                {form.formState.errors.buyerIsEu ? (
+                  <p className={errorTextClass}>
+                    <AlertCircle className="h-3 w-3" />
+                    {form.formState.errors.buyerIsEu.message}
+                  </p>
+                ) : null}
+              </fieldset>
+              {buyerKind === 'eu' ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
                   <div>
-                    <Label className={labelClass}>Ilość</Label>
-                    <Input
-                      type="number"
-                      step="0.0001"
-                      inputMode="decimal"
-                      className="h-12 text-right text-base tabular-nums"
-                      {...form.register(`lines.${index}.quantity`, {
-                        valueAsNumber: true,
-                      })}
-                    />
-                  </div>
-                  <div>
-                    <Label className={labelClass}>Jednostka</Label>
-                    <Input
-                      placeholder="szt."
-                      className="h-12 text-base"
-                      {...form.register(`lines.${index}.unit`)}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className={labelClass}>Cena netto (PLN)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      inputMode="decimal"
-                      className="h-12 text-right text-base tabular-nums"
-                      {...form.register(`lines.${index}.unitPriceNet`, {
-                        valueAsNumber: true,
-                      })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor={`line-${index}-vat-rate`} className={labelClass}>
-                      Stawka VAT
+                    <Label htmlFor="buyer-vat-ue" className={labelClass}>
+                      Numer VAT-UE nabywcy
                     </Label>
-                    <select
-                      id={`line-${index}-vat-rate`}
-                      className="h-12 w-full rounded-xl border border-[var(--ff-border)] bg-[var(--ff-surface)] px-3 text-base text-[var(--ff-text)] aria-invalid:border-red-500/60"
-                      aria-invalid={bladStawki(index) ? true : undefined}
-                      {...form.register(`lines.${index}.vatRate`)}
-                    >
-                      <option value="23">23%</option>
-                      <option value="8">8%</option>
-                      <option value="5">5%</option>
-                      <option value="0">0%</option>
-                      <option value="zw">zw — zwolniona</option>
-                      <option value="oo">oo — odwrotne obciążenie</option>
-                      <option value="np">np — nie podlega</option>
-                      <option value="np_ii">np. II (usługa dla firmy z UE)</option>
-                    </select>
+                    <Input
+                      id="buyer-vat-ue"
+                      autoComplete="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      placeholder="DE123456789"
+                      className="uppercase"
+                      aria-invalid={form.formState.errors.buyerVatUe ? true : undefined}
+                      aria-describedby="buyer-vat-ue-hint"
+                      {...form.register('buyerVatUe', {
+                        onChange: (e: ChangeEvent<HTMLInputElement>) =>
+                          onVatUeChange(buyerVatUeWatch, e.target.value),
+                      })}
+                    />
+                    {form.formState.errors.buyerVatUe ? (
+                      <p id="buyer-vat-ue-hint" className={errorTextClass}>
+                        <AlertCircle className="h-3 w-3" />
+                        {form.formState.errors.buyerVatUe.message}
+                      </p>
+                    ) : (
+                      <p
+                        id="buyer-vat-ue-hint"
+                        aria-live="polite"
+                        className={cn(
+                          'mt-1.5 text-xs',
+                          vatUeHint.tone === 'warn'
+                            ? 'text-amber-700 dark:text-amber-400'
+                            : vatUeHint.tone === 'ok'
+                              ? 'text-foreground'
+                              : 'text-muted-foreground',
+                        )}
+                      >
+                        {vatUeHint.text}
+                      </p>
+                    )}
                   </div>
-                  {bladStawki(index) ? (
-                    <p className={cn(errorTextClass, 'col-span-2 mt-0')}>
-                      <AlertCircle className="h-3 w-3 shrink-0" />
-                      {bladStawki(index)}
+                  <div>
+                    <Label htmlFor="buyer-country" className={labelClass}>
+                      Kraj nabywcy
+                    </Label>
+                    <Select
+                      value={buyerCountryCode}
+                      items={EU_COUNTRY_ITEMS}
+                      onValueChange={(v) => {
+                        if (v == null) return
+                        form.setValue('buyerCountryCode', v, {
+                          shouldDirty: true,
+                          shouldValidate: wyslanoRaz,
+                        })
+                      }}
+                    >
+                      <SelectTrigger
+                        id="buyer-country"
+                        className="w-full"
+                        aria-invalid={form.formState.errors.buyerCountryCode ? true : undefined}
+                      >
+                        <SelectValue placeholder="Wybierz kraj UE" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EU_COUNTRY_ITEMS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {form.formState.errors.buyerCountryCode ? (
+                      <p className={errorTextClass}>
+                        <AlertCircle className="h-3 w-3" />
+                        {form.formState.errors.buyerCountryCode.message}
+                      </p>
+                    ) : (
+                      <p className="text-muted-foreground mt-1.5 text-xs">
+                        Ustawiamy go z prefiksu numeru — zmień, jeśli adres jest w innym kraju UE.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+              {buyerKind === 'pl' ? (
+                <div className="space-y-2">
+                  <Label className={labelClass}>NIP nabywcy</Label>
+                  <BuyerLookup
+                    nip={buyerNipWatch ?? ''}
+                    onNipChange={(digits) => {
+                      form.setValue('buyerNip', digits, { shouldDirty: true });
+                      if (digits.length === 10) void form.trigger('buyerNip');
+                    }}
+                    onSelected={handleBuyerSelected}
+                    nipError={form.formState.errors.buyerNip?.message}
+                    onValidationComplete={(result) => {
+                      setBuyerVatStatus(result);
+                      if (
+                        result?.legalName &&
+                        !form.getValues('buyerName')?.trim()
+                      ) {
+                        form.setValue('buyerName', result.legalName, {
+                          shouldDirty: true,
+                        });
+                      }
+                    }}
+                  />
+                  {buyerVatStatus ? (
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      <VatStatusBadge
+                        status={buyerVatStatus.vatStatus}
+                        source={buyerVatStatus.source}
+                        fromCache={buyerVatStatus.fromCache}
+                        warning={buyerVatStatus.warning ?? null}
+                        size="sm"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {buyerKind === 'consumer' ? (
+                <div className="space-y-2">
+                  <Label className={labelClass}>Typ identyfikatora</Label>
+                  <Select
+                    value={buyerConsumerIdType ?? 'pesel'}
+                    items={BUYER_ID_TYPE_ITEMS}
+                    onValueChange={(v) => {
+                      if (v == null) return
+                      form.setValue(
+                        'buyerConsumerIdType',
+                        v as InvoiceFormValues['buyerConsumerIdType'],
+                        { shouldDirty: true },
+                      );
+                      form.setValue('buyerPesel', '', { shouldDirty: true });
+                      form.setValue('buyerIdDocument', '', { shouldDirty: true });
+                      void form.trigger(['buyerConsumerIdType', 'buyerPesel', 'buyerIdDocument']);
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Wybierz typ" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BUYER_ID_TYPE_ITEMS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {form.formState.errors.buyerConsumerIdType ? (
+                    <p className={errorTextClass}>
+                      <AlertCircle className="h-3 w-3" />
+                      {form.formState.errors.buyerConsumerIdType.message}
                     </p>
                   ) : null}
                 </div>
-
-                <div className="flex items-center justify-between border-t border-[var(--ff-row-divider)] pt-3">
-                  <span className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Brutto
-                  </span>
-                  <div className="text-right">
-                    <p className="text-base font-bold tabular-nums">
-                      {formatPlMoney(calc.grossAmount)} PLN
+              ) : null}
+              {buyerKind === 'consumer' && buyerConsumerIdType === 'pesel' ? (
+                <div>
+                  <Label className={labelClass}>PESEL</Label>
+                  <Input
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="11 cyfr"
+                    {...form.register('buyerPesel')}
+                  />
+                  {form.formState.errors.buyerPesel ? (
+                    <p className={errorTextClass}>
+                      <AlertCircle className="h-3 w-3" />
+                      {form.formState.errors.buyerPesel.message}
                     </p>
-                    <p className="text-xs tabular-nums text-muted-foreground">
-                      Netto: {formatPlMoney(calc.netAmount)}
+                  ) : null}
+                </div>
+              ) : null}
+              {buyerKind === 'consumer' &&
+              (buyerConsumerIdType === 'id_card' || buyerConsumerIdType === 'passport') ? (
+                <div>
+                  <Label className={labelClass}>Numer dokumentu</Label>
+                  <Input
+                    autoComplete="off"
+                    placeholder={
+                      buyerConsumerIdType === 'id_card' ? 'Seria i numer dowodu' : 'Numer paszportu'
+                    }
+                    {...form.register('buyerIdDocument')}
+                  />
+                  {form.formState.errors.buyerIdDocument ? (
+                    <p className={errorTextClass}>
+                      <AlertCircle className="h-3 w-3" />
+                      {form.formState.errors.buyerIdDocument.message}
                     </p>
-                  </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="sm:col-span-2 xl:col-span-1">
+                  <Label className={labelClass}>Nazwa firmy</Label>
+                  <Input {...form.register('buyerName')} />
+                </div>
+                <div>
+                  <Label className={labelClass}>Adres (linia 1)</Label>
+                  <Input {...form.register('buyerAddressLine1')} />
+                </div>
+                <div>
+                  <Label className={labelClass}>Adres (linia 2)</Label>
+                  <Input {...form.register('buyerAddressLine2')} />
+                </div>
+                <div className="sm:col-span-2 xl:col-span-1">
+                  <Label className={labelClass}>Email (opcjonalnie)</Label>
+                  <Input
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    {...form.register('buyerEmail')}
+                  />
                 </div>
               </div>
-            );
-          })}
+            </DocumentSection>
 
-        </div>
-        )}
-
-        {/* Jedno podsumowanie pod oboma układami pozycji — tabelą i kartami. */}
-        <InvoiceTotals totals={totals} lines={lineItems} />
-      </section>
-
-      {/* SECTION: Płatność */}
-      <section className={sectionClass}>
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Płatność</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Sposób i termin zapłaty
-          </p>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label className={labelClass}>Metoda płatności</Label>
-            <Select
-              value={paymentMethod}
-              items={PAYMENT_METHOD_ITEMS}
-              onValueChange={(v) => {
-                if (v == null) return
-                form.setValue(
-                  'paymentMethod',
-                  v as InvoiceFormValues['paymentMethod']
-                )
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PAYMENT_METHOD_ITEMS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className={labelClass}>Termin płatności</Label>
-            <Input
-              type="date"
-              className="h-12 text-base"
-              {...form.register('paymentDueDate')}
-            />
-            {/* Skróty zamiast kalendarza: na telefonie wybranie daty
-                z natywnego okna to cztery dotknięcia, a „14 dni” jedno.
-                Liczone od daty WYSTAWIENIA, nie od dzisiaj. */}
-            <div className="mt-2 flex flex-wrap gap-2">
-              {[7, 14, 30].map((dni) => (
-                <button
-                  key={dni}
-                  type="button"
-                  onClick={() => ustawTermin(dni)}
-                  className="min-h-9 rounded-full border border-[var(--ff-border)] px-3 text-xs text-[var(--ff-text-muted)] transition-colors hover:border-[var(--ff-border-strong)] hover:text-[var(--ff-text)]"
+            {/* PŁATNOŚĆ (Finora: „Bill To:”) — termin jest w nagłówku, jak „Date Due”. */}
+            <DocumentSection title="Płatność" testId="sekcja-platnosc" description="Sposób zapłaty i rachunek">
+              <div>
+                <Label className={labelClass}>Metoda płatności</Label>
+                <Select
+                  value={paymentMethod}
+                  items={PAYMENT_METHOD_ITEMS}
+                  onValueChange={(v) => {
+                    if (v == null) return
+                    form.setValue(
+                      'paymentMethod',
+                      v as InvoiceFormValues['paymentMethod']
+                    )
+                  }}
                 >
-                  {dni} dni
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="sm:col-span-2">
-            <Label className={labelClass}>Numer rachunku (dla przelewu)</Label>
-            <Input
-              {...form.register('bankAccount')}
-              placeholder="12 3456 7890 ..."
-            />
-          </div>
-          <div className="sm:col-span-2 space-y-1.5">
-            <label className="flex items-center gap-3 text-sm">
-              <input type="checkbox" className="h-4 w-4" {...form.register('splitPayment')} />
-              Mechanizm podzielonej płatności (MPP)
-            </label>
-            {podpowiedzMpp ? (
-              <p className="text-xs text-[var(--ff-text-muted)]">
-                Faktura dla firmy na ponad 15 000 zł brutto. Jeśli sprzedajesz towary lub usługi z załącznika 15
-                do ustawy o VAT (np. roboty budowlane, elektronika, paliwa), MPP jest obowiązkowy.
-              </p>
-            ) : null}
-            {form.formState.errors.splitPayment ? (
-              <p className="text-xs text-red-400">{form.formState.errors.splitPayment.message}</p>
-            ) : null}
-          </div>
-        </div>
-      </section>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHOD_ITEMS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className={labelClass}>Numer rachunku (dla przelewu)</Label>
+                <Input
+                  {...form.register('bankAccount')}
+                  placeholder="12 3456 7890 ..."
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-3 text-sm">
+                  <input type="checkbox" className="accent-primary h-4 w-4" {...form.register('splitPayment')} />
+                  Mechanizm podzielonej płatności (MPP)
+                </label>
+                {podpowiedzMpp ? (
+                  <p className="text-muted-foreground text-xs">
+                    Faktura dla firmy na ponad 15 000 zł brutto. Jeśli sprzedajesz towary lub usługi z załącznika 15
+                    do ustawy o VAT (np. roboty budowlane, elektronika, paliwa), MPP jest obowiązkowy.
+                  </p>
+                ) : null}
+                {form.formState.errors.splitPayment ? (
+                  <p className="text-destructive text-xs">{form.formState.errors.splitPayment.message}</p>
+                ) : null}
+              </div>
+            </DocumentSection>
+          </DocumentColumns>
 
-      {/* SECTION: Uwagi */}
-      <section className={sectionClass}>
-        <Label className={labelClass}>Uwagi</Label>
-        <Textarea rows={3} {...form.register('notes')} />
-      </section>
+          <Separator />
 
-      {/* STICKY FOOTER — przyciski bez tła/bluru (tylko „pływające” nad treścią) */}
-      <div className="ff-sticky-actions pointer-events-none">
+          {/* POZYCJE (Finora: `invoice-line-items.tsx`) — wiersze siatki vs karty
+              wg `linesDesktopLayout` (1280 px, Tailwind `xl`). */}
+          <DocumentSection title="Pozycje" testId="sekcja-pozycje" description="Towary i usługi na fakturze">
+            {/* Tylko jeden wariant layoutu naraz — patrz `linesDesktopLayout` powyżej. */}
+            {linesDesktopLayout ? (
+              <div className="-mx-1 overflow-x-auto px-1">
+                <div className="min-w-[38rem] space-y-3">
+                  <div className={cn(LINE_GRID, 'text-muted-foreground text-xs font-medium')}>
+                    <span>Nazwa</span>
+                    <span>J.m.</span>
+                    <span>Ilość</span>
+                    <span>Cena netto</span>
+                    <span>VAT</span>
+                    <span className="text-right">Brutto</span>
+                    <span />
+                  </div>
+                  {fields.map((field, index) => {
+                    const w = watchedLines?.[index];
+                    const calc = calculateLineItem({
+                      quantity: Number(w?.quantity) || 0,
+                      unitPriceNet: Number(w?.unitPriceNet) || 0,
+                      vatRate: w?.vatRate ?? '23',
+                    });
+                    return (
+                      <div key={field.id} className={cn(LINE_GRID, 'items-start')}>
+                        <Input
+                          aria-label={`Nazwa pozycji ${index + 1}`}
+                          {...form.register(`lines.${index}.name`)}
+                        />
+                        <Input
+                          aria-label={`Jednostka pozycji ${index + 1}`}
+                          {...form.register(`lines.${index}.unit`)}
+                        />
+                        <Input
+                          type="number"
+                          step="0.0001"
+                          inputMode="decimal"
+                          aria-label={`Ilość pozycji ${index + 1}`}
+                          className="text-right tabular-nums"
+                          {...form.register(`lines.${index}.quantity`, {
+                            valueAsNumber: true,
+                          })}
+                        />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          inputMode="decimal"
+                          aria-label={`Cena netto pozycji ${index + 1}`}
+                          className="text-right tabular-nums"
+                          {...form.register(`lines.${index}.unitPriceNet`, {
+                            valueAsNumber: true,
+                          })}
+                        />
+                        <select
+                          className={vatSelectClass}
+                          aria-label={`Stawka VAT pozycji ${index + 1}`}
+                          aria-invalid={bladStawki(index) ? true : undefined}
+                          title={bladStawki(index)}
+                          {...form.register(`lines.${index}.vatRate`)}
+                        >
+                          <option value="23">23%</option>
+                          <option value="8">8%</option>
+                          <option value="5">5%</option>
+                          <option value="0">0%</option>
+                          <option value="zw">zw</option>
+                          <option value="oo">oo</option>
+                          <option value="np">np</option>
+                          <option value="np_ii">np. II (usługa dla firmy z UE)</option>
+                        </select>
+                        <span className="mt-1.5 text-right text-sm tabular-nums">
+                          <span className="block font-medium">{formatPlMoney(calc.grossAmount)} zł</span>
+                          <span className="text-muted-foreground block text-xs">
+                            netto {formatPlMoney(calc.netAmount)} zł
+                          </span>
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Usuń pozycję ${index + 1}`}
+                          disabled={fields.length === 1}
+                          onClick={() => remove(index)}
+                          className="hover:text-destructive"
+                        >
+                          <RiCloseLine className="size-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Komórka stawki jest za wąska na komunikat — jeden pod wierszami. */}
+                {fields.some((_, i) => bladStawki(i)) ? (
+                  <p className={errorTextClass}>
+                    <AlertCircle className="h-3 w-3" />
+                    {fields.map((_, i) => bladStawki(i)).find(Boolean)}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {fields.map((field, index) => {
+                  const w = watchedLines?.[index];
+                  const calc = calculateLineItem({
+                    quantity: Number(w?.quantity) || 0,
+                    unitPriceNet: Number(w?.unitPriceNet) || 0,
+                    vatRate: w?.vatRate ?? '23',
+                  });
+                  return (
+                    <div key={field.id} className="border-border space-y-3 border p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="bg-foreground text-background inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium">
+                          {index + 1}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Usuń pozycję ${index + 1}`}
+                          disabled={fields.length === 1}
+                          onClick={() => remove(index)}
+                          className="hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div>
+                        <Label className={labelClass}>Nazwa pozycji</Label>
+                        <Input
+                          placeholder="np. Usługa programistyczna"
+                          {...form.register(`lines.${index}.name`)}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className={labelClass}>Ilość</Label>
+                          <Input
+                            type="number"
+                            step="0.0001"
+                            inputMode="decimal"
+                            className="text-right tabular-nums"
+                            {...form.register(`lines.${index}.quantity`, {
+                              valueAsNumber: true,
+                            })}
+                          />
+                        </div>
+                        <div>
+                          <Label className={labelClass}>Jednostka</Label>
+                          <Input
+                            placeholder="szt."
+                            {...form.register(`lines.${index}.unit`)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className={labelClass}>Cena netto (zł)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            inputMode="decimal"
+                            className="text-right tabular-nums"
+                            {...form.register(`lines.${index}.unitPriceNet`, {
+                              valueAsNumber: true,
+                            })}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`line-${index}-vat-rate`} className={labelClass}>
+                            Stawka VAT
+                          </Label>
+                          <select
+                            id={`line-${index}-vat-rate`}
+                            className={vatSelectClass}
+                            aria-invalid={bladStawki(index) ? true : undefined}
+                            {...form.register(`lines.${index}.vatRate`)}
+                          >
+                            <option value="23">23%</option>
+                            <option value="8">8%</option>
+                            <option value="5">5%</option>
+                            <option value="0">0%</option>
+                            <option value="zw">zw — zwolniona</option>
+                            <option value="oo">oo — odwrotne obciążenie</option>
+                            <option value="np">np — nie podlega</option>
+                            <option value="np_ii">np. II (usługa dla firmy z UE)</option>
+                          </select>
+                        </div>
+                        {bladStawki(index) ? (
+                          <p className={cn(errorTextClass, 'col-span-2 mt-0')}>
+                            <AlertCircle className="h-3 w-3 shrink-0" />
+                            {bladStawki(index)}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <div className="border-border flex items-center justify-between border-t pt-3">
+                        <span className="text-muted-foreground text-xs">Brutto</span>
+                        <div className="text-right">
+                          <p className="text-base font-semibold tabular-nums">
+                            {formatPlMoney(calc.grossAmount)} zł
+                          </p>
+                          <p className="text-muted-foreground text-xs tabular-nums">
+                            Netto: {formatPlMoney(calc.netAmount)} zł
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <Button type="button" variant="secondary" size="sm" onClick={() => append(newLine)}>
+              <RiAddLine />
+              Dodaj pozycję
+            </Button>
+          </DocumentSection>
+
+          <Separator />
+
+          {/* Jedno podsumowanie pod oboma układami pozycji — po prawej, jak w Finorze. */}
+          <InvoiceTotals totals={totals} lines={lineItems} />
+
+          <Separator />
+
+          <div>
+            <Label htmlFor="invoice-notes" className={labelClass}>
+              Uwagi
+            </Label>
+            <Textarea id="invoice-notes" rows={3} {...form.register('notes')} />
+          </div>
+        </InvoiceDocumentCard>
+
+        <InvoiceCreateActions
+          onSend={handleSend}
+          onSave={handleSaveDraft}
+          sending={isSending}
+          saving={isSaving}
+          disabled={busy}
+        />
+      </InvoiceCreateGrid>
+
+      {/* STICKY FOOTER — tylko telefon i tablet; od `lg` akcje są w prawej kolumnie. */}
+      <div className="ff-sticky-actions pointer-events-none lg:hidden">
         {/* Na telefonie wysyłka jest szeroka i pierwsza (kciuk trafia w nią bez
             celowania), a „Zapisz” wąskie obok — układ z makiety. Od `sm`
             wracają dwa przyciski o naturalnej szerokości, dosunięte do prawej.
@@ -1267,10 +1221,10 @@ export function InvoiceForm({
         <div className="pointer-events-auto mx-auto flex max-w-7xl gap-3 sm:justify-end">
           <Button
             type="button"
-            variant="glass"
+            variant="outline"
             size="lg"
             onClick={handleSaveDraft}
-            disabled={isSaving || isSending}
+            disabled={busy}
             className="order-2 flex-1 sm:order-1 sm:flex-none"
           >
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -1279,10 +1233,9 @@ export function InvoiceForm({
           </Button>
           <Button
             type="button"
-            variant="glass-primary"
             size="lg"
             onClick={handleSend}
-            disabled={isSaving || isSending}
+            disabled={busy}
             className="order-1 flex-[2] sm:order-2 sm:flex-none"
           >
             {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
