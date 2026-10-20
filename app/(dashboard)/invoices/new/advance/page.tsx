@@ -6,9 +6,6 @@ export default async function NewAdvanceInvoicePage() {
   const seller = await loadTenantSellerForForms();
   if (!seller) return <SellerProfileBlock />;
 
-  return (
-    <div className="max-w-4xl">
-      <AdvanceInvoiceForm initialSeller={seller} />
-    </div>
-  );
+  // P5: szerokość daje siatka Finory w formularzu (dokument + kolumna 18rem).
+  return <AdvanceInvoiceForm initialSeller={seller} />;
 }
