@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useTransition, type FormEvent } from 'react';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

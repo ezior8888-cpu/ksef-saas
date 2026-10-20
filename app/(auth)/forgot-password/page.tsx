@@ -11,7 +11,7 @@ import { RiArrowLeftSLine } from '@remixicon/react'
 // Component Imports
 import { AuthMessage } from '@/components/auth/finora/auth-message'
 import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout'
-import { Field, FieldGroup, FieldLabel } from '@/components/auth/finora/field'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { TurnstileWidget } from '@/components/auth/turnstile-widget'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

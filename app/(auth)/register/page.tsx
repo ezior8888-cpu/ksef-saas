@@ -12,7 +12,7 @@ import Link from 'next/link'
 // Component Imports
 import { AuthMessage } from '@/components/auth/finora/auth-message'
 import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/auth/finora/field'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { GoogleIcon } from '@/components/auth/finora/google-icon'
 import { PasswordInput } from '@/components/auth/finora/password-input'
 import { TurnstileWidget } from '@/components/auth/turnstile-widget'

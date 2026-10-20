@@ -15,8 +15,8 @@ import {
   createAccountantTokenAction,
   revokeAccountantTokenAction,
 } from '@/components/settings/accountant-actions';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/settings/finora/empty';
-import { Field, FieldLabel } from '@/components/settings/finora/field';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { Field, FieldLabel } from '@/components/ui/field';
 import { formatSettingsDate } from '@/components/settings/finora/format-date';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';

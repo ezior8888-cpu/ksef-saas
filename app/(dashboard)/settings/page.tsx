@@ -10,7 +10,7 @@ import {
   FieldDescription,
   FieldGroup,
   FieldLabel,
-} from '@/components/settings/finora/field';
+} from '@/components/ui/field';
 import { VatExemptionForm } from '@/components/settings/vat-exemption-form';
 import { buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';

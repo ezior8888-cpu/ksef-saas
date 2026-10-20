@@ -19,6 +19,11 @@ function cost(issueDate: string, outflow: number, fields: Partial<CostEntry> = {
   return {
     id: `c-${seq}`,
     issueDate,
+    // Pola dodane przez E5/E7 do `CostEntry` (zbiorcze scalenie etapów).
+    categoryLabel: null,
+    vat: 0,
+    documentNumber: null,
+    isReviewed: true,
     source: 'ksef_inbox',
     sellerNip: '1234567890',
     sellerName: 'Telekom sp. z o.o.',

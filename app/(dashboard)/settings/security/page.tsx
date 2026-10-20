@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { FieldGroup } from '@/components/settings/finora/field';
+import { FieldGroup } from '@/components/ui/field';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { createClient } from '@/lib/supabase/server';

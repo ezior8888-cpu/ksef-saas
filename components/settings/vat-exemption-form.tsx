@@ -5,8 +5,8 @@ import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { updateVatExemptionAction } from '@/app/actions/vat-exemption';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
-import { Switch } from '@/components/settings/finora/switch';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

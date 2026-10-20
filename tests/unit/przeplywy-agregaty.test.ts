@@ -42,6 +42,9 @@ function cost(issueDate: string, outflow: number, fields: Partial<CostEntry> = {
   return {
     id: `exp-${String(seq).padStart(4, '0')}`,
     issueDate,
+    // Pola dodane przez E6/E7 do `CostEntry` (zbiorcze scalenie etapów).
+    source: 'manual',
+    vat: 0,
     sellerNip: '2222222222',
     sellerName: 'Dostawca S.A.',
     cost: outflow,

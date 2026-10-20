@@ -5,7 +5,7 @@ import { RiDeleteBinLine, RiErrorWarningLine, RiLoader4Line } from '@remixicon/r
 import { toast } from 'sonner';
 
 import { requestAccountDeletionAction } from '@/components/settings/account-actions';
-import { Field, FieldContent, FieldLabel } from '@/components/settings/finora/field';
+import { Field, FieldContent, FieldLabel } from '@/components/ui/field';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

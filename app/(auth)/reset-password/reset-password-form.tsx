@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useActionState } from 'react';
 
 import { AuthMessage } from '@/components/auth/finora/auth-message';
-import { Field, FieldGroup, FieldLabel } from '@/components/auth/finora/field';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { PasswordInput } from '@/components/auth/finora/password-input';
 import { Button } from '@/components/ui/button';
 

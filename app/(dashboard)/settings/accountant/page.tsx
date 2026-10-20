@@ -3,7 +3,7 @@ import {
   type AccountantAccessPublicRow,
 } from '@/components/settings/accountant-list';
 import { CoPilotSettingsForm } from '@/components/exports/co-pilot-settings-form';
-import { FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { TaxOfficeForm } from '@/components/settings/tax-office-form';
 import { Separator } from '@/components/ui/separator';
 import { readTenantTaxOffice } from '@/lib/exports/tax-office';

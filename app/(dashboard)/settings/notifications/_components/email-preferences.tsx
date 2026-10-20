@@ -4,8 +4,8 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
-import { Switch } from '@/components/settings/finora/switch';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import type { EmailCategory } from '@/lib/email/preferences';
 

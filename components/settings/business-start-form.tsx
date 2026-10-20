@@ -5,7 +5,7 @@ import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { updateBusinessStartAction } from '@/app/actions/business-start';
-import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/settings/finora/field';
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { BUSINESS_START_MIN, businessStartSchema } from '@/lib/invoices/business-start';

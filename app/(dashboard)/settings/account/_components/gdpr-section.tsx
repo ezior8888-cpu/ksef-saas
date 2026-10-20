@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { RiDownloadLine } from '@remixicon/react';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

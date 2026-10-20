@@ -33,6 +33,9 @@ function cost(fields: Partial<CostEntry> = {}): CostEntry {
   return {
     id: `e-${String(seq).padStart(5, '0')}`,
     issueDate: '2026-10-05',
+    // Pola dodane przez E5/E6 do `CostEntry` (zbiorcze scalenie etapów).
+    source: 'manual',
+    documentNumber: null,
     sellerNip: '1234567890',
     sellerName: 'Dostawca',
     cost: 100,

@@ -16,8 +16,8 @@ import {
   triggerCoPilotNowAction,
   updateAccountantSettingsAction,
 } from '@/app/actions/exports';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
-import { Switch } from '@/components/settings/finora/switch';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

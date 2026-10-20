@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { toggleContractorRemindersAction } from '@/app/actions/reminders';
-import { Switch } from '@/components/contractors/finora/switch';
+import { Switch } from '@/components/ui/switch';
 
 interface Props {
   contractorId: string;

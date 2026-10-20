@@ -5,7 +5,7 @@ import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { updateTaxOfficeAction } from '@/app/actions/tax-office';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TAX_OFFICES, taxOfficeName } from '@/lib/exports/tax-offices';

@@ -8,8 +8,8 @@ import {
   type ReminderSettingsPayload,
   updateReminderSettingsAction,
 } from '@/app/actions/reminders';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
-import { Switch } from '@/components/settings/finora/switch';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';

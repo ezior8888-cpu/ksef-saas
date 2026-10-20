@@ -15,9 +15,9 @@ import {
   unsubscribePushAction,
   updatePushPreferencesAction,
 } from '@/app/actions/push-subscriptions';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { formatSettingsDate } from '@/components/settings/finora/format-date';
-import { Switch } from '@/components/settings/finora/switch';
+import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { usePushNotifications } from '@/hooks/use-push-notifications';

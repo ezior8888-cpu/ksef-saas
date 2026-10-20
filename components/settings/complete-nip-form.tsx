@@ -15,7 +15,7 @@ import {
   type OnboardingCompanyData,
 } from '@/components/onboarding/actions';
 import { completeCompanyNipAction } from '@/app/actions/organizations';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

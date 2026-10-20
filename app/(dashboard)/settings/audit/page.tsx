@@ -1,4 +1,4 @@
-import { FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import { createClient } from '@/lib/supabase/server';

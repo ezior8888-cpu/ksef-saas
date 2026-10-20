@@ -5,7 +5,7 @@ import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { updateCompanyProfileAction } from '@/app/actions/company-profile';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 

@@ -1,7 +1,7 @@
 import { RiHistoryLine } from '@remixicon/react';
 
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/settings/finora/empty';
-import { FieldDescription, FieldLabel } from '@/components/settings/finora/field';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { plural } from '@/lib/i18n/plural';

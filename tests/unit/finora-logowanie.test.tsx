@@ -67,7 +67,7 @@ import {
   AUTH_SLOGAN_TITLE,
   AuthSplitLayout,
 } from '@/components/auth/finora/auth-split-layout';
-import LetterGlitch, { hexToRgb, outerVignetteBackground } from '@/components/auth/finora/letter-glitch';
+import LetterGlitch, { hexToRgb, outerVignetteBackground } from '@/components/ui/letter-glitch';
 import { PasswordInput } from '@/components/auth/finora/password-input';
 import { InviteAcceptForm } from '@/components/invite/invite-accept-form';
 import { OnboardingForm } from '@/components/onboarding/form';

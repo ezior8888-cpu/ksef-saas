@@ -1,5 +1,5 @@
 import { DeleteAccountForm } from '@/components/settings/delete-account-form';
-import { FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Separator } from '@/components/ui/separator';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { getActiveGdprRequest } from '@/lib/gdpr/deletion';

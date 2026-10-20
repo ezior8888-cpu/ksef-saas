@@ -13,7 +13,7 @@ import { PAID_EMPTY_STATE } from '@/lib/invoices/paid-labels'
 import { cn } from '@/lib/utils'
 
 import { zl } from './money'
-import { Progress } from './progress'
+import { Progress } from '@/components/ui/progress'
 
 /**
  * „Skąd i dokąd płyną pieniądze” — Finora

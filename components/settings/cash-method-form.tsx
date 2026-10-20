@@ -5,8 +5,8 @@ import { RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { updateCashMethodAction } from '@/app/actions/cash-method';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
-import { Switch } from '@/components/settings/finora/switch';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 
 /**

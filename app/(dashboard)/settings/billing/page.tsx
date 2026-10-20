@@ -12,7 +12,7 @@ import {
   FieldDescription,
   FieldGroup,
   FieldLabel,
-} from '@/components/settings/finora/field';
+} from '@/components/ui/field';
 import { formatSettingsDate } from '@/components/settings/finora/format-date';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';

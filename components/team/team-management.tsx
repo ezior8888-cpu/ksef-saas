@@ -22,7 +22,7 @@ import {
   revokeInvitationAction,
   revokeMembershipAction,
 } from '@/app/actions/organizations';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { formatSettingsDate } from '@/components/settings/finora/format-date';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';

@@ -11,7 +11,7 @@
 import { useMemo, useSyncExternalStore } from 'react'
 
 // Component Imports
-import LetterGlitch from './letter-glitch'
+import LetterGlitch from '@/components/ui/letter-glitch'
 
 /** Zestaw Finory (`र€£¥₽₩₺₴₦₱₲₵₡₢₭`) z „zł” na początku zamiast rupii. */
 export const AUTH_GLITCH_CHARACTERS = 'zł€£¥₽₩₺₴₦₱₲₵₡₢₭'

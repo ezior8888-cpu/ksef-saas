@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 
 import { requestAccountDeletionAction } from '@/components/settings/account-actions';
-import { Field, FieldContent, FieldLabel } from '@/components/settings/finora/field';
+import { Field, FieldContent, FieldLabel } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
