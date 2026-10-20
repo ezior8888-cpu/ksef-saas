@@ -13,6 +13,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from '@/components/settings/finora/field';
+import { formatSettingsDate } from '@/components/settings/finora/format-date';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -44,14 +45,7 @@ interface SearchParams {
   error?: string;
 }
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('pl-PL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
+const fmtDate = formatSettingsDate;
 
 function fmtPlan(plan: ActiveSubscription['plan']): string {
   // Plan roczny nie jest już sprzedawany (decyzja z 1 października 2026);

@@ -10,6 +10,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from '@/components/settings/finora/field';
+import { formatSettingsDate } from '@/components/settings/finora/format-date';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -105,7 +106,7 @@ export default async function KsefSettingsPage() {
               <p className="text-muted-foreground text-xs">
                 {hasCredentials
                   ? tenant?.ksef_certificate_expiry
-                    ? `Certyfikat ważny do: ${new Date(tenant.ksef_certificate_expiry).toLocaleDateString('pl-PL')}`
+                    ? `Certyfikat ważny do: ${formatSettingsDate(tenant.ksef_certificate_expiry)}`
                     : 'Certyfikat wgrany'
                   : 'Wgraj certyfikat aby móc wysyłać faktury do KSeF'}
               </p>

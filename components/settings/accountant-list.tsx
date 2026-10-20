@@ -17,6 +17,7 @@ import {
 } from '@/components/settings/accountant-actions';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/settings/finora/empty';
 import { Field, FieldLabel } from '@/components/settings/finora/field';
+import { formatSettingsDate } from '@/components/settings/finora/format-date';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -56,7 +57,7 @@ const ACCESS_LEVEL_OPTIONS: { label: string; value: 'read_only' | 'download' }[]
 const BADGE_OK = 'bg-green-600/10 text-green-600 dark:bg-green-400/10 dark:text-green-400';
 const BADGE_ERROR = 'bg-red-600/10 text-red-600 dark:bg-red-400/10 dark:text-red-400';
 
-const plDate = (iso: string) => new Date(iso).toLocaleDateString('pl-PL');
+const plDate = formatSettingsDate;
 
 export function AccountantAccessList({
   accesses,

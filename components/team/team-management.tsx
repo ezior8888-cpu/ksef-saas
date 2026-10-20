@@ -23,6 +23,7 @@ import {
   revokeMembershipAction,
 } from '@/app/actions/organizations';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { formatSettingsDate } from '@/components/settings/finora/format-date';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -67,7 +68,7 @@ const ROLE_OPTIONS: Array<{ value: 'admin' | 'member' | 'accountant'; label: str
   { value: 'accountant', label: 'księgowy' },
 ];
 
-const plDate = (iso: string) => new Date(iso).toLocaleDateString('pl-PL');
+const plDate = formatSettingsDate;
 
 export function TeamManagement({
   members,

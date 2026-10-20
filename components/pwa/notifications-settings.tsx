@@ -16,6 +16,7 @@ import {
   updatePushPreferencesAction,
 } from '@/app/actions/push-subscriptions';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/settings/finora/field';
+import { formatSettingsDate } from '@/components/settings/finora/format-date';
 import { Switch } from '@/components/settings/finora/switch';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -187,7 +188,7 @@ function DeviceRow({
             </p>
             <p className="text-muted-foreground text-xs">
               Dodane{' '}
-              {new Date(subscription.created_at).toLocaleDateString('pl-PL')}
+              {formatSettingsDate(subscription.created_at)}
             </p>
           </div>
         </div>
