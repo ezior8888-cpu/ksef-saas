@@ -301,6 +301,7 @@ describe('TransactionDatatable (Wszystkie operacje)', () => {
   it('filtry, kolumny po polsku, paginacja po pięć, karty poniżej lg', () => {
     const out = html(<TransactionDatatable data={[...rows, operation({ id: 'out:x', direction: 'out', status: 'pending', category: 'Paliwo', counterparty: 'Stacja' })]} />);
     expect(out).toContain('Wszystkie operacje');
+    expect(out).toContain('Ostatnie 12 miesięcy');
     for (const header of ['Kontrahent', 'Kategoria', 'Kwota', 'Status', 'Akcje']) expect(out).toContain(header);
     expect(out.replace(/<[^>]+>/g, '')).toContain('Pozycje 1–5 z 8');
     expect(out).toContain('Poprzednia');

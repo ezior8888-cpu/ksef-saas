@@ -185,7 +185,12 @@ const TransactionDatatable = ({ data }: { data: CashFlowOperation[] }) => {
     <div className='w-full'>
       <div className='border-b'>
         <div className='flex flex-col gap-4 p-6'>
-          <h2 className='text-lg font-semibold'>Wszystkie operacje</h2>
+          <div className='flex flex-col gap-1'>
+            <h2 className='text-lg font-semibold'>Wszystkie operacje</h2>
+            <span className='text-muted-foreground text-sm'>
+              Ostatnie 12 miesięcy · wpłaty według dnia oznaczenia, wydatki według daty dokumentu
+            </span>
+          </div>
           <div className='grid grid-cols-1 gap-6 max-md:*:last:col-span-full sm:grid-cols-2'>
             <Filter column={table.getColumn('category')!} />
             <Filter column={table.getColumn('status')!} />
