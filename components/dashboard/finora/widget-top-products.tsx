@@ -84,7 +84,12 @@ const TopProductsCard = ({ salesTitle, productsBySalesData, volumeTitle, product
               </div>
               <div className='flex items-center justify-between gap-3 text-sm'>
                 <span className='text-sm'>{product.volume}</span>
-                <Badge className='bg-primary/10 dark:bg-primary/25 text-primary h-6 px-3 py-1'>
+                {/*
+                  Odstępstwo od Finory (WCAG 1.4.3): tekst `accent-foreground`, nie `primary` —
+                  `text-primary` na `bg-primary/10` ma 4,44:1 (jasny), na `dark:bg-primary/25`
+                  3,76:1 (ciemny); `accent-foreground` daje 9,00 i 6,76:1.
+                */}
+                <Badge className='bg-primary/10 dark:bg-primary/25 text-accent-foreground h-6 px-3 py-1'>
                   {product.changePercentage > 0 && '+'}
                   {product.changePercentage}%
                 </Badge>
