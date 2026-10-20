@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 
 import {
@@ -16,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { companyInitials, shortenLegalForm } from '@/lib/format/legal-form';
 import { formatPlMoney } from '@/lib/format/pl';
+import { formatInvoiceDate } from '@/lib/invoices/display-date';
 
 import { InvoiceRowActions } from './invoice-row-actions';
 import { PaymentIndicator } from './payment-indicator';
@@ -36,7 +38,31 @@ function money(amount: string | number | null | undefined, currency: string | nu
   return Number.isFinite(n) ? `${formatPlMoney(n)} ${currencySymbol(currency)}` : '—';
 }
 
-/** Tabela listy faktur w układzie data-table Finory (tylko od `lg`). Dane i filtry należą do serwera. */
+/**
+ * Kolumny Finory (`invoice-table/data-table.tsx`, `columns`): nagłówek i
+ * szerokość (`size` z definicji kolumny → `style.width`). Kolejność i rozmiary
+ * jak w szablonie; „Płatność” niesie też plakietkę KSeF, a „Numer” i
+ * „Nabywca” są szersze, bo polskie numery i nazwy firm są dłuższe (§7.2).
+ */
+const COLUMNS: Array<{ id: string; header: ReactNode; size?: number }> = [
+  { id: 'select', header: null, size: 50 },
+  { id: 'number', header: 'Numer', size: 140 },
+  { id: 'payment', header: 'Płatność', size: 200 },
+  { id: 'buyer', header: 'Nabywca', size: 280 },
+  { id: 'gross', header: 'Brutto' },
+  { id: 'issued', header: 'Wystawiona' },
+  { id: 'due', header: 'Termin' },
+  { id: 'balance', header: 'Do zapłaty' },
+  { id: 'actions', header: 'Akcje', size: 128 },
+];
+
+/**
+ * Tabela listy faktur 1:1 z data-table Finory (tylko od `lg`): wiersz
+ * nagłówka `h-14 border-t`, komórki `h-14 first:pl-4`, kolumna akcji
+ * wyśrodkowana. Rysujemy bieżącą stronę z serwera na prymitywach Finory —
+ * filtrowanie, sortowanie i stronicowanie robi baza (adres listy), więc
+ * `@tanstack/react-table` nie miałby tu nic do liczenia.
+ */
 export function InvoicesTable({ invoices, facts, today, selectedIds, onToggleRow, onToggleAll }: Props) {
   const selectedOnPage = invoices.filter((inv) => selectedIds.has(inv.id)).length;
   const allSelected = invoices.length > 0 && selectedOnPage === invoices.length;
@@ -44,23 +70,25 @@ export function InvoicesTable({ invoices, facts, today, selectedIds, onToggleRow
   return (
     <Table>
       <TableHeader>
-        <TableRow className="hover:bg-transparent">
-          <TableHead className="w-10 pl-4">
-            <Checkbox
-              aria-label="Zaznacz wszystkie faktury na stronie"
-              checked={allSelected}
-              indeterminate={selectedOnPage > 0 && !allSelected}
-              onCheckedChange={(checked) => onToggleAll(checked === true)}
-            />
-          </TableHead>
-          <TableHead>Numer</TableHead>
-          <TableHead>Płatność</TableHead>
-          <TableHead className="min-w-56">Nabywca</TableHead>
-          <TableHead className="text-right">Brutto</TableHead>
-          <TableHead>Wystawiona</TableHead>
-          <TableHead>Termin</TableHead>
-          <TableHead className="text-right">Do zapłaty</TableHead>
-          <TableHead className="pr-4 text-right">Akcje</TableHead>
+        <TableRow className="h-14 border-t">
+          {COLUMNS.map((column) => (
+            <TableHead
+              key={column.id}
+              style={column.size ? { width: `${column.size}px` } : undefined}
+              className="text-muted-foreground first:pl-4 last:px-4 last:text-center"
+            >
+              {column.id === 'select' ? (
+                <Checkbox
+                  aria-label="Zaznacz wszystkie faktury na stronie"
+                  checked={allSelected}
+                  indeterminate={selectedOnPage > 0 && !allSelected}
+                  onCheckedChange={(checked) => onToggleAll(checked === true)}
+                />
+              ) : (
+                column.header
+              )}
+            </TableHead>
+          ))}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -72,57 +100,60 @@ export function InvoicesTable({ invoices, facts, today, selectedIds, onToggleRow
           const buyerName = inv.buyer_data?.name ?? null;
           return (
             <TableRow key={inv.id} data-state={selectedIds.has(inv.id) ? 'selected' : undefined}>
-              <TableCell className="pl-4">
+              <TableCell className="h-14 first:pl-4">
                 <Checkbox
                   aria-label={`Zaznacz fakturę ${number}`}
                   checked={selectedIds.has(inv.id)}
                   onCheckedChange={(checked) => onToggleRow(inv.id, checked === true)}
                 />
               </TableCell>
-              <TableCell>
-                <Link
-                  href={`/invoices/${inv.id}`}
-                  className="text-foreground font-mono text-xs font-medium hover:underline"
-                >
+              <TableCell className="h-14 first:pl-4">
+                <Link href={`/invoices/${inv.id}`} className="text-muted-foreground hover:text-foreground hover:underline">
                   {number}
                 </Link>
               </TableCell>
-              <TableCell>
+              <TableCell className="h-14 first:pl-4">
                 <div className="flex items-center gap-2">
                   <PaymentIndicator state={state} />
                   <StatusBadge status={inv.ksef_status} errorCode={inv.last_error_code} />
                 </div>
               </TableCell>
-              <TableCell className="max-w-72">
-                <div className="flex items-center gap-3">
-                  <Avatar size="lg">
-                    <AvatarFallback className="bg-primary/10 text-accent-foreground text-xs font-medium">
-                      {companyInitials(buyerName)}
-                    </AvatarFallback>
+              <TableCell className="h-14 max-w-72 first:pl-4">
+                <div className="flex items-center gap-2">
+                  <Avatar className="size-9">
+                    <AvatarFallback className="text-xs">{companyInitials(buyerName)}</AvatarFallback>
                   </Avatar>
-                  <div className="min-w-0">
-                    <p className="truncate font-medium" title={buyerName ?? undefined}>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate font-medium" title={buyerName ?? undefined}>
                       {buyerName ? shortenLegalForm(buyerName) : '—'}
-                    </p>
+                    </span>
                     {inv.buyer_data?.nip ? (
-                      <p className="text-muted-foreground truncate font-mono text-xs">{inv.buyer_data.nip}</p>
+                      <span className="text-muted-foreground truncate">NIP {inv.buyer_data.nip}</span>
                     ) : null}
                   </div>
                 </div>
               </TableCell>
-              <TableCell className="text-right tabular-nums">{money(inv.gross_total, inv.currency)}</TableCell>
-              <TableCell className="tabular-nums">{inv.issue_date ?? '—'}</TableCell>
-              <TableCell className="tabular-nums">{inv.payment_due_date ?? '—'}</TableCell>
-              <TableCell className="text-right tabular-nums">
+              <TableCell className="h-14 tabular-nums first:pl-4">
+                <span>{money(inv.gross_total, inv.currency)}</span>
+              </TableCell>
+              <TableCell className="h-14 first:pl-4">
+                <span className="text-muted-foreground tabular-nums">{formatInvoiceDate(inv.issue_date)}</span>
+              </TableCell>
+              <TableCell className="h-14 first:pl-4">
+                <span className="text-muted-foreground tabular-nums">{formatInvoiceDate(inv.payment_due_date)}</span>
+              </TableCell>
+              <TableCell className="h-14 tabular-nums first:pl-4">
                 {outstanding === null ? (
                   <span className="text-muted-foreground">—</span>
                 ) : outstanding === 0 ? (
-                  <Badge variant="secondary">Opłacona</Badge>
+                  <Badge className="h-auto rounded-sm bg-green-600/10 text-green-700 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40">
+                    Opłacona
+                  </Badge>
                 ) : (
-                  money(outstanding, inv.currency)
+                  <span>{money(outstanding, inv.currency)}</span>
                 )}
               </TableCell>
-              <TableCell className="pr-4">
+              <TableCell className="h-14 first:pl-4 last:px-4">
                 <InvoiceRowActions invoice={inv} facts={rowFacts} />
               </TableCell>
             </TableRow>

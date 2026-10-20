@@ -72,24 +72,23 @@ export function BatchPdfDownload() {
     });
   };
 
+  // Plan Finora E3b: jeden rząd z przyciskami paska listy (Finora: „Show” + „Create Invoice”).
+  // Stoi w formularzu GET filtrów, więc pole miesiąca nie należy do niego (`form` bez takiego
+  // formularza) — Enter i „Filtruj” nie wysyłają miesiąca paczki jako filtra.
   return (
-    <div className="flex items-end gap-2">
-      <div>
-        <label
-          htmlFor="batch-month"
-          className="mb-1 block text-xs font-medium text-muted-foreground"
-        >
-          Pobierz PDF za miesiąc
-        </label>
-        <Input
-          id="batch-month"
-          type="month"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          className="w-40"
-        />
-      </div>
-      <Button variant="outline" onClick={download} disabled={isPending}>
+    <div className="flex items-center gap-2">
+      <label htmlFor="batch-month" className="sr-only">
+        Pobierz PDF za miesiąc
+      </label>
+      <Input
+        id="batch-month"
+        type="month"
+        form="paczka-pdf-za-miesiac"
+        value={month}
+        onChange={(e) => setMonth(e.target.value)}
+        className="w-40"
+      />
+      <Button type="button" variant="outline" onClick={download} disabled={isPending} title="Pobierz PDF za miesiąc (ZIP)">
         {isPending ? (
           <RiLoader4Line className="animate-spin" />
         ) : (

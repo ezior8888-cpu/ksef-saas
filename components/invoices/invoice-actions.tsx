@@ -3,9 +3,10 @@
 import { useTransition } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Download, FilePenLine, FileText, Loader2, Printer } from 'lucide-react';
+import { RiDownloadLine, RiEditLine, RiFileCodeLine, RiLoader4Line, RiPrinterLine } from '@remixicon/react';
 
 import { Button, buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { EmailInvoiceButton } from './email-invoice-button';
 import { DraftInvoiceActions } from './draft-invoice-actions';
 import { FailedInvoiceActions } from './failed-invoice-actions';
@@ -54,6 +55,8 @@ interface Props {
    * Każdy przycisk jest w DOM raz. `all` (domyślnie) to dotychczasowy pasek.
    */
   section?: 'primary' | 'secondary' | 'all';
+  /** Adres nabywcy z dokumentu — podpowiedź pola „Do” w oknie „Wyślij e-mailem” (Finora: `invoice.email`). */
+  buyerEmail?: string | null;
 }
 
 /** Komunikat dla klienta po nieudanym pobraniu PDF — wspólny dla „Pobierz PDF” i „Drukuj”. */
@@ -69,7 +72,7 @@ async function pdfFailureMessage(res: Response): Promise<string> {
 /** Blob URL zostaje na czas oglądania PDF w nowej karcie (przeładowanie karty go potrzebuje). */
 const PRINT_BLOB_URL_TTL_MS = 10 * 60_000;
 
-export function InvoiceActions({ invoice, canManageSend = false, section = 'all' }: Props) {
+export function InvoiceActions({ invoice, canManageSend = false, section = 'all', buyerEmail = null }: Props) {
   const [isDownloading, startDownloading] = useTransition();
   const [isDownloadingPdf, startDownloadingPdf] = useTransition();
   const [isOpeningPdf, startOpeningPdf] = useTransition();
@@ -171,57 +174,55 @@ export function InvoiceActions({ invoice, canManageSend = false, section = 'all'
 
   // Podział na karty: główna akcja (wysyłka, ponowienie) obok statusu, reszta w karcie „Dokument”.
   if (section === 'primary') {
-    return hasPrimary ? <div className="flex flex-wrap gap-2">{primary}</div> : null;
+    // Kolumna 18rem jak karta akcji Finory: przyciski jeden pod drugim, na całą szerokość.
+    return hasPrimary ? <div className="space-y-4 [&>button]:w-full">{primary}</div> : null;
   }
 
+  // Karta akcji Finory (`invoices-view/invoice-actions.tsx`): Send Invoice (główny) /
+  // Download / Print → Wyślij e-mailem / Pobierz PDF / Drukuj, `w-full`, ikony Remix;
+  // pod nimi nasze akcje dokumentu (XML, Korekta) w tym samym wariancie `outline`.
+  const full = section === 'secondary' ? 'w-full' : undefined;
   const secondary = (
     <>
+      {/* Decyzja 10: dokument wycofany nie jest fakturą dla nabywcy (odmawia też serwer). */}
+      {!invoice.ksef_retired && (
+        <EmailInvoiceButton invoiceId={invoice.id} defaultEmail={buyerEmail} className={full} />
+      )}
       <Button
         variant="outline"
+        className={full}
         onClick={handleDownloadPdf}
         disabled={isDownloadingPdf}
       >
-        {isDownloadingPdf ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-        ) : (
-          <FileText className="h-4 w-4 mr-2" />
-        )}
+        {isDownloadingPdf ? <RiLoader4Line className="animate-spin" /> : <RiDownloadLine />}
         Pobierz PDF
       </Button>
       <Button
         variant="outline"
+        className={full}
         onClick={handlePrintPdf}
         disabled={isOpeningPdf}
       >
-        {isOpeningPdf ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-        ) : (
-          <Printer className="h-4 w-4 mr-2" />
-        )}
+        {isOpeningPdf ? <RiLoader4Line className="animate-spin" /> : <RiPrinterLine />}
         Drukuj
       </Button>
-      {/* Decyzja 10: dokument wycofany nie jest fakturą dla nabywcy (odmawia też serwer). */}
-      {!invoice.ksef_retired && <EmailInvoiceButton invoiceId={invoice.id} />}
       {canDownload && (
         <Button
           variant="outline"
+          className={full}
           onClick={handleDownload}
           disabled={isDownloading}
-          >
-          {isDownloading ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4 mr-2" />
-          )}
+        >
+          {isDownloading ? <RiLoader4Line className="animate-spin" /> : <RiFileCodeLine />}
           Pobierz XML
         </Button>
       )}
       {invoice.can_correct && (
         <Link
           href={`/invoices/new/correction?parentId=${encodeURIComponent(invoice.id)}`}
-          className={buttonVariants({ variant: 'outline' })}
+          className={cn(buttonVariants({ variant: 'outline' }), full)}
         >
-          <FilePenLine className="h-4 w-4 mr-2" />
+          <RiEditLine />
           Korekta
         </Link>
       )}
@@ -229,8 +230,7 @@ export function InvoiceActions({ invoice, canManageSend = false, section = 'all'
   );
 
   if (section === 'secondary') {
-    // Kolumna 18 rem: pole e-maila (EmailInvoiceButton) ma się zawinąć, nie wystawać.
-    return <div className="flex flex-col gap-2 [&_form]:flex-wrap">{secondary}</div>;
+    return <div className="space-y-4">{secondary}</div>;
   }
 
   return (

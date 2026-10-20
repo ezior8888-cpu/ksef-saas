@@ -1,13 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FileText, PlusCircle, Upload } from 'lucide-react';
+import { RiAddLine, RiFileSearchLine, RiFileTextLine, RiUploadLine } from '@remixicon/react';
 
 import { InvoicesTable } from '@/app/(dashboard)/invoices/_components/invoices-table';
 import { createClient } from '@/lib/supabase/client';
-import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
+import { buttonVariants } from '@/components/ui/button';
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { plural } from '@/lib/i18n/plural';
 import { SelectedPdfDownload } from './batch-pdf-download';
 import { SwipeableInvoiceRow } from './swipeable-invoice-row';
 
@@ -176,41 +178,51 @@ export function InvoiceList({
     };
   }, [tenantId, filtered, router]);
 
+  // Puste stany w oprawie `Empty` Finory (jak „Invoice Not Found” w `invoices-view`),
+  // z dzisiejszymi tekstami i linkami (PLAN-FINORA §7.3, e2e/tests/04-empty-states.spec.ts).
   if (invoices.length === 0 && filtered) {
     return (
-      <EmptyState
-        icon={FileText}
-        title="Brak faktur dla tych filtrów"
-        description="Zmień frazę, status albo okres — albo wyczyść filtry."
-        primaryAction={{
-          type: 'link',
-          label: 'Wyczyść filtry',
-          href: '/invoices',
-          icon: FileText,
-        }}
-      />
+      <Empty className="border-t py-12">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <RiFileSearchLine />
+          </EmptyMedia>
+          <EmptyTitle>Brak faktur dla tych filtrów</EmptyTitle>
+          <EmptyDescription>Zmień frazę, status albo okres — albo wyczyść filtry.</EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Link href="/invoices" className={buttonVariants({ variant: 'default' })}>
+            Wyczyść filtry
+          </Link>
+        </EmptyContent>
+      </Empty>
     );
   }
 
   if (invoices.length === 0) {
     return (
-      <EmptyState
-        icon={FileText}
-        title="Brak faktur wystawionych"
-        description="Wystaw pierwszą fakturę albo zaimportuj historię z poprzedniego programu. Migracja CSV z Fakturownia / inFakt / wFirma / iFirma zajmuje 5 minut."
-        primaryAction={{
-          type: 'link',
-          label: 'Wystaw pierwszą fakturę',
-          href: '/invoices/new',
-          icon: PlusCircle,
-        }}
-        secondaryAction={{
-          type: 'link',
-          label: 'Importuj historię',
-          href: '/onboarding/import-source',
-          icon: Upload,
-        }}
-      />
+      <Empty className="border-t py-12">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <RiFileTextLine />
+          </EmptyMedia>
+          <EmptyTitle>Brak faktur wystawionych</EmptyTitle>
+          <EmptyDescription>
+            Wystaw pierwszą fakturę albo zaimportuj historię z poprzedniego programu. Migracja CSV z Fakturownia /
+            inFakt / wFirma / iFirma zajmuje 5 minut.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent className="flex-row flex-wrap justify-center">
+          <Link href="/invoices/new" className={buttonVariants({ variant: 'default' })}>
+            <RiAddLine aria-hidden />
+            Wystaw pierwszą fakturę
+          </Link>
+          <Link href="/onboarding/import-source" className={buttonVariants({ variant: 'outline' })}>
+            <RiUploadLine aria-hidden />
+            Importuj historię
+          </Link>
+        </EmptyContent>
+      </Empty>
     );
   }
 
@@ -218,24 +230,30 @@ export function InvoiceList({
 
   return (
     <>
-      {/* TELEFON (< lg): lista kart ze swipe */}
-      <div className="lg:hidden space-y-2">
+      {/*
+        Zaznaczone wiersze (od `lg`, jak zaznaczanie w tabeli Finory): pasek z „Pobierz PDF
+        zaznaczonych” pokazuje się tylko przy zaznaczeniu. Finora nie ma akcji zbiorczej;
+        to nasza funkcja (P3), więc stoi nad tabelą, nie w pasku narzędzi.
+      */}
+      {selectedIds.length > 0 ? (
+        <div className="hidden items-center justify-between gap-3 border-t px-4 py-2 lg:flex">
+          <p className="text-muted-foreground text-sm">
+            {`Zaznaczono ${selectedIds.length} ${plural(selectedIds.length, ['fakturę', 'faktury', 'faktur'])}`}
+          </p>
+          <SelectedPdfDownload ids={selectedIds} />
+        </div>
+      ) : null}
+
+      {/* TELEFON (< lg, §7.2): wiersze-karty ze swipe zamiast tabeli */}
+      <div className="divide-y border-t lg:hidden">
         {invoices.map((inv) => (
           <SwipeableInvoiceRow key={inv.id} invoice={inv} facts={facts[inv.id]} today={dayToday} />
         ))}
       </div>
 
-      {/* KOMPUTER (lg+): data-table Finory na ui/table */}
-      <Card className="hidden gap-0 py-0 shadow-none lg:block">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-          <div>
-            <h2 className="text-sm font-medium">Lista faktur wystawionych</h2>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              {summary ?? `${invoices.length} pozycji • sortowanie wg daty utworzenia`}
-            </p>
-          </div>
-          <SelectedPdfDownload ids={selectedIds} />
-        </div>
+      {/* KOMPUTER (lg+): data-table Finory */}
+      <div className="hidden lg:block">
+        {summary ? <p className="sr-only">{summary}</p> : null}
         <InvoicesTable
           invoices={invoices}
           facts={facts}
@@ -244,7 +262,7 @@ export function InvoiceList({
           onToggleRow={toggleRow}
           onToggleAll={toggleAll}
         />
-      </Card>
+      </div>
     </>
   );
 }
