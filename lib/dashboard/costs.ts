@@ -34,6 +34,14 @@ export interface CostEntry {
    * z `VAT_DEDUCTIBLE_DOCUMENTS` (ta sama reguła co JPK_V7M), inaczej 0.
    */
   vatDeductible: number;
+  /**
+   * Plan Finora P10 (analiza kosztów): kategoria z `category_label` (`null`,
+   * gdy wydatek jej nie ma), VAT naliczony z dokumentu (`vat_amount`, bez
+   * reguły odliczenia) i czy wydatek jest opisany (`is_reviewed`).
+   */
+  categoryLabel: string | null;
+  vat: number;
+  isReviewed: boolean;
 }
 
 /**
@@ -44,7 +52,7 @@ export interface CostEntry {
 const PROVENANCE_READ_FAILED = 'KSeF expense invoice provenance check is unavailable';
 
 const EXPENSE_COLUMNS =
-  'id, source, ksef_invoice_id, issue_date, seller_nip, seller_name, net_amount, vat_amount, gross_amount, vat_deductible_amount, document_type, is_reviewed, ocr_extracted_data';
+  'id, source, ksef_invoice_id, issue_date, seller_nip, seller_name, net_amount, vat_amount, gross_amount, vat_deductible_amount, document_type, is_reviewed, ocr_extracted_data, category_label';
 
 /**
  * Koszty z zakresu `[from, toExclusive)` (daty RRRR-MM-DD), posortowane po
@@ -127,6 +135,11 @@ export async function getCosts(
     vatDeductible: VAT_DEDUCTIBLE_DOCUMENTS.has(row.document_type ?? 'invoice')
       ? Number(row.vat_deductible_amount ?? 0)
       : 0,
+    categoryLabel: typeof row.category_label === 'string' && row.category_label.trim()
+      ? row.category_label.trim()
+      : null,
+    vat: Number(row.vat_amount ?? 0),
+    isReviewed: row.is_reviewed === true,
   }));
 }
 

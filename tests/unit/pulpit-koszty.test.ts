@@ -129,7 +129,25 @@ describe('getCosts — jedna droga kosztów Pulpitu', () => {
       cost: 123,
       outflow: 123,
       vatDeductible: 0,
+      // Plan Finora P10 (E7): pola analizy kosztów z tego samego wiersza.
+      categoryLabel: null,
+      vat: 23,
+      isReviewed: true,
     });
+  });
+
+  it('analiza kosztów (P10): kategoria, VAT naliczony i opis z tego samego wiersza', async () => {
+    tables.expenses = [
+      expense('e-1', { category_label: '  Paliwo ', vat_amount: 46, vat_deductible_amount: 23, is_reviewed: false }),
+      expense('e-2', { category_label: '   ' }),
+    ];
+
+    const entries = await getCosts(database(), TENANT, RANGE);
+
+    expect(entries.map((e) => [e.id, e.categoryLabel, e.vat, e.vatDeductible, e.isReviewed])).toEqual([
+      ['e-1', 'Paliwo', 46, 23, false],
+      ['e-2', null, 23, 23, true],
+    ]);
   });
 
   it('faktura czynnego podatnika: koszt = netto, VAT do odliczenia z wiersza', async () => {
@@ -255,6 +273,7 @@ describe('getCosts — jedna droga kosztów Pulpitu', () => {
 describe('sumCostsByMonth', () => {
   const entry = (issueDate: string, cost: number): CostEntry => ({
     id: issueDate, issueDate, sellerNip: null, sellerName: null, cost, outflow: cost, vatDeductible: 0,
+    categoryLabel: null, vat: 0, isReviewed: true,
   });
 
   it('sumuje per klucz RRRR-MM w kolejności kluczy, z zerem dla pustego miesiąca', () => {
