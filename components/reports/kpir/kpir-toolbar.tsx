@@ -1,4 +1,6 @@
 import Link from 'next/link';
+
+import { DemoBadge } from '@/components/dashboard/demo-badge';
 import { RiArrowLeftSLine, RiArrowRightSLine, RiDownload2Line } from '@remixicon/react';
 
 import MonthSelector from '@/components/expenses/finora/month-selector';
@@ -36,6 +38,7 @@ export function KpirToolbar({
   currentMonth,
   monthTitle,
   exportHref,
+  demo = false,
 }: {
   /** Wybrany miesiąc RRRR-MM. */
   period: string;
@@ -44,9 +47,17 @@ export function KpirToolbar({
   /** „Wrzesień 2026”. */
   monthTitle: string;
   exportHref?: string;
+  /** Dane przykładowe (przed weryfikacją KSeF) — plakietka po lewej. */
+  demo?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2 sm:justify-end">
+    <div className={cn('flex items-center gap-2 sm:justify-end', demo && 'flex-wrap')}>
+      {demo ? (
+        // Na telefonie plakietka w osobnym rzędzie nad wyborem miesiąca.
+        <span className="max-sm:basis-full sm:mr-auto">
+          <DemoBadge />
+        </span>
+      ) : null}
       <Link href={kpirHref(shiftMonth(period, -1))} aria-label="Poprzedni miesiąc" className={ARROW}>
         <RiArrowLeftSLine aria-hidden />
       </Link>

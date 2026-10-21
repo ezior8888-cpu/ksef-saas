@@ -85,6 +85,8 @@ interface KpirViewProps {
   settledError?: string | null;
   /** Dziś RRRR-MM-DD w Polsce; domyślnie `todayInWarsaw()`. */
   today?: string;
+  /** Dane przykładowe (firma przed weryfikacją KSeF) — plakietka w pasku. */
+  demo?: boolean;
 }
 
 /** Segment nad księgą: wszystkie wpisy, przychody, koszty albo koszty poza sumą. */
@@ -335,7 +337,7 @@ function EntryCard({ entry }: { entry: KpirEntry }) {
   );
 }
 
-export function KpirView({ month, year, expenses, invoices, settledError = null, today: todayProp }: KpirViewProps) {
+export function KpirView({ month, year, expenses, invoices, settledError = null, today: todayProp, demo = false }: KpirViewProps) {
   const router = useRouter();
   const today = todayProp ?? todayInWarsaw();
   const period = `${year}-${String(month).padStart(2, '0')}`;
@@ -462,7 +464,7 @@ export function KpirView({ month, year, expenses, invoices, settledError = null,
 
   return (
     <>
-      <KpirToolbar period={period} currentMonth={today.slice(0, 7)} monthTitle={monthTitle} exportHref={exportHref} />
+      <KpirToolbar period={period} currentMonth={today.slice(0, 7)} monthTitle={monthTitle} exportHref={exportHref} demo={demo} />
 
       {settledError ? (
         <Alert variant="destructive">
