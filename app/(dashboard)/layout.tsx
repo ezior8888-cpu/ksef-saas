@@ -115,7 +115,8 @@ export default async function DashboardLayout({
             />
 
             <div className="ff-shell-scroll min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto min-h-0 w-full max-w-[1500px] px-4 pb-12 sm:px-[var(--ff-container-padding)]">
+              {/* Kontener treści 1:1 z `<main>` Finory (układ „compact”). */}
+              <div className="mx-auto min-h-0 w-full max-w-360 flex-1 px-4 py-6 sm:px-6">
                 <Suspense fallback={null}>
                   <KsefHealthBanner />
                 </Suspense>

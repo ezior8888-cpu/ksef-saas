@@ -23,7 +23,7 @@ export default async function AnalizaSprzedazyPage({
   const month = resolveAnalyticsMonth(params[ANALYTICS_MONTH_PARAM], now);
 
   return (
-    <div className="space-y-6 py-6">
+    <div className="space-y-6">
       <AnalizyHeader
         title="Analiza sprzedaży"
         description="Śledź sprzedaż, klientów i produkty miesiąc po miesiącu."
