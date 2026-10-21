@@ -1,13 +1,15 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { RiArrowRightLine, RiCheckLine, RiLoader4Line, RiSparklingLine } from '@remixicon/react';
 import { toast } from 'sonner';
 
+import { LegalInline } from '@/components/legal/legal-document';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { PRICE_GROSS, PRICE_NET, TRIAL_DAYS } from '@/lib/billing/pricing';
+import { CHECKOUT_STATEMENT } from '@/lib/legal/versions';
 
 import { startCheckoutAction } from '../actions';
 
@@ -18,13 +20,16 @@ const FEATURES = [
   'Wkurzacz Dłużników',
   'Magiczny import z konkurencji',
   'Co-Pilot Księgowego',
-  'PWA mobilna z OCR',
+  // Dawniej „PWA mobilna z OCR” — panel na telefonie jest wyłączony (/mobile).
+  'Odczyt paragonów (AI) z limitem dziennym i miesięcznym',
   'Wsparcie po polsku',
 ];
 
 interface PlanCardProps {
   isPending: boolean;
   onSelect: () => void;
+  statementAccepted: boolean;
+  onStatementChange: (accepted: boolean) => void;
 }
 
 /**
@@ -32,8 +37,11 @@ interface PlanCardProps {
  * Plan roczny nie jest sprzedawany — akcja zakupu też go odrzuca.
  *
  * Wygląd: `Card` Finory (nagłówek, treść, stopka), odznaka jak jej `Badge`.
+ * Oświadczenie przed płatnością (art. 15 ust. 3 i art. 35 ustawy o prawach
+ * konsumenta) — brzmienie z lib/legal/versions.ts; serwer odrzuca zakup bez
+ * niego (`startCheckoutAction`, `statement-required`).
  */
-function PlanCard({ isPending, onSelect }: PlanCardProps) {
+function PlanCard({ isPending, onSelect, statementAccepted, onStatementChange }: PlanCardProps) {
   return (
     <Card>
       <CardHeader>
@@ -69,7 +77,18 @@ function PlanCard({ isPending, onSelect }: PlanCardProps) {
       </CardContent>
 
       <CardFooter className="flex flex-col items-stretch gap-2">
-        <Button size="lg" className="w-full" disabled={isPending} onClick={onSelect}>
+        <label className="text-muted-foreground flex items-start gap-2.5 text-xs leading-relaxed">
+          <input
+            type="checkbox"
+            checked={statementAccepted}
+            onChange={(e) => onStatementChange(e.target.checked)}
+            className="accent-primary mt-0.5 size-4 shrink-0"
+          />
+          <span>
+            <LegalInline text={CHECKOUT_STATEMENT.text} linkClassName="underline underline-offset-2" />
+          </span>
+        </label>
+        <Button size="lg" className="w-full" disabled={isPending || !statementAccepted} onClick={onSelect}>
           {isPending ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
           Zacznij {TRIAL_DAYS} dni za darmo
           <RiArrowRightLine aria-hidden />
@@ -84,11 +103,12 @@ function PlanCard({ isPending, onSelect }: PlanCardProps) {
 
 export function PlanCards() {
   const [isPending, startTransition] = useTransition();
+  const [statementAccepted, setStatementAccepted] = useState(false);
 
   const handleSelect = () => {
     startTransition(async () => {
       try {
-        await startCheckoutAction('monthly');
+        await startCheckoutAction('monthly', statementAccepted);
         // `startCheckoutAction` rzuca NEXT_REDIRECT — kod tu nie dotrze przy
         // sukcesie. Toast wyląduje gdy redirect wróci z `?error=...`.
       } catch (e) {
@@ -103,7 +123,12 @@ export function PlanCards() {
 
   return (
     <div className="max-w-md">
-      <PlanCard isPending={isPending} onSelect={handleSelect} />
+      <PlanCard
+        isPending={isPending}
+        onSelect={handleSelect}
+        statementAccepted={statementAccepted}
+        onStatementChange={setStatementAccepted}
+      />
     </div>
   );
 }

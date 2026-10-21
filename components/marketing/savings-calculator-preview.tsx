@@ -143,8 +143,8 @@ export function SavingsCalculatorPreview() {
 
         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-zinc-200 bg-zinc-100 p-6 lg:px-10">
           <p className="max-w-md text-xs text-zinc-600">
-            Szacowanie na podstawie pomiarów beta-testerów: 8 min ręcznie vs 1,5
-            min z OCR FaktWay.
+            Szacunek przy założeniu: 8 min na dokument ręcznie vs 1,5 min
+            z OCR FaktWay. Twój wynik może być inny.
           </p>
           <Link
             href="/register"

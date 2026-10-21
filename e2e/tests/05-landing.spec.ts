@@ -24,15 +24,16 @@ test.describe('Landing page (Faza 19)', () => {
     ).toBeVisible();
   });
 
-  test('comparison subpages (vs Inni/inFakt/wFirma/iFirma) działają', async ({
+  // Strony porównawcze wyłączone 15.10.2026 do weryfikacji treści
+  // (lib/marketing/comparisons.ts, uzasadnienie w app/(marketing)/vs/layout.tsx).
+  // Po włączeniu flagi wróć do sprawdzania, że się renderują.
+  test('comparison subpages (vs Inni/inFakt/wFirma/iFirma) są wyłączone (404)', async ({
     page,
   }) => {
     const slugs = ['inni', 'infakt', 'wfirma', 'ifirma'] as const;
     for (const slug of slugs) {
-      await page.goto(`/vs/${slug}`);
-      await expect(page).toHaveURL(new RegExp(`/vs/${slug}`));
-      const status = await page.evaluate(() => document.readyState);
-      expect(status).toBe('complete');
+      const response = await page.goto(`/vs/${slug}`);
+      expect(response?.status()).toBe(404);
     }
   });
 

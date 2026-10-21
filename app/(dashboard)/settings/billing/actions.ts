@@ -2,7 +2,9 @@
 
 import { redirect } from 'next/navigation';
 
+import { logAudit } from '@/lib/audit/log';
 import { logAuditSystem } from '@/lib/audit/log-system';
+import { CHECKOUT_STATEMENT, CONTRACT_VERSION } from '@/lib/legal/versions';
 import { isStripeConfigured } from '@/lib/stripe/client';
 import { createCheckoutSession, type CheckoutPlan } from '@/lib/stripe/checkout';
 import { createPortalSession } from '@/lib/stripe/portal';
@@ -40,11 +42,23 @@ function getBaseUrl(): string {
  * Sukces = redirect na Stripe Checkout (303). Fail = redirect na
  * `/settings/billing?error=<code>` (kody: not-configured, forbidden, …).
  */
-export async function startCheckoutAction(plan: CheckoutPlan): Promise<void> {
+export async function startCheckoutAction(
+  plan: CheckoutPlan,
+  /**
+   * Oświadczenie z `CHECKOUT_STATEMENT` (zamówienie z obowiązkiem zapłaty
+   * i — dla konsumenta/PNPK — żądanie rozpoczęcia usługi przed upływem
+   * 14 dni na odstąpienie, art. 15 ust. 3 i art. 35 ustawy o prawach
+   * konsumenta). Bez niego nie kierujemy do płatności.
+   */
+  statementAccepted = false,
+): Promise<void> {
   const ctx = await getPageContext();
 
   if (!canManageBilling(ctx.role)) {
     redirect('/settings/billing?error=forbidden');
+  }
+  if (statementAccepted !== true) {
+    redirect('/settings/billing?error=statement-required');
   }
   // AAL2 przy płatnościach, gdy flaga włączona (AUD-65).
   if (!(await billingMfaSatisfied(ctx))) {
@@ -84,6 +98,19 @@ export async function startCheckoutAction(plan: CheckoutPlan): Promise<void> {
       baseUrl: getBaseUrl(),
     });
     url = result.url;
+    // Dowód oświadczenia: wersja brzmienia, regulaminu i plan. Zapis po
+    // utworzeniu sesji — przy błędzie Stripe nie ma czego dokumentować.
+    // `logAudit` nie rzuca, więc nie trafi do `catch` poniżej.
+    await logAudit({
+      action: 'legal.checkout_statement_accepted',
+      tenantId: ctx.tenantId,
+      userId: ctx.user.id,
+      metadata: {
+        plan,
+        statementVersion: CHECKOUT_STATEMENT.version,
+        contractVersion: CONTRACT_VERSION,
+      },
+    });
   } catch (e) {
     // Klient zobaczy "Coś poszło nie tak — spróbuj ponownie" zamiast goly
     // stack trace. Operator widzi w Sentry full kontekst.

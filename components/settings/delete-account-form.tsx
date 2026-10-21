@@ -16,6 +16,11 @@ interface DeleteAccountFormProps {
  * Usunięcie firmy. Wygląd: potwierdzenie jak w `privacy/delete-account-dialog.tsx`
  * Finory (pole z frazą do wpisania, przycisk destrukcyjny) — u nas frazą jest
  * NIP firmy, w miejscu, bez okna.
+ *
+ * Od 15.10.2026 akcja zawsze odmawia i kieruje do pomocy technicznej
+ * (usuwanie firmy wstrzymane, NIP niczego nie odblokowuje), więc nie
+ * przekierowuje i nie ma czego łapać. Przycisk dotyczy firmy (organizacji),
+ * nie konta użytkownika.
  */
 export function DeleteAccountForm({ tenantNipHint }: DeleteAccountFormProps) {
   const [error, setError] = useState<string | null>(null);
@@ -27,25 +32,9 @@ export function DeleteAccountForm({ tenantNipHint }: DeleteAccountFormProps) {
       onSubmit={(e) => {
         e.preventDefault();
         setError(null);
-        const formData = new FormData(e.currentTarget);
         startTransition(async () => {
-          try {
-            const result = await requestAccountDeletionAction(formData);
-            if (!result.success) setError(result.error);
-          } catch (err: unknown) {
-            if (
-              typeof err === 'object' &&
-              err !== null &&
-              'digest' in err &&
-              typeof (err as { digest?: unknown }).digest === 'string' &&
-              String((err as { digest: string }).digest).startsWith(
-                'NEXT_REDIRECT'
-              )
-            ) {
-              return;
-            }
-            throw err;
-          }
+          const result = await requestAccountDeletionAction();
+          setError(result.error);
         });
       }}
     >
@@ -76,7 +65,7 @@ export function DeleteAccountForm({ tenantNipHint }: DeleteAccountFormProps) {
 
       <div>
         <Button type="submit" variant="destructive" disabled={isPending}>
-          {isPending ? 'Przetwarzanie…' : 'Usuń konto'}
+          {isPending ? 'Przetwarzanie…' : 'Usuń firmę'}
         </Button>
       </div>
     </form>

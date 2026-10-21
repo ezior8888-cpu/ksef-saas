@@ -6,6 +6,7 @@ import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
 import type { UserRole } from '@/lib/supabase/auth-context';
 import { hasConfiguredKsefProof } from '@/lib/ksef/claim-environment';
+import { LEGAL_GATE_PATH, needsTermsAcceptance } from '@/lib/legal/acceptance';
 
 /** Kształt listy firm w menu profilu (`ProfileMenu`, „Moje firmy”). */
 export interface DashboardOrgMembershipPreview {
@@ -114,6 +115,11 @@ export async function assertDashboardShellAccess(): Promise<void> {
     cookies(),
   ]);
   if (!user) redirect('/login');
+
+  // Bramka dokumentów prawnych: aktywna dopiero, gdy dane usługodawcy są
+  // kompletne (do tego czasu `needsTermsAcceptance` zwraca false). Odczyt
+  // z `getUser()` — bez dodatkowego zapytania do bazy.
+  if (needsTermsAcceptance(user.app_metadata)) redirect(LEGAL_GATE_PATH);
 
   const activeOrg = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
   if (!isUuid(activeOrg)) {
