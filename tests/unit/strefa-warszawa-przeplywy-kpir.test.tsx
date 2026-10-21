@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   context: vi.fn(),
   provenance: vi.fn(async () => undefined),
 }));
+// Strona KPiR pyta o weryfikację KSeF (dane przykładowe przed nią) — tu firma zweryfikowana.
+vi.mock('@/lib/demo/kontekst-przykladowy', () => ({ czyZweryfikowana: async () => true }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: mocks.context }));
 vi.mock('@/lib/ksef/claim-environment', () => ({
   requireConfiguredKsefEnvironment: () => 'production',
