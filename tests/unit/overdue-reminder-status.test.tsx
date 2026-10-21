@@ -130,8 +130,11 @@ describe('overdue reminder status', () => {
     expect(props.overdueInvoices.map((item) => item.id)).toEqual([INVOICE]);
     expect(props.stats.totalAmount).toBe(100);
     const html = renderToStaticMarkup(page);
-    expect(html).toContain('Importy i dokumenty wymagające uzgodnienia nie wchodzą do tej sumy');
-    expect(html).toContain('Suma pokazanych pozycji');
+    // Poprawka Bartosza 21.10.2026: stała nota nad kaflami zniknęła. Zakres sumy
+    // (bez importów i korekt) mówi podpis kafla „Po terminie” (RECEIVABLES_NOTE).
+    expect(html).not.toContain('role="note"');
+    expect(html).not.toContain('Importy i dokumenty wymagające uzgodnienia nie wchodzą do tej sumy');
+    expect(html).toContain('Suma pokazanych pozycji<br/>Bez importów i faktur skorygowanych');
     expect(html).not.toContain('Suma do odzyskania');
     expect(html).not.toContain('IMPORTED');
     expect(html).not.toContain('CORRECTED-ORIGINAL');
@@ -230,9 +233,48 @@ describe('overdue reminder status', () => {
     expect(props.overdueInvoices).toHaveLength(100);
     expect(props.overdueInvoices.every((row) => row.id.startsWith('prod-'))).toBe(true);
     expect(props.stats.totalAmount).toBe(10_000);
+    // Dokładnie 100 po przejrzeniu całego widoku: lista jest pełna, bez noty o limicie.
+    expect((page.props as { limitReached: boolean }).limitReached).toBe(false);
     expect(queries.filter((query) => query.table === 'invoices_overdue')).toHaveLength(3);
     expect(queries.filter((query) => query.table === 'invoices' && query.selection.includes('ksef_environment'))
       .every((query) => query.selection === 'id, ksef_environment, origin, invoice_kind, invoice_type, currency, payment_data' && query.exactCount)).toBe(true);
+  });
+
+  it('notes the 100-invoice cap only when more overdue invoices may exist (poprawka Bartosza 21.10.2026)', async () => {
+    const productionRows = (count: number) => Array.from({ length: count }, (_, index) => ({
+      ...invoice('prod-' + index, TENANT), internal_number: 'PROD-' + index,
+    }));
+    const CAP_NOTE = /Faktur po terminie<\/p><p[^>]*>średnio 22 dni po terminie<br\/>Pokazujemy pierwsze 100, od najdłużej zaległych<\/p>/;
+
+    // Jedna faktura: bez noty.
+    let page = await OverduePage();
+    expect((page.props as { limitReached: boolean }).limitReached).toBe(false);
+    expect(renderToStaticMarkup(page)).not.toContain('Pokazujemy pierwsze');
+
+    // Dokładnie 100 na jednej stronie widoku: lista pełna, bez noty.
+    rows.invoices_overdue = productionRows(100);
+    page = await OverduePage();
+    expect((page.props as { limitReached: boolean }).limitReached).toBe(false);
+    expect(renderToStaticMarkup(page)).not.toContain('Pokazujemy pierwsze');
+
+    // 101 kandydatów: pętla staje po 100 bezpiecznych, 101. nie jest sprawdzana —
+    // dalszych pozycji nie wykluczymy, więc nota mówi „pierwsze 100”.
+    rows.invoices_overdue = productionRows(101);
+    page = await OverduePage();
+    expect((page.props as { overdueInvoices: unknown[] }).overdueInvoices).toHaveLength(100);
+    expect((page.props as { limitReached: boolean }).limitReached).toBe(true);
+    expect(renderToStaticMarkup(page)).toMatch(CAP_NOTE);
+
+    // Cały widok przejrzany, bezpiecznych ponad 100 (99 + 100 z dwóch stron): ucięte na pewno.
+    const testRow = { ...invoice('test-0', TENANT), internal_number: 'TEST-0' };
+    rows.invoices_overdue = [testRow, ...productionRows(199)];
+    rows.invoices = rows.invoices_overdue.map((row) => ({ id: row.id, tenant_id: TENANT,
+      ksef_environment: row.id === 'test-0' ? 'test' : 'production', origin: 'app',
+      invoice_kind: 'regular', invoice_type: 'VAT', currency: 'PLN' }));
+    page = await OverduePage();
+    expect((page.props as { overdueInvoices: unknown[] }).overdueInvoices).toHaveLength(100);
+    expect((page.props as { limitReached: boolean }).limitReached).toBe(true);
+    expect(renderToStaticMarkup(page)).toMatch(CAP_NOTE);
   });
 
   it('shows reconciliation error for an overdue accepted invoice with unknown environment', async () => {
@@ -249,7 +291,11 @@ describe('overdue reminder status', () => {
     rows.payment_reminders.push(reminder('22222222-2222-4222-8222-222222222222', FOREIGN, '2026-09-23T11:00:00.000Z'));
     const html = await markup();
     expect(html).toContain('Oczekuje na wysyłkę');
-    expect(html).toContain('Stan przypomnień jest orientacyjny.');
+    // Poprawka Bartosza 21.10.2026: zastrzeżenie przeszło z noty nad kaflami
+    // do podpisu kafla „Przypomnień wysłanych w miesiącu” (ten atrapowy klient nie
+    // zna `.gte`, więc licznik kafla jest tu nieodczytany — zdanie stoi pod tą linią).
+    expect(html).toMatch(/Przypomnień wysłanych w miesiącu<\/p><p[^>]*>Nie udało się odczytać — odśwież za chwilę<br\/>Stan przypomnień jest orientacyjny<\/p>/);
+    expect(html).not.toContain('Stan przypomnień jest orientacyjny.');
     expect(html).not.toContain('FOREIGN-1');
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Przypomnienie już zlecone"/);
     const view = queries.find((q) => q.table === 'invoices_overdue')!;

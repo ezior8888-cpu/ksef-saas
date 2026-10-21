@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { InvoicesTabs } from '@/components/invoices/invoices-tabs';
 import { Card } from '@/components/ui/card';
 import { receivableBaseFilterOps } from '@/lib/dashboard/receivables';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
@@ -134,8 +135,10 @@ export default async function InvoicesPage({
   // Układ `invoices-list/index.tsx` Finory: kafle, potem JEDNA karta z paskiem
   // narzędzi, tabelą (od `lg`; niżej karty wierszy, §7.2) i stopką z paginacją.
   // Strona nie ma widocznego nagłówka, jak w szablonie — tytuł dla czytników ekranu.
+  // Poprawka 21.10.2026: pierwszy rząd karty to zakładki Faktur, a karta sięga
+  // do stopki pustym arkuszem (`ff-page-fill`, rośnie obszar tabeli nad paginacją).
   return (
-    <div className="space-y-6">
+    <div className="ff-page-fill flex flex-col gap-6">
       <h1 className="sr-only">Faktury wystawione</h1>
 
       {/* N1: ile faktur cyklicznych czeka na wystawienie. Własny odczyt w Suspense — nie wstrzymuje listy, a jego błąd jej nie psuje. */}
@@ -145,9 +148,10 @@ export default async function InvoicesPage({
 
       <InvoiceStatTiles supabase={supabase} tenantId={tenantId} />
 
-      <Card>
-        <div className="w-full">
-          <div className="border-b">
+      <Card className="flex-1 pt-0">
+        <InvoicesTabs active="wystawione" />
+        <div className="flex w-full flex-1 flex-col pt-2">
+          <div className="flex-1 border-b">
             <InvoicesToolbar params={params} filtered={filtered} />
 
             {paymentFilterError ? (

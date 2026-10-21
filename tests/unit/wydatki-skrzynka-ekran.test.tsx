@@ -473,6 +473,8 @@ describe('Skrzynka KSeF P9', () => {
 
     const none = html((await InboxLastFetchCell(props)) as ReactElement);
     expect(none).toContain('Jeszcze nie pobraliśmy żadnej faktury');
+    // Poprawka 21.10.2026: podtytuł z „co 15 minut” zniknął — rytm jest w kaflu także przed pierwszym pobraniem.
+    expect(none).toContain('sprawdzamy KSeF co 15 minut');
 
     stats.verified.mockResolvedValue(false);
     const noKsef = html((await InboxLastFetchCell(props)) as ReactElement);

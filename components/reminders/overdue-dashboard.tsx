@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 import { ReminderConsentDialog } from './reminder-consent-dialog';
 import { toggleInvoiceRemindersAction } from '@/app/actions/reminders';
 import StatsCards from '@/components/dashboard/stats-cards';
+import { InvoicesTabs } from '@/components/invoices/invoices-tabs';
 import {
   ColumnSelectFilter,
   DataTablePagination,
@@ -83,6 +84,11 @@ interface Props {
     /** `null`, gdy odczytu nie da się potwierdzić — kafel pokazuje „—”, nie „0”. */
     sentThisMonth: number | null;
   };
+  /**
+   * Lista mogła się nie zmieścić w limicie strony (100 pozycji) — wtedy kafel
+   * „Faktur po terminie” mówi, że to pierwsze z nich. Bez flagi noty nie ma.
+   */
+  limitReached?: boolean;
   /** „Ustawienia przypomnień” tylko dla właściciela (P7). */
   canManageSettings?: boolean;
 }
@@ -285,29 +291,30 @@ function OverdueRowActions({ invoice, onPrepare }: { invoice: OverdueInvoice; on
   );
 }
 
-/** Nagłówek strony (jak nagłówki stron Finory: tytuł + opis). */
+/**
+ * Tytuł dla czytników ekranu. Poprawka 21.10.2026: ekran to zakładka „Po terminie”
+ * Faktur — nazwę niesie zakładka, więc widocznego nagłówka nie ma (jak w Finorze).
+ */
 function OverdueHeading() {
-  return (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Przypomnienia</h1>
-      <p className="text-muted-foreground text-sm">
-        Faktury po terminie płatności • przypomnienia e-mail. Stan przypomnień jest orientacyjny.
-      </p>
-    </div>
-  );
+  return <h1 className="sr-only">Faktury po terminie</h1>;
 }
 
-/** Lista, której nie da się potwierdzić w całości: komunikat zamiast kwot. */
+/** Lista, której nie da się potwierdzić w całości: komunikat zamiast kwot (w karcie z zakładkami). */
 export function OverdueDashboardError({ message }: { message: string }) {
   return (
-    <div className="space-y-6 pb-10">
+    <div className="ff-page-fill flex flex-col gap-6">
       <OverdueHeading />
-      <Alert variant="destructive">
-        <AlertTitle>Nie udało się pobrać listy: {message}</AlertTitle>
-        <AlertDescription>
-          Odśwież stronę za chwilę. Jeśli komunikat wraca, napisz do pomocy FaktWay — sprawdzimy dane faktur.
-        </AlertDescription>
-      </Alert>
+      <Card className="flex-1 pt-0 shadow-none">
+        <InvoicesTabs active="po-terminie" />
+        <div className="px-4 pt-2">
+          <Alert variant="destructive">
+            <AlertTitle>Nie udało się pobrać listy: {message}</AlertTitle>
+            <AlertDescription>
+              Odśwież stronę za chwilę. Jeśli komunikat wraca, napisz do pomocy FaktWay — sprawdzimy dane faktur.
+            </AlertDescription>
+          </Alert>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -382,7 +389,7 @@ export function overdueColumns(onPrepare: (invoice: OverdueInvoice) => void): Co
   ];
 }
 
-export function OverdueDashboard({ overdueInvoices, stats, canManageSettings = false }: Props) {
+export function OverdueDashboard({ overdueInvoices, stats, limitReached = false, canManageSettings = false }: Props) {
   const router = useRouter();
   const [reminderInvoice, setReminderInvoice] = useState<OverdueInvoice | null>(null);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -416,6 +423,12 @@ export function OverdueDashboard({ overdueInvoices, stats, canManageSettings = f
     onPaginationChange: setPagination,
   });
 
+  // Poprawka Bartosza 21.10.2026: stała nota nad kaflami („brzydka”) zniknęła.
+  // Jej zastrzeżenia stoją tam, gdzie dotyczą: zakres sumy w podpisie kafla
+  // „Po terminie” (RECEIVABLES_NOTE), limit 100 pod „Faktur po terminie” tylko
+  // przy ucięciu, orientacyjny stan pod kaflem przypomnień, saldo w oknie zgody.
+  const averageNote = `średnio ${daysOverdueLabel(stats.avgDaysOverdue)}`;
+  const reminderStateNote = overdueInvoices.length > 0 ? 'Stan przypomnień jest orientacyjny' : null;
   const statItems = [
     {
       label: 'Po terminie',
@@ -432,13 +445,24 @@ export function OverdueDashboard({ overdueInvoices, stats, canManageSettings = f
     {
       label: 'Faktur po terminie',
       value: formatPlInt(stats.totalCount),
-      note: stats.totalCount > 0 ? `średnio ${daysOverdueLabel(stats.avgDaysOverdue)}` : undefined,
+      note: stats.totalCount === 0 ? undefined : limitReached ? (
+        <>
+          {averageNote}
+          <br />
+          Pokazujemy pierwsze {formatPlInt(stats.totalCount)}, od najdłużej zaległych
+        </>
+      ) : averageNote,
       icon: RiErrorWarningLine,
     },
     {
       label: 'Przypomnień wysłanych w miesiącu',
       value: stats.sentThisMonth === null ? '—' : formatPlInt(stats.sentThisMonth),
-      note: stats.sentThisMonth === null ? 'Nie udało się odczytać — odśwież za chwilę' : undefined,
+      note: stats.sentThisMonth === null ? (
+        <>
+          Nie udało się odczytać — odśwież za chwilę
+          {reminderStateNote ? <><br />{reminderStateNote}</> : null}
+        </>
+      ) : reminderStateNote ?? undefined,
       icon: RiMailSendLine,
     },
     {
@@ -450,36 +474,34 @@ export function OverdueDashboard({ overdueInvoices, stats, canManageSettings = f
   ];
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="ff-page-fill flex flex-col gap-6">
       <OverdueHeading />
-      <p className="text-muted-foreground max-w-3xl text-sm" role="note">
-        Pokazujemy najwyżej 100 faktur wystawionych w aplikacji bez powiązanych korekt.
-        Importy i dokumenty wymagające uzgodnienia nie wchodzą do tej sumy.
-        Przed zatwierdzeniem przypomnienia sprawdź aktualne saldo.
-      </p>
-
       <StatsCards stats={statItems} iconPosition="right" />
 
       {overdueInvoices.length === 0 ? (
-        <Card className="items-center px-6 py-12 text-center shadow-none">
-          <div className="bg-muted flex size-12 items-center justify-center">
-            <RiCheckboxCircleLine className="text-foreground size-6" aria-hidden />
+        <Card className="flex-1 pt-0 shadow-none">
+          <InvoicesTabs active="po-terminie" />
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-12 text-center">
+            <div className="bg-muted flex size-12 items-center justify-center">
+              <RiCheckboxCircleLine className="text-foreground size-6" aria-hidden />
+            </div>
+            <h3 className="text-lg font-semibold tracking-tight">Brak pozycji gotowych do przypomnienia</h3>
+            <p className="text-muted-foreground mx-auto max-w-md text-sm">
+              Inne dokumenty mogą nadal wymagać sprawdzenia salda i korekt.
+            </p>
+            {canManageSettings ? (
+              <Link href="/settings/reminders" className={buttonVariants({ variant: 'outline' })}>
+                <RiSettings3Line aria-hidden />
+                Ustawienia przypomnień
+              </Link>
+            ) : null}
           </div>
-          <h3 className="text-lg font-semibold tracking-tight">Brak pozycji gotowych do przypomnienia</h3>
-          <p className="text-muted-foreground mx-auto max-w-md text-sm">
-            Inne dokumenty mogą nadal wymagać sprawdzenia salda i korekt.
-          </p>
-          {canManageSettings ? (
-            <Link href="/settings/reminders" className={buttonVariants({ variant: 'outline' })}>
-              <RiSettings3Line aria-hidden />
-              Ustawienia przypomnień
-            </Link>
-          ) : null}
         </Card>
       ) : (
-        <Card className="shadow-none">
-          <div className="w-full">
-            <div className="border-b">
+        <Card className="flex-1 pt-0 shadow-none">
+          <InvoicesTabs active="po-terminie" />
+          <div className="flex w-full flex-1 flex-col pt-2">
+            <div className="flex-1 border-b">
               <div className="flex gap-6 p-4 pt-0 max-lg:flex-col lg:items-center lg:justify-between">
                 <div className="flex items-center gap-4">
                   <PageSizeSelect table={table} />

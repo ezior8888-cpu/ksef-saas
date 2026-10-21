@@ -196,11 +196,14 @@ function listedLabels(tree: ReactNode): string[] {
   return found[0]!.map((r) => String(r.label)).sort();
 }
 
-async function listFor(platnosc?: string): Promise<string[]> {
+async function listFor(platnosc?: string, naStronie?: string): Promise<string[]> {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
   try {
-    const tree = await InvoicesPage({ searchParams: Promise.resolve(platnosc ? { platnosc } : {}) });
+    const searchParams: Record<string, string> = {};
+    if (platnosc) searchParams.platnosc = platnosc;
+    if (naStronie) searchParams.na_stronie = naStronie;
+    const tree = await InvoicesPage({ searchParams: Promise.resolve(searchParams) });
     return listedLabels(tree);
   } finally {
     vi.useRealTimers();
@@ -255,7 +258,9 @@ describe('C1: filtr płatności na stronie /invoices obejmuje tylko należności
 
   it('bez filtra płatności lista pokazuje wszystkie faktury sprzedaży (jak dotąd)', async () => {
     state.rows = overdueMix();
-    expect(await listFor()).toHaveLength(12); // wszystko poza zakupem
+    // Lista 1:1 z Finory (21.10.2026): domyślna strona ma 10 pozycji (było 50), a ten zbiór to 12 faktur
+    // sprzedaży — „Pokaż 25” mieści je wszystkie, więc nadal sprawdzamy brak zawężenia filtrem płatności.
+    expect(await listFor(undefined, '25')).toHaveLength(12); // wszystko poza zakupem
   });
 });
 

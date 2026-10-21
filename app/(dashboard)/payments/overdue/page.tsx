@@ -59,6 +59,9 @@ export default async function OverduePage() {
   const seenViewIds = new Set<string>();
   let overdueError: string | null = null;
   let totalCandidates: number | null = null;
+  // Czy pętla przejrzała cały widok. Gdy stanie na limicie wcześniej, dalsze
+  // pozycje są niesprawdzone — nie wiemy, czy któraś by się zmieściła.
+  let scannedAll = false;
   for (let offset = 0; overdueRows.length < MAX_VISIBLE_INVOICES; offset += OVERDUE_PAGE_SIZE) {
     const page = await supabase
       .from('invoices_overdue')
@@ -74,7 +77,7 @@ export default async function OverduePage() {
       break;
     }
     totalCandidates = page.count;
-    if (page.data.length === 0) break;
+    if (page.data.length === 0) { scannedAll = true; break; }
 
     const ids = page.data.map((row) => row.id).filter((id): id is string => id !== null);
     if (ids.length !== page.data.length || ids.some((id) => seenViewIds.has(id)) ||
@@ -172,12 +175,19 @@ export default async function OverduePage() {
       break;
     }
     overdueRows.push(...safeRows);
-    if (offset + page.data.length >= page.count) break;
+    if (offset + page.data.length >= page.count) { scannedAll = true; break; }
   }
 
   if (overdueError) {
     return <OverdueDashboardError message={overdueError} />;
   }
+
+  // Poprawka Bartosza 21.10.2026: limit 100 pokazujemy tylko wtedy, gdy lista
+  // mogła się w nim nie zmieścić — bezpiecznych pozycji jest więcej (ucięte
+  // na pewno) albo pętla stanęła na setnej przed końcem widoku (dalszych nie
+  // sprawdziliśmy). Dokładnie 100 po przejrzeniu całości to pełna lista.
+  const limitReached = overdueRows.length > MAX_VISIBLE_INVOICES ||
+    (overdueRows.length === MAX_VISIBLE_INVOICES && !scannedAll);
 
   const baseInvoices = overdueRows.slice(0, MAX_VISIBLE_INVOICES).flatMap((row) => {
     const inv = toOverdueInvoice(row);
@@ -267,6 +277,7 @@ export default async function OverduePage() {
         pausedCount: overdueInvoices.filter((invoice) => invoice.reminders_paused).length,
         sentThisMonth,
       }}
+      limitReached={limitReached}
       canManageSettings={isOwner}
     />
   );

@@ -22,6 +22,7 @@ import {
   PageSizeSelect,
   TableSearch,
 } from '@/components/lists/finora-data-table';
+import { InvoicesTabs } from '@/components/invoices/invoices-tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -167,6 +168,9 @@ export interface RecurringInvoicesViewProps {
  * („Pokaż N”, „+ Nowa faktura cykliczna”, wyszukiwarka, filtr statusu),
  * tabelą od `lg` (niżej karty — plan §7.2) i stopką z paginacją.
  * Dane z serwera (`items`); wstrzymanie, usunięcie i zapis odświeżają stronę.
+ *
+ * Poprawka 21.10.2026: zakładka „Cykliczne” ekranu Faktur — pierwszy rząd karty
+ * to zakładki, a karta (także pusta) sięga do stopki pustym arkuszem.
  */
 export function RecurringInvoicesView({
   items,
@@ -254,7 +258,7 @@ export function RecurringInvoicesView({
   if (pagination.pageIndex > lastPageIndex) setPagination((p) => ({ ...p, pageIndex: lastPageIndex }));
 
   return (
-    <div className='space-y-6'>
+    <div className='flex flex-1 flex-col gap-6'>
       {templateNotice ? (
         <Alert>
           <AlertTitle>Nie wybraliśmy faktury-wzoru</AlertTitle>
@@ -264,7 +268,8 @@ export function RecurringInvoicesView({
 
       {items.length === 0 ? (
         // Pusty stan w oprawie `Empty` Finory (jak „Invoice Not Found”), z przyciskiem jak w pasku narzędzi.
-        <Card className='shadow-none'>
+        <Card className='flex-1 pt-0 shadow-none'>
+          <InvoicesTabs active='cykliczne' />
           <Empty className='py-12'>
             <EmptyHeader>
               <EmptyMedia variant='icon'>
@@ -282,9 +287,10 @@ export function RecurringInvoicesView({
           </Empty>
         </Card>
       ) : (
-        <Card className='shadow-none'>
-          <div className='w-full'>
-            <div className='border-b'>
+        <Card className='flex-1 pt-0 shadow-none'>
+          <InvoicesTabs active='cykliczne' />
+          <div className='flex w-full flex-1 flex-col pt-2'>
+            <div className='flex-1 border-b'>
               <div className='flex gap-6 p-4 pt-0 max-lg:flex-col lg:items-center lg:justify-between'>
                 <div className='flex flex-wrap items-center gap-4'>
                   <PageSizeSelect table={table} />
