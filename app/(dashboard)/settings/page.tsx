@@ -27,7 +27,10 @@ export const dynamic = 'force-dynamic';
  * z VAT, metoda kasowa, data rozpoczęcia działalności (#data-rozpoczecia —
  * link z Pulpitu). Z General wylatują język, waluta, strefa czasowa i rok
  * obrotowy (zawsze PL / PLN / Europe/Warsaw / rok kalendarzowy), a Profile
- * Finory nie ma odpowiednika. Usunięcie firmy jest tylko w „Konto i dane”.
+ * Finory nie ma odpowiednika. Usunięcie firmy jest tylko w „Konto i dane
+ * (RODO)” (`/settings/account`, zakładka dla każdej roli — eksport i usunięcie
+ * konta to prawo każdego użytkownika); firmę usuwa się przez pomoc techniczną
+ * (pakiet prawny #274), więc „Niebezpiecznej strefy” tu nie ma.
  */
 export default async function SettingsPage() {
   const { supabase, tenantId, role } = await getPageContext();

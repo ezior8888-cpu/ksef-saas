@@ -9,6 +9,7 @@ import { Field, FieldContent, FieldLabel } from '@/components/ui/field';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 /**
  * UWAGA (plan Finora P14, E10a): od E10a komponent NIE stoi na żadnym
@@ -29,13 +30,11 @@ export function DeleteAccountSection({ tenantNip }: { tenantNip: string }) {
     if (!isConfirmValid) return;
 
     startDeleting(async () => {
-      const formData = new FormData();
-      formData.set('nipConfirm', confirmInput);
-      const result = await requestAccountDeletionAction(formData);
-      if ('success' in result && result.success === false) {
-        toast.error(result.error);
-      }
-      // Sukces → redirect obsługuje akcja serwerowa (`/login?success=account_deleted`).
+      // Od 15.10.2026 akcja zawsze odmawia i kieruje do pomocy technicznej
+      // (usuwanie firmy wstrzymane, NIP niczego nie odblokowuje) — komunikat
+      // ma trzy zdania, stąd 20 s.
+      const result = await requestAccountDeletionAction();
+      toast.error(result.error, { duration: 20_000 });
     });
   };
 
@@ -43,20 +42,37 @@ export function DeleteAccountSection({ tenantNip }: { tenantNip: string }) {
     return (
       <Button variant="destructive" onClick={() => setShowConfirm(true)}>
         <RiDeleteBinLine aria-hidden />
-        Usuń konto
+        Usuń firmę
       </Button>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Ten przycisk dotyczy FIRMY (organizacji), nie konta użytkownika —
+          konto usuwa sekcja RODO w Ustawienia → Konto i dane (RODO)
+          (lib/gdpr/deletion.ts, 14 dni). Usunięcie firmy idzie przez
+          pomoc techniczną: flag tenants.deleted_at / is_active nic nie
+          sprawdza, więc aplikacja nie umie firmy wyłączyć ani usunąć
+          (ścieżka operatora: docs/support/escalation-matrix.md).
+          Do 15.10.2026 opis obiecywał „od razu wyłączona” i usunięcie
+          danych w 30 + 30 dni. Zgodne z regulaminem § 14 i umową
+          powierzenia § 9. */}
       <Alert variant="destructive">
         <RiErrorWarningLine aria-hidden />
-        <AlertTitle>Ta operacja jest nieodwracalna po 14 dniach.</AlertTitle>
+        <AlertTitle>
+          Usunięcie firmy i wszystkich jej danych zlecasz przez pomoc
+          techniczną.
+        </AlertTitle>
         <AlertDescription>
-          Wszystkie faktury, kontrahenci, certyfikaty i dane konta zostaną
-          trwale usunięte. Faktury zachowane zgodnie z polityką retencji
-          10 lat (RODO).
+          Napisz na {SUPPORT_EMAIL} z adresu właściciela i podaj NIP firmy.
+          Do czasu wykonania zlecenia firma i abonament działają bez zmian —
+          abonament anulujesz w Ustawienia → Abonament.{' '}
+          <strong>Najpierw pobierz kopię danych</strong> (Księgowość →
+          Eksport).
+          Faktury wysłane do KSeF przechowuje też Ministerstwo Finansów.
+          Swoje konto użytkownika usuniesz osobno w Ustawienia → Konto
+          i dane (RODO).
         </AlertDescription>
       </Alert>
 
@@ -91,12 +107,12 @@ export function DeleteAccountSection({ tenantNip }: { tenantNip: string }) {
           {isDeleting ? (
             <>
               <RiLoader4Line className="animate-spin" aria-hidden />
-              Usuwam...
+              Przetwarzanie…
             </>
           ) : (
             <>
               <RiDeleteBinLine aria-hidden />
-              Potwierdź usunięcie konta
+              Potwierdź
             </>
           )}
         </Button>

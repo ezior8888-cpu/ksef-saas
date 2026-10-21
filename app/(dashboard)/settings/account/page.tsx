@@ -3,6 +3,7 @@ import { FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Separator } from '@/components/ui/separator';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { getActiveGdprRequest } from '@/lib/gdpr/deletion';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import { GdprSection } from './_components/gdpr-section';
 
 export const dynamic = 'force-dynamic';
@@ -45,12 +46,19 @@ export default async function AccountSettingsPage() {
 
       <div>
         <FieldLabel className="text-destructive">Usuń organizację (firmę)</FieldLabel>
+        {/* Opis zgodny z regulaminem (§ 14 ust. 2 i 6) i umową powierzenia
+            (§ 9). Usunięcie firmy idzie przez pomoc techniczną: aplikacja
+            nie umie firmy wyłączyć ani usunąć (flag tenants.deleted_at /
+            is_active nic nie sprawdza). Do 15.10.2026 opis obiecywał „od
+            razu wyłączona” i usunięcie danych w 30 + 30 dni. */}
         <FieldDescription>
-          Operacja jest <strong>nieodwracalna po 30 dniach</strong> (zgodnie z
-          harmonogramem retencji): firma zostanie oznaczona do usunięcia, a Ty
-          zostaniesz wylogowany. W tym czasie możesz skontaktować się z
-          pomocą, jeśli to pomyłka. To NIE jest usunięcie Twojego konta — żeby
-          to zrobić użyj sekcji &laquo;Twoje dane (RODO)&raquo; powyżej.
+          Usunięcie firmy rozwiązuje umowę. Zlecasz je przez pomoc techniczną:
+          napisz na {SUPPORT_EMAIL} z adresu właściciela i podaj NIP firmy. Do
+          czasu wykonania zlecenia firma i abonament działają bez zmian.{' '}
+          <strong>Najpierw pobierz kopię danych</strong> (Księgowość →
+          Eksport). Faktury wysłane do KSeF przechowuje też Ministerstwo
+          Finansów. To nie jest usunięcie Twojego konta — do tego służy sekcja
+          &laquo;Twoje dane (RODO)&raquo; powyżej.
         </FieldDescription>
       </div>
       {!isOwner ? (

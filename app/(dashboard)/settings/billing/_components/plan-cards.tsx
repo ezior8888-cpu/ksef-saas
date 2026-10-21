@@ -1,13 +1,17 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { RiArrowRightLine, RiCheckLine, RiLoader4Line, RiSparklingLine } from '@remixicon/react';
 import { toast } from 'sonner';
 
+import { LegalInline } from '@/components/legal/legal-document';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { PRICE_GROSS, PRICE_NET, TRIAL_DAYS } from '@/lib/billing/pricing';
+import { CHECKOUT_STATEMENT } from '@/lib/legal/versions';
 
 import { startCheckoutAction } from '../actions';
 
@@ -18,13 +22,16 @@ const FEATURES = [
   'Wkurzacz Dłużników',
   'Magiczny import z konkurencji',
   'Co-Pilot Księgowego',
-  'PWA mobilna z OCR',
+  // Dawniej „PWA mobilna z OCR” — panel na telefonie jest wyłączony (/mobile).
+  'Odczyt paragonów (AI) z limitem dziennym i miesięcznym',
   'Wsparcie po polsku',
 ];
 
 interface PlanCardProps {
   isPending: boolean;
   onSelect: () => void;
+  statementAccepted: boolean;
+  onStatementChange: (accepted: boolean) => void;
 }
 
 /**
@@ -33,7 +40,7 @@ interface PlanCardProps {
  *
  * Wygląd: `Card` Finory (nagłówek, treść, stopka), odznaka jak jej `Badge`.
  */
-function PlanCard({ isPending, onSelect }: PlanCardProps) {
+function PlanCard({ isPending, onSelect, statementAccepted, onStatementChange }: PlanCardProps) {
   return (
     <Card>
       <CardHeader>
@@ -68,15 +75,42 @@ function PlanCard({ isPending, onSelect }: PlanCardProps) {
         </ul>
       </CardContent>
 
-      <CardFooter className="flex flex-col items-stretch gap-2">
-        <Button size="lg" className="w-full" disabled={isPending} onClick={onSelect}>
-          {isPending ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
-          Zacznij {TRIAL_DAYS} dni za darmo
-          <RiArrowRightLine aria-hidden />
-        </Button>
-        <p className="text-muted-foreground text-center text-xs">
-          Kartę podajesz teraz, pierwsza płatność po {TRIAL_DAYS} dniach.
-        </p>
+      <CardFooter className="flex flex-col items-stretch gap-4">
+        {/* Oświadczenie przed płatnością — brzmienie z lib/legal/versions.ts,
+            serwer odrzuca zakup bez niego (startCheckoutAction). */}
+        <div className="flex items-start gap-2.5">
+          <Checkbox
+            id="checkout-statement"
+            checked={statementAccepted}
+            onCheckedChange={(checked) => onStatementChange(checked)}
+            className="mt-0.5"
+          />
+          <Label
+            htmlFor="checkout-statement"
+            className="text-muted-foreground block leading-relaxed select-text"
+          >
+            <LegalInline
+              text={CHECKOUT_STATEMENT.text}
+              linkClassName="text-foreground underline underline-offset-4"
+            />
+          </Label>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={isPending || !statementAccepted}
+            onClick={onSelect}
+          >
+            {isPending ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
+            Zacznij {TRIAL_DAYS} dni za darmo
+            <RiArrowRightLine aria-hidden />
+          </Button>
+          <p className="text-muted-foreground text-center text-xs">
+            Kartę podajesz teraz, pierwsza płatność po {TRIAL_DAYS} dniach.
+          </p>
+        </div>
       </CardFooter>
     </Card>
   );
@@ -84,11 +118,12 @@ function PlanCard({ isPending, onSelect }: PlanCardProps) {
 
 export function PlanCards() {
   const [isPending, startTransition] = useTransition();
+  const [statementAccepted, setStatementAccepted] = useState(false);
 
   const handleSelect = () => {
     startTransition(async () => {
       try {
-        await startCheckoutAction('monthly');
+        await startCheckoutAction('monthly', statementAccepted);
         // `startCheckoutAction` rzuca NEXT_REDIRECT — kod tu nie dotrze przy
         // sukcesie. Toast wyląduje gdy redirect wróci z `?error=...`.
       } catch (e) {
@@ -103,7 +138,12 @@ export function PlanCards() {
 
   return (
     <div className="max-w-md">
-      <PlanCard isPending={isPending} onSelect={handleSelect} />
+      <PlanCard
+        isPending={isPending}
+        onSelect={handleSelect}
+        statementAccepted={statementAccepted}
+        onStatementChange={setStatementAccepted}
+      />
     </div>
   );
 }

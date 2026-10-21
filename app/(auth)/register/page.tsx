@@ -2,9 +2,10 @@
 // `register-form.tsx` szablonu. Układ i klasy 1:1; logika nasza i bez zmian:
 // `signupWithEmail`, Google przez `loginWithGoogle` (tylko przy włączonym
 // Google w GoTrue), Turnstile, wyłącznik `/wylacz rejestracja` (AUD-63).
-// Pole zgody Finory („I agree to all Terms…”) zastępuje dzisiejsza informacja
-// o regulaminie: akcja nie zapisuje zgody z pola wyboru, a nowe wymaganie
-// w formularzu byłoby nową funkcją (plan: nie wymyślaj funkcji).
+// W miejscu pola zgody Finory („I agree to all Terms…”) stoją dwa pola
+// z pakietu prawnego (#264): akceptacja Regulaminu i Umowy powierzenia
+// (wymagana, akcja zapisuje ją razem z wersją brzmienia) i dobrowolna zgoda
+// na e-maile z poradami i ofertami.
 
 // Next Imports
 import Link from 'next/link'
@@ -16,6 +17,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui
 import { GoogleIcon } from '@/components/auth/finora/google-icon'
 import { PasswordInput } from '@/components/auth/finora/password-input'
 import { TurnstileWidget } from '@/components/auth/turnstile-widget'
+import { LegalInline } from '@/components/legal/legal-document'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
@@ -23,6 +25,7 @@ import { Separator } from '@/components/ui/separator'
 // Lib Imports
 import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers'
 import { isSignupClosed, SIGNUPS_CLOSED_MESSAGE } from '@/lib/feature-flags/signups'
+import { MARKETING_STATEMENT, TERMS_STATEMENT } from '@/lib/legal/versions'
 
 import { loginWithGoogle } from '../login/actions'
 import { signupWithEmail } from './actions'
@@ -40,11 +43,16 @@ const ERROR_MESSAGES: Record<string, string> = {
   'email rate limit exceeded':
     'Przekroczono limit wysyłki maili. Poczekaj kilka minut i spróbuj ponownie.',
   signups_disabled: SIGNUPS_CLOSED_MESSAGE,
+  terms_required:
+    'Aby założyć konto, zaakceptuj Regulamin i Umowę powierzenia (pierwsze pole wyboru).',
 }
 
 const PANEL_TITLE = 'Załóż konto i wystaw pierwszą fakturę'
 const PANEL_TEXT =
   'Po rejestracji podasz NIP, a dane firmy pobierzemy z GUS. Certyfikat KSeF dodasz w ustawieniach, kiedy będziesz gotowy.'
+
+/** Odnośniki w treści oświadczeń — kolor tekstu jak odsyłacze Finory, z podkreśleniem, bo stoją w zdaniu. */
+const LEGAL_LINK_CLASS = 'text-foreground underline underline-offset-2 hover:text-primary'
 
 function LoginLink() {
   return (
@@ -52,6 +60,31 @@ function LoginLink() {
       Masz już konto?{' '}
       <Link href='/login' className='text-foreground hover:underline'>
         Zaloguj się
+      </Link>
+    </p>
+  )
+}
+
+/**
+ * Odnośniki do dokumentów pod formularzem (do E10b stopka dawnego układu
+ * stron logowania, pakiet prawny #264). Akceptację zbiera pole wyboru
+ * w formularzu i bramka /onboarding/zgody — tu tylko odnośniki. Polityki
+ * prywatności się nie „akceptuje”: to informacja (art. 13 RODO).
+ */
+function LegalDocumentsLinks() {
+  return (
+    <p className='text-sm text-muted-foreground'>
+      Dokumenty:{' '}
+      <Link href='/legal/regulamin' className='underline underline-offset-2 hover:text-foreground'>
+        Regulamin
+      </Link>
+      {' · '}
+      <Link href='/legal/umowa-powierzenia' className='underline underline-offset-2 hover:text-foreground'>
+        Umowa powierzenia
+      </Link>
+      {' · '}
+      <Link href='/legal/polityka-prywatnosci' className='underline underline-offset-2 hover:text-foreground'>
+        Polityka prywatności
       </Link>
     </p>
   )
@@ -80,6 +113,7 @@ export default async function RegisterPage({
         </div>
         <AuthMessage tone='error'>{SIGNUPS_CLOSED_MESSAGE}</AuthMessage>
         <LoginLink />
+        <LegalDocumentsLinks />
       </AuthSplitLayout>
     )
   }
@@ -102,6 +136,17 @@ export default async function RegisterPage({
               <GoogleIcon />
               Zarejestruj przez Google
             </Button>
+            {/* Konto z Google powstaje bez naszego formularza — wyraźną
+                akceptację zbiera bramka /onboarding/zgody
+                (lib/legal/acceptance.ts), gdy dokumenty przestaną być wersją
+                roboczą. */}
+            <p className='mt-2 text-center text-xs/relaxed text-muted-foreground'>
+              Rejestrując się przez Google, akceptujesz{' '}
+              <LegalInline
+                text='[Regulamin](/legal/regulamin) i [Umowę powierzenia](/legal/umowa-powierzenia) oraz potwierdzasz zapoznanie się z [Polityką prywatności](/legal/polityka-prywatnosci).'
+                linkClassName={LEGAL_LINK_CLASS}
+              />
+            </p>
           </form>
 
           <div className='flex items-center gap-4'>
@@ -160,11 +205,42 @@ export default async function RegisterPage({
                 Min. 12 znaków, mała + duża litera, cyfra, znak specjalny. Sprawdzamy w bazie wycieków.
               </FieldDescription>
             </Field>
-            {/* Regulamin — w miejscu pola zgody Finory */}
-            <FieldDescription>
-              Rejestrując się akceptujesz <Link href='/legal/regulamin'>regulamin</Link> i{' '}
-              <Link href='/legal/polityka-prywatnosci'>politykę prywatności</Link>.
-            </FieldDescription>
+            {/* Zgody — w miejscu pola zgody Finory. Pierwsze pole obowiązkowe
+                (sprawdza je też serwer), drugie dobrowolne i domyślnie
+                odznaczone (art. 7 RODO, art. 398 PKE). Brzmienie
+                z lib/legal/versions.ts — to samo trafia do zapisu.
+                Natywne pole wyboru zamiast `Checkbox` z components/ui:
+                `required` i wartość `on` działają w przeglądarce bez
+                skryptów, a akcja czyta `terms`/`marketing` z FormData. */}
+            <Field className='gap-2'>
+              <div className='flex items-start gap-2'>
+                <input
+                  type='checkbox'
+                  id='terms'
+                  name='terms'
+                  value='on'
+                  required
+                  className='mt-0.5 size-4 shrink-0 accent-primary'
+                />
+                <FieldLabel htmlFor='terms' className='block w-auto leading-relaxed text-muted-foreground'>
+                  <LegalInline text={TERMS_STATEMENT.text} linkClassName={LEGAL_LINK_CLASS} /> (wymagane)
+                </FieldLabel>
+              </div>
+            </Field>
+            <Field className='gap-2'>
+              <div className='flex items-start gap-2'>
+                <input
+                  type='checkbox'
+                  id='marketing'
+                  name='marketing'
+                  value='on'
+                  className='mt-0.5 size-4 shrink-0 accent-primary'
+                />
+                <FieldLabel htmlFor='marketing' className='block w-auto leading-relaxed text-muted-foreground'>
+                  {MARKETING_STATEMENT.text} (dobrowolne)
+                </FieldLabel>
+              </div>
+            </Field>
             <TurnstileWidget action='register' theme='light' />
             <Field>
               <Button className='w-full' type='submit'>
@@ -175,6 +251,7 @@ export default async function RegisterPage({
         </form>
 
         <LoginLink />
+        <LegalDocumentsLinks />
       </div>
     </AuthSplitLayout>
   )

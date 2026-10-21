@@ -40,7 +40,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 const SUCCESS_MESSAGES: Record<string, string> = {
   check_email: 'Konto utworzone! Sprawdź swoją skrzynkę pocztową — wysłaliśmy link aktywacyjny.',
-  account_deleted: 'Zapisaliśmy żądanie usunięcia firmy. Zostałeś wylogowany — konto zostanie trwale usunięte po upływie okresu retencji (30 dni), o ile nie cofniesz decyzji z pomocą techniczną.',
+  // Bez `account_deleted` od 15.10.2026: usuwanie firmy z aplikacji jest
+  // wstrzymane (components/settings/account-actions.ts), a komunikat obiecywał
+  // trwałe usunięcie po 30 dniach, którego nic nie wykonywało.
   session_expired: 'Wylogowaliśmy Cię po godzinie bezczynności. Zaloguj się ponownie, aby kontynuować.',
 }
 
@@ -140,10 +142,24 @@ export default async function LoginPage({
             Utwórz konto
           </Link>
         </p>
-        {/* Pierwsze logowanie Google zakłada konto, więc zgoda musi być widoczna i tu. */}
+        {/* Odnośniki do dokumentów (pakiet prawny #264; do E10b stopka dawnego
+            układu stron logowania). Akceptację zbiera pole wyboru w formularzu
+            rejestracji, a konto założone pierwszym logowaniem Google — bramka
+            /onboarding/zgody (lib/legal/acceptance.ts). Tu tylko odnośniki.
+            Polityki prywatności się nie „akceptuje”: to informacja (art. 13 RODO). */}
         <p className='text-center text-sm text-muted-foreground'>
-          Zakładając konto akceptujesz <Link href='/legal/regulamin' className='underline'>regulamin</Link> i{' '}
-          <Link href='/legal/polityka-prywatnosci' className='underline'>politykę prywatności</Link>.
+          Dokumenty:{' '}
+          <Link href='/legal/regulamin' className='underline underline-offset-2 hover:text-foreground'>
+            Regulamin
+          </Link>
+          {' · '}
+          <Link href='/legal/umowa-powierzenia' className='underline underline-offset-2 hover:text-foreground'>
+            Umowa powierzenia
+          </Link>
+          {' · '}
+          <Link href='/legal/polityka-prywatnosci' className='underline underline-offset-2 hover:text-foreground'>
+            Polityka prywatności
+          </Link>
         </p>
       </div>
     </AuthSplitLayout>

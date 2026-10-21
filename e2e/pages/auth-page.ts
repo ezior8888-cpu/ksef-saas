@@ -43,6 +43,7 @@ export class AuthPage {
   async submitRegister(email: string, password: string): Promise<void> {
     await this.emailInput.fill(email);
     await this.passwordInput.fill(password);
+    await this.page.locator('#terms').check();
     // Dokładna nazwa: przy włączonym Google obok stoi „Zarejestruj przez
     // Google”, które dawny wzorzec `/(zarejestruj|utwórz konto)/i` też łapał.
     await this.page.getByRole('button', { name: 'Utwórz konto', exact: true }).click();
