@@ -1,4 +1,5 @@
 import type { KpirExpenseRow, KpirInvoiceRow } from '@/lib/reports/kpir-totals';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
  * Dane przykładowe KPiR (poprawka Bartosza 21.10.2026): firma przed weryfikacją
@@ -7,7 +8,7 @@ import type { KpirExpenseRow, KpirInvoiceRow } from '@/lib/reports/kpir-totals';
  * więc przełączanie miesięcy działa. Firmy i NIP-y są fikcyjne.
  */
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
+const r2 = roundToCents;
 const pad = (n: number) => String(n).padStart(2, '0');
 
 function dzien(year: number, month: number, day: number): string {

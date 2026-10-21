@@ -9,12 +9,13 @@ import { currentMonthKey, shiftMonthKey } from '@/lib/analytics-finance/months';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { fakePostgrest, type Row } from '@/lib/demo/fake-postgrest';
 import type { KsefEnvironment } from '@/types/ksef';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /** Firma-atrapa: wiersze przykładowe nie należą do żadnej prawdziwej firmy. */
 export const DEMO_TENANT = 'przyklad-analizy';
 const T = DEMO_TENANT;
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
+const r2 = roundToCents;
 
 /** Dni z miesiąca `k` wstecz; w bieżącym tylko te, które już minęły. */
 function dates(now: Date, k: number, day: number): string | null {
