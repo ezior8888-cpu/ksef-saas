@@ -314,8 +314,7 @@ export function InvoiceForm({
   const podpowiedzMpp = !splitPayment && suggestsSplitPayment(totals.grossTotal, buyerKind !== 'pl');
 
   // Podtytuł nagłówka na telefonie („wrzesień 2026 · KSeF”). Liczony przy
-  // renderze, a nie wpisany na stałe — ten sam wzorzec co w pasku panelu
-  // (`lib/dashboard-page-title.ts`).
+  // renderze, a nie wpisany na stałe.
   const miesiacRok = new Date().toLocaleDateString('pl-PL', {
     month: 'long',
     year: 'numeric',

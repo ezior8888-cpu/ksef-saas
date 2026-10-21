@@ -9,10 +9,8 @@ const LINK_CLASS =
  * Stopka panelu (plan Finora P0, E2) — wygląd `Footer.tsx` z szablonu, treść
  * nasza: „© FaktWay · Regulamin · Polityka prywatności · Pomoc”.
  *
- * Element `<footer>`, nie `<div>`, i to celowo: stoi jako drugie dziecko
- * `.ff-shell-scroll`, a blokada wysokości ekranu agenta celuje w
- * `.ff-shell-scroll > div`. Na `/dashboard` stopkę chowa
- * `html.ff-route-dashboard .ff-shell-footer` w `app/globals.css`.
+ * Stoi jako drugie dziecko `.ff-shell-scroll` (kolumna flex, kontener treści
+ * rośnie), więc zawsze jest na samym dole strony — także na krótkiej.
  */
 export function Footer() {
   const year = new Date().getFullYear();

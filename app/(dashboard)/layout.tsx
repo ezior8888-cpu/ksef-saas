@@ -1,14 +1,11 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { assertDashboardShellAccess } from '@/lib/dashboard-shell-data';
-import DashboardOrgHeader, {
-  OrgSwitcherHeaderSkeleton,
-} from '@/app/(dashboard)/_components/dashboard-org-header';
-import { DashboardPageHeading } from '@/app/(dashboard)/_components/dashboard-page-heading';
+import DashboardProfileMenu from '@/app/(dashboard)/_components/dashboard-profile-menu';
 import { DashboardRouteFlags } from '@/components/dashboard/dashboard-route-flags';
-import { DashboardVerificationBannerSlot } from '@/app/(dashboard)/_components/dashboard-verification-banner';
 import { KsefHealthBanner } from '@/app/(dashboard)/_components/ksef-health-banner';
 import { AppHeader } from '@/components/dashboard/app-header';
+import { ProfileMenu } from '@/components/dashboard/profile-menu';
 import { AppSidebar } from '@/components/dashboard/app-sidebar';
 import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { Footer } from '@/components/dashboard/footer';
@@ -86,11 +83,12 @@ export default async function DashboardLayout({
   // menu, okna i podpowiedzi Base UI dziedziczyły tokeny, a `transform`
   // animacji trasy nie przypinał ich do pudełka strony.
   //
-  // ŁAŃCUCH WYSOKOŚCI EKRANU AGENTA — nie wstawiaj opakowań:
-  // `.ff-shell-scroll` > JEDEN `<div>` (kontener max-w) > baner, baner KSeF,
-  // `{children}` jako OSTATNIE dziecko. Blokada z `globals.css`
-  // (`html.ff-route-dashboard .ff-shell-scroll > div`) liczy na tę budowę,
-  // dlatego stopka obok kontenera jest `<footer>`, nie `<div>`.
+  // STOPKA NA DOLE (poprawka Bartosza 21.10.2026): `.ff-shell-scroll` jest
+  // kolumną flex, kontener treści rośnie (`grow`, bez `min-h-0` — nie może
+  // skurczyć się poniżej treści i wjechać na stopkę), więc „Regulamin ·
+  // Polityka · Pomoc” stoją przy dolnej krawędzi także na krótkiej stronie.
+  // `ff-shell-content` niesie łańcuch „pełnego arkusza” list Faktur
+  // (`globals.css`, `.ff-page-fill`).
   return (
     <TooltipProvider>
       <SidebarProvider
@@ -102,24 +100,24 @@ export default async function DashboardLayout({
 
           <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
             <AppHeader
-              orgSwitcher={
-                <Suspense fallback={<OrgSwitcherHeaderSkeleton />}>
-                  <DashboardOrgHeader />
-                </Suspense>
+              profile={
+                user?.email ? (
+                  // Do czasu wczytania firm menu działa bez nich (e‑mail,
+                  // Ustawienia, Analiza, Wyloguj) — pasek nie czeka na bazę.
+                  <Suspense
+                    fallback={
+                      <ProfileMenu email={user.email} name={userName} company={null} memberships={[]} />
+                    }
+                  >
+                    <DashboardProfileMenu email={user.email} name={userName} />
+                  </Suspense>
+                ) : null
               }
-              pageHeading={<DashboardPageHeading />}
-              user={user?.email ? { email: user.email, name: userName } : null}
             />
 
-            <div className="ff-shell-scroll min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto min-h-0 w-full max-w-[1500px] px-4 pb-12 sm:px-[var(--ff-container-padding)]">
-                {/* Na dashboardzie ten baner stoi w prawej szynie — szeroki
-                    wariant chowa CSS. Na pozostałych stronach zostaje. */}
-                <div className="ff-shell-banner">
-                  <Suspense fallback={null}>
-                    <DashboardVerificationBannerSlot />
-                  </Suspense>
-                </div>
+            <div className="ff-shell-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
+              {/* Kontener treści 1:1 z `<main>` Finory (układ „compact”). */}
+              <div className="ff-shell-content mx-auto w-full max-w-360 grow px-4 py-6 sm:px-6">
                 <Suspense fallback={null}>
                   <KsefHealthBanner />
                 </Suspense>

@@ -1,46 +1,58 @@
-import { RiAlarmWarningLine, RiHourglassLine, RiMoneyDollarCircleLine } from '@remixicon/react';
+import { RiBox3Line, RiMoreLine, RiUser3Line } from '@remixicon/react';
 
 import { dailyTotals } from '@/lib/analytics-finance/breakdown';
-import { clientMovers, clientShares, saleBuyerName } from '@/lib/analytics-finance/clients';
+import { clientMovers, clientShares } from '@/lib/analytics-finance/clients';
 import { costOfMonth } from '@/lib/analytics-finance/costs';
 import {
   currentMonthKey,
   HEATMAP_DAYS,
-  isoDatePl,
   monthKeysEnding,
   shiftMonthKey,
   TREND_MONTHS,
 } from '@/lib/analytics-finance/months';
 import { productBreakdown } from '@/lib/analytics-finance/products';
 import { RECURRING_MONTHS, recurringClients } from '@/lib/analytics-finance/recurring';
-import { recentSales, salesMonthStats, salesOfMonth, salesTrend, type SaleInvoice } from '@/lib/analytics-finance/sales';
+import { salesMonthStats, salesOfMonth, salesTrend, type SaleInvoice } from '@/lib/analytics-finance/sales';
 import { PRODUCTS_NOTE } from '@/lib/dashboard/rankings';
 import { RECEIVABLES_NOTE } from '@/lib/dashboard/receivables';
-import { formatPlMoney } from '@/lib/format/pl';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
-import { countLabel, plural } from '@/lib/i18n/plural';
+import { plural } from '@/lib/i18n/plural';
 
+import {
+  incomeExpenseNet,
+  isAllZero,
+  isOtherSlice,
+  RECURRING_LIST_LIMIT,
+  receivablesRows,
+  recentSaleItems,
+  salesAvgDaily,
+  toCategorySlices,
+  toRankedItems,
+  toSubscriptionItems,
+  toTrendData,
+} from './adapters';
 import { AnalizySlot, loadAnalizyCard, type AnalizyCardProps } from './card-slot';
-import CategoryBreakdownChart from './finora/category-breakdown-chart';
-import CategoryRankedList from './finora/category-ranked-list';
+import CategoryBreakdownChart from './finora-1do1/category-breakdown-chart';
+import CategoryRankedList from './finora-1do1/category-ranked-list';
+import IncomeExpenseSummary from './finora-1do1/income-expense-summary';
+import MonthlyStatsCards from './finora-1do1/monthly-stats-cards';
+import RecentExpensesFeed from './finora-1do1/recent-expenses-feed';
+import SpendHeatmap from './finora-1do1/spend-heatmap';
+import SpendTrendChart from './finora-1do1/spend-trend-chart';
+import SpendingStreaksCard from './finora-1do1/spending-streaks-card';
+import SubscriptionsCard from './finora-1do1/subscriptions-card';
 import AssetAllocationCard from './finora/chart-asset-allocation';
 import { ANALIZY_EMPTY, type EmptyStateProps } from './finora/empty';
-import IncomeExpenseSummary from './finora/income-expense-summary';
-import { SalesStatsCards } from './finora/monthly-stats-cards';
 import MoverListCard from './finora/mover-list-card';
-import RecentExpensesFeed from './finora/recent-expenses-feed';
-import SpendHeatmap from './finora/spend-heatmap';
-import SpendTrendChart from './finora/spend-trend-chart';
-import SpendingStreaksCard from './finora/spending-streaks-card';
-import SubscriptionsCard from './finora/subscriptions-card';
 import { loadCostsWindow, loadProductLines, loadReceivables, loadSalesWindow } from './loaders';
 
 /**
- * Analiza sprzedaży `/analizy/sprzedaz` (plan Finora P11 ← Monthly
- * Analytics drugi raz, ten sam układ co P10) + rząd 3 × 1/3 pod siatką:
- * „Udział klientów w przychodach” (Asset Allocation z Net Worth) | „Klienci:
- * rośnie” | „Klienci: spada” (Top Gainers / Top Losers, siatka jak
- * `investments/equities`). Faktury jednym odczytem `getSalesInvoices`
+ * Analiza sprzedaży `/analizy/sprzedaz` — poprawka Bartosza 21.10.2026:
+ * Analizy 1:1 z Finory (Monthly Analytics drugi raz, ten sam układ co koszty).
+ * Siatka `grid gap-6 md:grid-cols-4` z dziewięcioma kartami Finory w tej samej
+ * kolejności i z tymi samymi rozpiętościami — bez dodatkowego rzędu pod
+ * spodem. Karty to kopie z `finora-1do1/`, dane — prawdziwe, przez czyste
+ * adaptery (`./adapters`). Faktury jednym odczytem `getSalesInvoices`
  * (§2.4 pkt 2, 4–7), produkty `fetchProductLines` (§2.4 pkt 13), należności
  * `getReceivables` (§2.4 pkt 11). Każda karta osobno w `Suspense`
  * + `SectionErrorBoundary` (§2.4 pkt 15).
@@ -56,24 +68,56 @@ function salesEmpty(invoices: readonly SaleInvoice[]): EmptyStateProps {
 const inMonth = (invoices: readonly SaleInvoice[], month: string) =>
   invoices.filter((inv) => inv.issueDate.slice(0, 7) === month);
 
+/** Produkty: miesiąc bez faktur to brak sprzedaży; faktury bez pozycji produktowych — osobny komunikat. */
+function productsEmpty(invoices: readonly SaleInvoice[], month: string): EmptyStateProps {
+  return inMonth(invoices, month).length === 0 ? salesEmpty(invoices) : ANALIZY_EMPTY.noProducts;
+}
+
 export async function SalesStatsSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
   return loadAnalizyCard('Sprzedaż miesiąca', className, async () => {
     const invoices = await loadSalesWindow(supabase, tenantId, nowIso);
-    return <SalesStatsCards stats={salesMonthStats(invoices, month, shiftMonthKey(month, -1))} className={className} />;
+    const stats = salesMonthStats(invoices, month, shiftMonthKey(month, -1));
+    return (
+      <MonthlyStatsCards
+        stats={{
+          totalSpend: stats.total,
+          // Finorowy kafel „Avg Daily” — ta sama reguła dni co w kosztach (D9).
+          avgDailySpend: salesAvgDaily(stats.total, month, todayInWarsaw(new Date(nowIso))),
+          vsLastMonthPercentage: stats.changePct,
+          topCategory: stats.bestClient,
+        }}
+        labels={{
+          totalSpend: 'Sprzedano (netto)',
+          avgDailySpend: 'Średnio dziennie',
+          vsLastMonth: 'vs poprzedni miesiąc',
+          topCategory: 'Najlepszy klient',
+          noPreviousMonth: 'Brak sprzedaży w poprzednim miesiącu',
+        }}
+        topCategoryIcon={RiUser3Line}
+        className={className}
+      />
+    );
   });
 }
 
 export async function SalesTrendSlot({ supabase, tenantId, nowIso, className }: CardProps) {
   return loadAnalizyCard('Trend sprzedaży', className, async () => {
     const invoices = await loadSalesWindow(supabase, tenantId, nowIso);
-    const keys = monthKeysEnding(currentMonthKey(new Date(nowIso)), TREND_MONTHS);
+    // Miesiąc z korektą in minus rysuje się jako słupek ujemny — tak, jak jest.
+    const data = toTrendData(salesTrend(invoices, monthKeysEnding(currentMonthKey(new Date(nowIso)), TREND_MONTHS)));
+    // Słupki Finory zawsze; pusto tylko, gdy wszystkie 6 miesięcy to zero (D8).
+    const empty = isAllZero(data)
+      ? invoices.length === 0
+        ? ANALIZY_EMPTY.noInvoices
+        : ANALIZY_EMPTY.noSalesInTrend
+      : null;
     return (
       <SpendTrendChart
         title="Trend sprzedaży"
         description="Sprzedaż netto w ostatnich 6 miesiącach"
-        seriesLabel="Sprzedaż netto"
-        data={salesTrend(invoices, keys)}
-        empty={invoices.length === 0 ? ANALIZY_EMPTY.noInvoices : ANALIZY_EMPTY.noSalesInTrend}
+        seriesLabel="Sprzedaż"
+        data={data}
+        empty={empty}
         className={className}
       />
     );
@@ -86,13 +130,12 @@ export async function ProductsChartSlot({ supabase, tenantId, nowIso, month, cla
       loadProductLines(supabase, tenantId, month),
       loadSalesWindow(supabase, tenantId, nowIso),
     ]);
-    const data = productBreakdown(lines);
     return (
       <CategoryBreakdownChart
         title="Sprzedaż według produktów"
         description={`${PRODUCTS_NOTE} · wybrany miesiąc`}
-        data={data}
-        empty={inMonth(invoices, month).length === 0 ? salesEmpty(invoices) : ANALIZY_EMPTY.noProducts}
+        data={toCategorySlices(productBreakdown(lines))}
+        empty={productsEmpty(invoices, month)}
         className={className}
       />
     );
@@ -109,9 +152,9 @@ export async function ProductsListSlot({ supabase, tenantId, nowIso, month, clas
       <CategoryRankedList
         title="Najlepsze produkty i usługi"
         description={`${PRODUCTS_NOTE} · netto`}
-        data={productBreakdown(lines)}
-        kind="product"
-        empty={inMonth(invoices, month).length === 0 ? salesEmpty(invoices) : ANALIZY_EMPTY.noProducts}
+        data={toRankedItems(toCategorySlices(productBreakdown(lines)), (s) =>
+          isOtherSlice(s) ? RiMoreLine : RiBox3Line)}
+        empty={productsEmpty(invoices, month)}
         className={className}
       />
     );
@@ -124,15 +167,10 @@ export async function RecentSalesSlot({ supabase, tenantId, nowIso, month, class
     return (
       <RecentExpensesFeed
         title="Ostatnie faktury"
-        description="Najnowsze faktury przyjęte w KSeF w wybranym miesiącu · brutto"
-        items={recentSales(invoices, month, saleBuyerName).map((s) => ({
-          id: s.id,
-          name: s.name,
-          subtitle: [s.kind === 'correction' ? 'Korekta' : null, s.number, isoDatePl(s.date)]
-            .filter(Boolean)
-            .join(' · '),
-          amount: s.amount,
-        }))}
+        // Poprawka 21.10.2026: `getSalesInvoices` czyta tylko faktury przyjęte w KSeF —
+        // opis musi to mówić (Pulpit pokazuje wszystkie statusy), a mieścić się w linii.
+        description="Przyjęte w KSeF w wybranym miesiącu · brutto"
+        data={recentSaleItems(invoices, month)}
         direction="in"
         empty={salesEmpty(invoices)}
         className={className}
@@ -151,29 +189,8 @@ export async function ReceivablesSlot({ supabase, tenantId, nowIso, className }:
       <SpendingStreaksCard
         title="Należności"
         description={`${RECEIVABLES_NOTE}${skipped}`}
+        rows={receivablesRows(r)}
         className={className}
-        rows={[
-          {
-            icon: RiMoneyDollarCircleLine,
-            iconClassName: 'text-foreground',
-            title: 'Do zapłaty',
-            value: `${formatPlMoney(r.total)} zł · ${countLabel(r.count, ['faktura', 'faktury', 'faktur'])}`,
-          },
-          {
-            icon: RiAlarmWarningLine,
-            iconClassName: r.overdue > 0 ? 'text-destructive' : 'text-foreground',
-            title: 'Po terminie',
-            value: `${formatPlMoney(r.overdue)} zł · ${countLabel(r.overdueCount, ['faktura', 'faktury', 'faktur'])}`,
-          },
-          {
-            icon: RiHourglassLine,
-            iconClassName: 'text-foreground',
-            title: 'Najstarsza zaległość',
-            value: r.oldestOverdueDays === null
-              ? 'Brak zaległości'
-              : countLabel(r.oldestOverdueDays, ['dzień', 'dni', 'dni']),
-          },
-        ]}
       />
     );
   });
@@ -185,7 +202,9 @@ export async function SalesIncomeExpenseSlot({ supabase, tenantId, nowIso, month
       loadSalesWindow(supabase, tenantId, nowIso),
       loadCostsWindow(supabase, tenantId, nowIso),
     ]);
-    return <IncomeExpenseSummary income={salesOfMonth(sales, month)} expense={costOfMonth(costs, month)} className={className} />;
+    return (
+      <IncomeExpenseSummary data={incomeExpenseNet(salesOfMonth(sales, month), costOfMonth(costs, month))} className={className} />
+    );
   });
 }
 
@@ -197,7 +216,7 @@ export async function RecurringClientsSlot({ supabase, tenantId, nowIso, classNa
       <SubscriptionsCard
         title="Stali klienci"
         description="Nabywcy z fakturą w 3 z 4 ostatnich miesięcy · netto"
-        items={recurringClients(invoices, months)}
+        data={toSubscriptionItems(recurringClients(invoices, months, RECURRING_LIST_LIMIT), 'client')}
         empty={ANALIZY_EMPTY.noRecurringClients}
         className={className}
       />
@@ -212,15 +231,19 @@ export async function SalesHeatmapSlot({ supabase, tenantId, nowIso, className }
     return (
       <SpendHeatmap
         title="Kalendarz sprzedaży"
-        description={`Ostatnie ${HEATMAP_DAYS} dni — ciemniejsze pole to większa sprzedaż netto`}
-        days={days}
-        empty={invoices.length === 0 ? ANALIZY_EMPTY.noInvoices : ANALIZY_EMPTY.noSalesInWindow}
+        // Poprawka 21.10.2026: „mocniejszy kolor” zamiast „ciemniejsze pole” (w ciemnym
+        // motywie więcej sprzedaży = jaśniej), jedna linia jak w Finorze, „netto” zostaje.
+        description={`Ostatnie ${HEATMAP_DAYS} dni · netto — mocniejszy kolor to więcej`}
+        data={days}
+        // Siatka Finory zawsze, gdy w oknie jest choć jedna faktura; pusto tylko bez żadnej (D10).
+        empty={invoices.length === 0 ? ANALIZY_EMPTY.noInvoices : null}
         className={className}
       />
     );
   });
 }
 
+// Poza siatką 1:1 z Finory (decyzja Bartosza 21.10.2026: „na razie wszystko 1:1”) — wrócimy do tego.
 export async function ClientSharesSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
   return loadAnalizyCard('Udział klientów w przychodach', className, async () => {
     const invoices = await loadSalesWindow(supabase, tenantId, nowIso);
@@ -241,6 +264,7 @@ function moversWindow(nowIso: string) {
   };
 }
 
+// Poza siatką 1:1 z Finory (decyzja Bartosza 21.10.2026: „na razie wszystko 1:1”) — wrócimy do tego.
 export async function ClientMoversSlot({
   supabase,
   tenantId,
@@ -262,52 +286,36 @@ export async function ClientMoversSlot({
   });
 }
 
-const THIRD = 'col-span-full md:col-span-3 lg:col-span-2';
-
 export function SprzedazGrid(props: AnalizyCardProps) {
   return (
-    <>
-      <div className="grid gap-6 md:grid-cols-4">
-        <AnalizySlot title="Sprzedaż miesiąca" variant="tile" className="md:col-span-4">
-          <SalesStatsSlot {...props} className="md:col-span-4" />
-        </AnalizySlot>
-        <AnalizySlot title="Trend sprzedaży" variant="chart" className="md:col-span-2 2xl:col-span-3">
-          <SalesTrendSlot {...props} className="md:col-span-2 2xl:col-span-3" />
-        </AnalizySlot>
-        <AnalizySlot title="Sprzedaż według produktów" variant="chart" className="md:max-2xl:col-span-2">
-          <ProductsChartSlot {...props} className="md:max-2xl:col-span-2" />
-        </AnalizySlot>
-        <AnalizySlot title="Najlepsze produkty i usługi" variant="list" className="md:col-span-2">
-          <ProductsListSlot {...props} className="md:col-span-2" />
-        </AnalizySlot>
-        <AnalizySlot title="Ostatnie faktury" variant="list" className="md:col-span-2">
-          <RecentSalesSlot {...props} className="md:col-span-2" />
-        </AnalizySlot>
-        <AnalizySlot title="Należności" variant="list" className="md:col-span-2">
-          <ReceivablesSlot {...props} className="md:col-span-2" />
-        </AnalizySlot>
-        <AnalizySlot title="Przychody a koszty" variant="list" className="md:col-span-2">
-          <SalesIncomeExpenseSlot {...props} className="md:col-span-2" />
-        </AnalizySlot>
-        <AnalizySlot title="Stali klienci" variant="list" className="md:col-span-2">
-          <RecurringClientsSlot {...props} className="md:col-span-2" />
-        </AnalizySlot>
-        <AnalizySlot title="Kalendarz sprzedaży" variant="chart" className="md:col-span-2">
-          <SalesHeatmapSlot {...props} className="md:col-span-2" />
-        </AnalizySlot>
-      </div>
-
-      <div className="grid grid-cols-6 gap-6">
-        <AnalizySlot title="Udział klientów w przychodach" variant="chart" className={THIRD}>
-          <ClientSharesSlot {...props} className={THIRD} />
-        </AnalizySlot>
-        <AnalizySlot title="Klienci: rośnie" variant="list" className={THIRD}>
-          <ClientMoversSlot {...props} mode="gainers" className={THIRD} />
-        </AnalizySlot>
-        <AnalizySlot title="Klienci: spada" variant="list" className={THIRD}>
-          <ClientMoversSlot {...props} mode="losers" className={THIRD} />
-        </AnalizySlot>
-      </div>
-    </>
+    <div className="grid gap-6 md:grid-cols-4">
+      <AnalizySlot title="Sprzedaż miesiąca" variant="stats" className="md:col-span-4">
+        <SalesStatsSlot {...props} className="md:col-span-4" />
+      </AnalizySlot>
+      <AnalizySlot title="Trend sprzedaży" variant="bar" className="md:col-span-2 2xl:col-span-3">
+        <SalesTrendSlot {...props} className="md:col-span-2 2xl:col-span-3" />
+      </AnalizySlot>
+      <AnalizySlot title="Sprzedaż według produktów" variant="pie" className="md:max-2xl:col-span-2">
+        <ProductsChartSlot {...props} className="md:max-2xl:col-span-2" />
+      </AnalizySlot>
+      <AnalizySlot title="Najlepsze produkty i usługi" variant="list" className="md:col-span-2">
+        <ProductsListSlot {...props} className="md:col-span-2" />
+      </AnalizySlot>
+      <AnalizySlot title="Ostatnie faktury" variant="feed" className="md:col-span-2">
+        <RecentSalesSlot {...props} className="md:col-span-2" />
+      </AnalizySlot>
+      <AnalizySlot title="Należności" variant="rows" className="md:col-span-2">
+        <ReceivablesSlot {...props} className="md:col-span-2" />
+      </AnalizySlot>
+      <AnalizySlot title="Przychody a koszty" variant="rows" className="md:col-span-2">
+        <SalesIncomeExpenseSlot {...props} className="md:col-span-2" />
+      </AnalizySlot>
+      <AnalizySlot title="Stali klienci" variant="list" className="md:col-span-2">
+        <RecurringClientsSlot {...props} className="md:col-span-2" />
+      </AnalizySlot>
+      <AnalizySlot title="Kalendarz sprzedaży" variant="heatmap" className="md:col-span-2">
+        <SalesHeatmapSlot {...props} className="md:col-span-2" />
+      </AnalizySlot>
+    </div>
   );
 }

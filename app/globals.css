@@ -978,15 +978,34 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
   /* Wysokość i wcięcie pod wcięcie ekranu — zob. sekcja „Telefon" niżej.
    * Dzięki temu w layoucie nie ma już `h-20`, którego kopie krążyły po
    * wyliczeniach wysokości na dashboardzie. */
-  height: calc(var(--ff-header-h) + var(--ff-safe-t));
+  /* Wysokość jak w Finorze: z `py-2` i przycisków (21.10.2026), bez sztywnych
+   * 52 px. Wcięcie ekranu dalej dokłada `padding-top`. */
   padding-top: var(--ff-safe-t);
 }
 
 /* Stopka panelu (`components/dashboard/footer.tsx`) — przewija się z treścią
- * jako drugie dziecko `.ff-shell-scroll`. Na `/dashboard` znika (niżej,
- * `html.ff-route-dashboard .ff-shell-footer`). */
+ * jako drugie dziecko `.ff-shell-scroll`. Ta jest kolumną flex, a kontener
+ * treści rośnie, więc na krótkiej stronie stopka stoi przy dolnej krawędzi. */
 .ff-shell-footer {
   border-top: 1px solid var(--border);
+}
+
+/* Pełny arkusz list Faktur (Wystawione / Cykliczne / Po terminie, poprawka
+ * Bartosza 21.10.2026): karta z tabelą sięga do stopki pustym arkuszem, zamiast
+ * kończyć się po ostatnim wierszu. Korzeń takiej strony ma `ff-page-fill`;
+ * opakowania między kontenerem treści a nim (szablon trasy, skóra `/invoices`)
+ * stają się kolumną flex TYLKO na tych stronach (`:has`). Wszędzie indziej
+ * zostają blokami — w kolumnie flex korzeń `mx-auto max-w-*` skurczyłby się
+ * do szerokości treści. */
+.ff-shell-content:has(.ff-page-fill),
+.ff-shell-content :is(.ff-route-template, .ff-invoices-route):has(.ff-page-fill) {
+  display: flex;
+  flex-direction: column;
+}
+
+.ff-shell-content :is(.ff-route-template, .ff-invoices-route):has(.ff-page-fill),
+.ff-shell-content .ff-page-fill {
+  flex-grow: 1;
 }
 
 
@@ -1108,8 +1127,8 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
  * nie być jeszcze w arkuszu, a przezroczysty pasek nawigacji nad treścią
  * wygląda jak zepsuta strona.
  *
- * Wysokość niesie `--ff-bottom-nav-h` + pasek domowy. Żadnego `overflow`:
- * wyróżniony przycisk „Nowa" celowo wystaje ponad górną krawędź. */
+ * Wysokość niesie `--ff-bottom-nav-h` + pasek domowy. Wyróżnione koło „Nowa”
+ * od 21.10.2026 nie wystaje ponad krawędź — stoi w pasku na miejscu napisu. */
 .ff-bottom-nav {
   height: calc(var(--ff-bottom-nav-h) + var(--ff-safe-b));
   background-color: var(--background);

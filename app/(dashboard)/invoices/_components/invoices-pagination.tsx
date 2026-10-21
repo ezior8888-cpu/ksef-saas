@@ -70,7 +70,8 @@ export function InvoicesPagination({ params, total }: { params: InvoiceListParam
       <p className="text-muted-foreground text-sm whitespace-nowrap" aria-live="polite">
         {total === 0 ? 'Brak pozycji' : `Pozycje ${first}–${last} z ${total}`}
       </p>
-      {pages > 1 ? (
+      {/* Jak w Finorze: „Poprzednia / numery / Następna” zawsze, także przy jednej stronie. */}
+      {total > 0 ? (
         <div>
           <Pagination aria-label="Strony listy faktur">
             {/* Zawijanie: od `sm` przy dotyku (44 px na numer) 10 stron nie mieści się do ok. 720 px. */}

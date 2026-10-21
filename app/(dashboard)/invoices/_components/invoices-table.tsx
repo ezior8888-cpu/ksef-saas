@@ -46,8 +46,8 @@ function money(amount: string | number | null | undefined, currency: string | nu
  */
 const COLUMNS: Array<{ id: string; header: ReactNode; size?: number }> = [
   { id: 'select', header: null, size: 50 },
-  { id: 'number', header: 'Numer', size: 140 },
-  { id: 'payment', header: 'Płatność', size: 200 },
+  { id: 'number', header: 'Numer', size: 100 },
+  { id: 'payment', header: 'Płatność', size: 100 },
   { id: 'buyer', header: 'Nabywca', size: 280 },
   { id: 'gross', header: 'Brutto' },
   { id: 'issued', header: 'Wystawiona' },
