@@ -19,14 +19,21 @@ export const metadata: Metadata = {
     `Jeden plan dla wszystkich: ${PRICE_PER_MONTH}, płatne co miesiąc. ${TRIAL_DAYS} dni za darmo. OCR, KSeF 2.0, KPiR, Wkurzacz Dłużników w cenie. Bez ukrytych dodatków.`,
 };
 
+/**
+ * Lista funkcji — każda pozycja musi działać dziś (przegląd prawny 15.10.2026).
+ * Usunięte wtedy: „Bez limitu paragonów” (OCR ma limit dzienny i miesięczny,
+ * lib/ai/tenant-ai-budget.ts), eksporty JPK_V7M / Optima / Subiekt / Symfonia /
+ * Wapro (wyłączone, lib/exports/suspended-formats.ts — pilnuje test
+ * marketing-bez-fikcji), „Mobile” (panel na telefonach jest wyłączony, /mobile),
+ * „Retencja 10 lat” (dane trzymamy przez czas umowy), „GDPR-compliant”,
+ * „Bank EU”, „Live chat” (czat prowadzi asystent AI).
+ */
 const FEATURES = [
   {
     category: 'Faktury',
     items: [
-      'Bez limitu wystawionych',
-      'Bez limitu zakupowych',
-      'Bez limitu paragonów',
-      'Korekty + zaliczki + finalne',
+      'Bez limitu faktur sprzedaży i zakupu',
+      'Korekty, zaliczki i faktury rozliczające',
       'Wystawianie B2B i B2C',
     ],
   },
@@ -43,63 +50,47 @@ const FEATURES = [
   {
     category: 'OCR + KPiR',
     items: [
-      'OCR Claude Vision faktur',
-      'OCR paragonów + auto-kategoryzacja',
-      'Apka uczy się Twoich preferencji',
-      'Auto-import z KSeF inbox',
-      'Eksport JPK_FA + KPiR Excel',
-    ],
-  },
-  {
-    category: 'Mobile',
-    items: [
-      'PWA installable',
-      'Native aparat',
-      'Push notifications',
-      'Offline mode',
-      'Swipe gestures',
+      'Odczyt faktur kosztowych i paragonów (AI) — z limitem dziennym i miesięcznym',
+      'Podpowiedź kolumny KPiR, która uczy się Twoich poprawek',
+      'Automatyczny import faktur zakupowych z KSeF',
+      'Eksport JPK_FA i KPiR (Excel)',
     ],
   },
   {
     category: 'Workflow',
     items: [
-      'Magiczny Import z 4 innych apek',
-      'Wkurzacz Dłużników (przypomnienia + wezwania KPC)',
-      'Co-Pilot Księgowego (auto-mailing 25.)',
-      'Live walidacja NIP/VIES',
-      'Walidacja kont bankowych (Biała Lista)',
+      'Magiczny Import z 4 innych programów (CSV)',
+      'Wkurzacz Dłużników (przypomnienia i przedsądowe wezwania do zapłaty, wysyłane po Twoim zatwierdzeniu)',
+      'Co-Pilot Księgowego (paczka dla księgowej co miesiąc)',
+      'Walidacja NIP (biała lista VAT, VIES)',
+      'Sprawdzanie rachunków na białej liście',
+      'Powiadomienia push w przeglądarce',
     ],
   },
   {
     category: 'Eksport',
     items: [
       'JPK_FA(4)',
-      'JPK_V7M',
-      'KPiR Excel',
-      'Comarch Optima',
-      'Insert Subiekt',
-      'Symfonia',
-      'Wapro Mag',
+      'KPiR (Excel)',
+      'Uniwersalny CSV dla księgowej',
     ],
   },
   {
     category: 'Bezpieczeństwo',
     items: [
-      'Hosting w UE (Niemcy) 🇪🇺',
-      'GDPR-compliant',
-      'Retencja 10 lat (zgodnie z prawem)',
-      'Eksport pełnych danych',
-      'Bank EU (nie Polska)',
-      'Audit logs',
+      'Serwery w UE (Niemcy) 🇪🇺',
+      'Umowa powierzenia danych (RODO) w standardzie',
+      'Eksport pełnych danych w każdej chwili',
+      'Weryfikacja dwuetapowa (2FA)',
+      'Dziennik zdarzeń',
     ],
   },
   {
     category: 'Wsparcie',
     items: [
-      'Email po polsku',
-      'Dokumentacja w pl',
-      'Live chat (godziny biurowe)',
-      'Onboarding pomoc',
+      'E-mail po polsku (dni robocze)',
+      'Centrum pomocy po polsku',
+      'Czat z asystentem AI i kontakt z człowiekiem',
     ],
   },
 ];
@@ -187,7 +178,7 @@ export default function PricingPage() {
         </div>
 
         <h2 className="mb-12 max-w-3xl font-editorial text-4xl font-medium leading-[1] tracking-[-0.02em] md:text-5xl">
-          Osiem kategorii.{' '}
+          {FEATURES.length} kategorii.{' '}
           <span className="italic text-[var(--marketing-accent)]">
             Wszystko od pierwszego dnia.
           </span>
@@ -226,6 +217,16 @@ export default function PricingPage() {
             </div>
           ))}
         </div>
+        <p className="mt-6 max-w-3xl text-sm text-[var(--marketing-muted)]">
+          W przygotowaniu (jeszcze niedostępne): eksport JPK_V7M(3), eksport
+          do Comarch Optima i Subiekta (EDI++), panel na telefonie. Odczyt
+          dokumentów przez AI ma limit dzienny i miesięczny na firmę — po jego
+          wyczerpaniu dane wpisujesz ręcznie. Szczegóły w{' '}
+          <Link href="/legal/regulamin" className="underline underline-offset-2">
+            regulaminie
+          </Link>
+          .
+        </p>
       </div>
     </article>
   );
