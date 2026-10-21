@@ -1,5 +1,13 @@
 'use client'
 
+// `src/components/ui/letter-glitch.tsx` szablonu Finora. Rysowanie, siatka
+// i animacja 1:1. Zmiany względem Finory (plan §10.4, wiersz „P15 tło”):
+//  - tło kontenera i winieta idą z prop `backgroundColor` (Finora: `#000000`
+//    na sztywno i winieta `rgba(9, 11, 12, …)`), żeby panel szedł za motywem;
+//  - przy `prefers-reduced-motion: reduce` znaki rysujemy raz, bez animacji
+//    (WCAG 2.3.3 — Finora tego nie sprawdza).
+// Kolory i znaki podaje `AuthGlitchBackground`.
+
 import { useEffect, useRef, type CSSProperties } from 'react'
 
 interface LetterGlitchProps {
@@ -10,6 +18,8 @@ interface LetterGlitchProps {
   outerVignette?: boolean
   smooth?: boolean
   characters?: string
+  /** Kolor CSS tła kontenera (także `var(--…)`); winieta wtapia się w ten kolor. */
+  backgroundColor?: string
 }
 
 interface Rgb {
@@ -33,7 +43,7 @@ const CHAR_HEIGHT = 20
 // Used only when every color passed in fails to parse, so the canvas is never blank
 const FALLBACK_COLOR: Rgb = { r: 255, g: 255, b: 255 }
 
-const hexToRgb = (hex: string): Rgb | null => {
+export const hexToRgb = (hex: string): Rgb | null => {
   const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i
   const expanded = hex.replace(shorthandRegex, (_, r: string, g: string, b: string) => r + r + g + g + b + b)
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(expanded)
@@ -55,39 +65,36 @@ const interpolateColor = (start: Rgb, end: Rgb, factor: number): Rgb => ({
   b: Math.round(start.b + (end.b - start.b) * factor)
 })
 
-const containerStyle: CSSProperties = {
-  position: 'relative',
-  width: '100%',
-  height: '100%',
-  backgroundColor: '#000000',
-  overflow: 'hidden'
-}
-
 const canvasStyle: CSSProperties = {
   display: 'block',
   width: '100%',
   height: '100%'
 }
 
-const outerVignetteStyle: CSSProperties = {
+const overlayBase: CSSProperties = {
   position: 'absolute',
   top: 0,
   left: 0,
   width: '100%',
   height: '100%',
-  pointerEvents: 'none',
-  background: 'radial-gradient(circle, rgba(9, 11, 12, 0.5) 20%, rgba(9, 11, 12, 0.9) 70%)'
+  pointerEvents: 'none'
 }
 
-const centerVignetteStyle: CSSProperties = {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  width: '100%',
-  height: '100%',
-  pointerEvents: 'none',
-  background: 'radial-gradient(circle, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 60%)'
-}
+/** Winieta Finory: 50% koloru tła w środku, 90% przy brzegach. */
+export const outerVignetteBackground = (backgroundColor: string) =>
+  backgroundColor === '#000000'
+    ? 'radial-gradient(circle, rgba(9, 11, 12, 0.5) 20%, rgba(9, 11, 12, 0.9) 70%)'
+    : `radial-gradient(circle, color-mix(in oklab, ${backgroundColor} 50%, transparent) 20%, color-mix(in oklab, ${backgroundColor} 90%, transparent) 70%)`
+
+const centerVignetteBackground = (backgroundColor: string) =>
+  backgroundColor === '#000000'
+    ? 'radial-gradient(circle, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 60%)'
+    : `radial-gradient(circle, color-mix(in oklab, ${backgroundColor} 80%, transparent) 0%, transparent 60%)`
+
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 const LetterGlitch = ({
   glitchColors = ['#5ee9b5', '#00bc7d', '#009966'],
@@ -96,7 +103,8 @@ const LetterGlitch = ({
   centerVignette = false,
   outerVignette = true,
   smooth = true,
-  characters = 'र€£¥₽₩₺₴₦₱₲₵₡₢₭'
+  characters = 'र€£¥₽₩₺₴₦₱₲₵₡₢₭',
+  backgroundColor = '#000000'
 }: LetterGlitchProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -123,6 +131,7 @@ const LetterGlitch = ({
     if (palette.length === 0) palette.push(FALLBACK_COLOR)
 
     const symbols = Array.from(characters)
+    const reducedMotion = prefersReducedMotion()
 
     const grid = { columns: 0, rows: 0 }
     let letters: Letter[] = []
@@ -231,8 +240,12 @@ const LetterGlitch = ({
       animationId = requestAnimationFrame(animate)
     }
 
+    const start = () => {
+      if (!reducedMotion) animationId = requestAnimationFrame(animate)
+    }
+
     resizeCanvas()
-    animationId = requestAnimationFrame(animate)
+    start()
 
     let resizeTimeout: ReturnType<typeof setTimeout>
 
@@ -241,7 +254,7 @@ const LetterGlitch = ({
       resizeTimeout = setTimeout(() => {
         cancelAnimationFrame(animationId)
         resizeCanvas()
-        animationId = requestAnimationFrame(animate)
+        start()
       }, 100)
     }
 
@@ -254,11 +267,19 @@ const LetterGlitch = ({
     }
   }, [characters, colorsKey, glitchSpeed, smooth])
 
+  const containerStyle: CSSProperties = {
+    position: 'relative',
+    width: '100%',
+    height: '100%',
+    backgroundColor,
+    overflow: 'hidden'
+  }
+
   return (
-    <div style={containerStyle} className={className}>
+    <div style={containerStyle} className={className} aria-hidden>
       <canvas ref={canvasRef} style={canvasStyle} />
-      {outerVignette && <div style={outerVignetteStyle} />}
-      {centerVignette && <div style={centerVignetteStyle} />}
+      {outerVignette && <div style={{ ...overlayBase, background: outerVignetteBackground(backgroundColor) }} />}
+      {centerVignette && <div style={{ ...overlayBase, background: centerVignetteBackground(backgroundColor) }} />}
     </div>
   )
 }

@@ -1377,7 +1377,15 @@ Transactions, Monthly Analytics, Accounts i Invoice List.
 | 19.10.2026 | §2.4 pkt 10 (strefa czasowa) | #284 | sesja lokalna (bez kredytów chmury); agenci: przegląd wszystkich `getMonth`/`getFullYear` 0,53 mln (szukanie Sonnet, weryfikacja mocny model) | scalone 19.10 (przez #290), wdrożone | `19bbe9cc` | `getMonthlyFigures`, `getSalesSeries` i 4 miejsca z tą samą przyczyną (rok legendy na `/przeplywy`, okno `CashFlowDashboard`, rok szacunku podatku, domyślny miesiąc i granice KPiR) liczą „dziś” z `todayInWarsaw`. Czerwone przed naprawą: 6 + 5 + 1. Obalone: eksporty (stan liczy się ponownie w przeglądarce), stopka, blog, klucze S3 |
 | 19.10.2026 | E4 | #287 (stos na #284) | sesja lokalna; agenci: mapowanie 0,28 mln (Sonnet), budowa 0,53 mln (dane mocny model, karty Sonnet), przegląd 2,77 mln (szukanie: dane i strona mocny model, karty i testy Sonnet; weryfikacja mocny model), poprawki 0,23 mln (dane mocny model, karty Sonnet) | scalone 19.10 (przez #290), wdrożone | `19bbe9cc` | P1 Pulpit: slot FLO `min(640px,70dvh)` od `lg` nad siatką Finance (poniżej `lg` FLO na pełny ekran, blokada przewijania tylko do 1023,98 px), 8 kart w `components/dashboard/pulpit/` (każda w `Suspense` + `SectionErrorBoundary`, treść wyjątku przez filtr `pulpitErrorMessage`), `lib/dashboard/costs.ts` (§2.4 pkt 12), `getSalesSeries({ months, withPrevYear })` z `netSeries`/`vatSeries` w groszach, rankingi (§2.4 pkt 13), należności według terminu, ostatnie faktury, `formatPlCompactMoney`, `shortCompanyName`. Przegląd: 25 znalezisk, 18 potwierdzonych (w tym duplikaty) — poprawione z czerwonymi testami, 7 obalonych. Konflikt planu z D4: wariant „Limit zwolnienia z VAT” (niżej) |
 | 19.10.2026 | E4: limit zwolnienia z VAT (decyzja „Opcja A”) | #290 (stos na #287) | sesja lokalna; agenci: budowa 0,33 mln (funkcja limitu mocny model, ustawienia i karta Sonnet), przegląd (szukanie: prawo/dane i migracja mocny model, karta i testy Sonnet; weryfikacja mocny model) | scalone 19.10, migracja 00153 wgrana na db-1, wdrożone (worker i aplikacja) | `19bbe9cc` | znacznik NIEAKTYWNE zdjęty z `vat-limit.ts`; migracja **00153** (`tenants.business_started_on`, przed wdrożeniem); pole w `/settings`; `getVatLimit` + `VatLimitCard`; test na bazie `rls-data-rozpoczecia` (grant z 00112, CHECK, izolacja) |
-| 19.10.2026 | Pulpit = Finance Finory 1:1 (decyzja Bartosza, wieczór) | (ten PR) | sesja lokalna | gotowe, czeka na odbiór | — | `/dashboard` to strona `dashboard/finance` Finory przeniesiona plikami (`components/dashboard/finora/*`: wykresy, kafle, odwiedzający, produkty, tabela z filtrami i paginacją, `@tanstack/react-table` 8.21.3), teksty po polsku, **dane przykładowe**, animacje recharts jak w szablonie. **FLO usunięty z Pulpitu w UI** (komponenty FLO zostają w kodzie). Usunięta blokada przewijania `/dashboard` i ukrywanie banera certyfikatu; dolny pasek: „Pulpit” zamiast „Flo”. Karty E4 na prawdziwych danych (`components/dashboard/pulpit/*`, `lib/dashboard/*`) zostają do podpięcia w miejsce danych przykładowych |
+| 19.10.2026 | Pulpit = Finance Finory 1:1 (decyzja Bartosza, wieczór) | #292 | sesja lokalna | scalone i wdrożone 19.10 ok. 23:36 | `67251ef6` | `/dashboard` to strona `dashboard/finance` Finory przeniesiona plikami (`components/dashboard/finora/*`: wykresy, kafle, odwiedzający, produkty, tabela z filtrami i paginacją, `@tanstack/react-table` 8.21.3), teksty po polsku, **dane przykładowe**, animacje recharts jak w szablonie. **FLO usunięty z Pulpitu w UI** (komponenty FLO zostają w kodzie). Usunięta blokada przewijania `/dashboard` i ukrywanie banera certyfikatu; dolny pasek: „Pulpit” zamiast „Flo”. Karty E4 na prawdziwych danych (`components/dashboard/pulpit/*`, `lib/dashboard/*`) zostają do podpięcia w miejsce danych przykładowych |
+| 20.10.2026 | Prymitywy UI Finory dla E5–E10 | #293 | sesja lokalna | scalone 20.10 | — | `alert-dialog`, `empty`, `field`, `letter-glitch`, `popover`, `progress`, `radio-group`, `scroll-area`, `switch` z szablonu bez zmian; portale w `.ff-dashboard` |
+| 20.10.2026 | E3b + E5 + E6 + E7 + E8 + E10a + E10b (decyzja Bartosza 20.10: „cały layout z Finory przetłumaczony bez kombinowania”) | #294 | sesja lokalna, Bartosz poza domem ~9 h z poleceniem „wdrożyć jak najwięcej”; agenci (mocny model, izolowane worktree): 7 etapów równolegle, przegląd adwersaryjny 2 soczewki na etap (logika — mocny model, wierność Finorze i WCAG — Sonnet; weryfikacja mocny model), poprawki per obszar | scalone i wdrożone 20.10 (pierwsze wdrożenie aplikacji padło na pamięci builda — #297) | `cfceeaa5` | **E3b** lista i podgląd faktur 1:1 (kafle `stats-cards`, pasek narzędzi, tabela, plakietki, paginacja, dokument, arkusz „Wyślij e‑mailem”, `Empty` dla nieznanej faktury); **E5** `/przeplywy` = Cash Flow + rząd Net Worth na prawdziwych danych (`getCashFlowData`, `getInflows`, `cash-movements`), karta „Przychody i koszty / Ten miesiąc” nad siatką na każdej szerokości (Pulpit ma dane przykładowe); **E6** `/expenses` i `/inbox` = Transactions (kafle z §2.4 pkt 12, N3 stałe koszty), `/expenses/[id]` w karcie Finory; **E7** nowe `/analizy/koszty` i `/analizy/sprzedaz` = Monthly Analytics (+ Udział klientów, Klienci rośnie/spada), sekcja „Analizy” w menu i ⌘K; **E8** `/payments/overdue` = Invoice Reminders, `/contractors` w stylu Invoice List, KPiR = tabela Transactions, Eksport i Import = karty Accounts, portal księgowej; **E10a** `/settings/*` = Settings (zakładki-linki w `settings/layout.tsx` liczone z roli); **E10b** logowanie, rejestracja, reset, 2FA, RODO, onboarding, zaproszenie = auth Finory z tłem LetterGlitch (czarne jak w szablonie, znaki presetu). Przegląd: fala 1 — 36 znalezisk, 26 potwierdzonych (1 krytyczne: import serwerowy w komponencie klienckim — `next build` padał; naprawione przy scaleniu); fala 2 — 11, 9 potwierdzonych. Przy scaleniu: CodeQL (js/incomplete-multi-character-sanitization) na trzech testach zdzierających znaczniki wyrażeniem — wspólny pomocnik `tests/unit/helpers/tekst-html.ts`; hasło logowania bez obietnicy FLO (agent niewdrożony) |
+| 20.10.2026 | P5 Wystaw fakturę (`/invoices/new/*`) ← Create Invoice | #295 | sesja lokalna; agenci: budowa (mocny model, izolowany worktree), przegląd 2 soczewki (logika mocny model, wierność Finorze i WCAG Sonnet; weryfikacja mocny model), poprawki w sesji | scalone i wdrożone 20.10 | `cfceeaa5` | oprawa dokumentu Finory dla zwykłej, zaliczkowej i rozliczającej (`components/invoices/finora/invoice-document.tsx`, karta akcji 18rem, pasek na telefonie bez zmian), korekta tylko w ramce (`correction-form.tsx` nietknięty — #283), wybór rodzaju w kartach; logika pól, walidacji i wysyłki bez zmian. Przegląd: 9 znalezisk, 5 potwierdzonych (etykiety pól bez `htmlFor`, nagłówek dokumentu ucięty na 375 px, wiersze pozycji szersze od karty przy 1280 px → próg 1360 px, etykieta zaliczki, odstępstwo kolumn Nabywca/Płatność od `xl` opisane) — poprawione z czerwonymi testami |
+| 20.10.2026 | Build produkcyjny: pamięć sterty | #297 | sesja lokalna | scalone i wdrożone 20.10 ok. 23:07 | `cfceeaa5` | wdrożenie #294 padło: `next build --webpack` „JavaScript heap out of memory” (exit 134) przy pułapie 3072 MB; Coolify zostawił starą aplikację, worker był już na nowym kodzie (stan mieszany ok. 45 min). Przyczyna: mapy źródeł dla Sentry (token jest, mapy zostają) urosły z kodem — pomiar lokalny szczytu sterty kompilacji 67251ef6 3296 MB → main 4365 MB → z `experimental.webpackMemoryOptimizations` 3526 MB. Poprawka: ta opcja + pułap 3584 MB w `Dockerfile`, strażnik `build-pamiec-sterty`. Szczyt swapu `app-1` w udanym buildzie 6,2 z 8 GB — zapas mały, przy dalszym wzroście aplikacji patrzeć na swap |
+| 20.10.2026 | CI: pułap sterty jak na produkcji | #298 | sesja lokalna | **czeka na Bartosza** (zmiana w `.github/`) | — | job „Next build” budował z domyślną stertą runnera (~4 GB) i przepuścił regresję; `NODE_OPTIONS=--max-old-space-size=3584` w kroku Build + strażnik równości z `Dockerfile` |
+| 20.10.2026 | E9 faktury cykliczne (N1 v1) | #296 | sesja lokalna; agenci: dane (mocny model), ekran (Sonnet, przerwany limitem → dokończony mocnym modelem), przegląd 4 soczewki + krytyk kompletności (weryfikacja mocny model), poprawki 2 obszary + weryfikacja adwersaryjna | scalone 20.10, migracja 00154 wgrana na db-1 przed wdrożeniem, wdrożone ok. 23:53 (worker i aplikacja) | `eb5b1620` | migracja **00154** (`recurring_invoices`, `invoices.recurring_invoice_id`/`recurring_period`, `uq_invoices_recurring_period`, UNIQUE wzoru, wyzwalacz blokujący przepięcie), `lib/invoices/recurring/*`, akcje, `/invoices/recurring` w układzie Recurring Invoices, baner na `/invoices`, „Duplikuj”, „Ustaw jako cykliczną”, „Zrób fakturę cykliczną”, menu i ⌘K. Przegląd: 12 potwierdzonych + 3 z krytyka (2 krytyczne: build padał na typach strony; formularz z dwóch kart dawał drugą fakturę w miesiącu) — poprawione z czerwonymi testami; weryfikacja poprawek znalazła 2 kolejne (zaległy okres przy kwartał → miesiąc, zmiana samego wzoru) — poprawione |
+| 20.10.2026 | Typy bazy z produkcji po 00154 | #299 | sesja lokalna | scalone i wdrożone 21.10 ok. 00:23 | `9e66ddbe` | `types/database.ts` z postgres-meta na db-1 (diff tylko obiekty 00154), `lib/invoices/recurring/db.ts` bez rozszerzenia `Database` i rzutowania przez `unknown` (`toRecurringRow` zawęża `frequency`); rejestr: 00154 wgrana |
+| 21.10.2026 | Kontrast tekstu na tle primary (WCAG 1.4.3) | #300 | sesja lokalna; agenci: poprawki (mocny model), weryfikacja adwersaryjna (mocny model) | scalone i wdrożone 21.10 ok. 00:53 | `b2c595c4` | tekst `text-primary` na `bg-primary/10`–`/30` (paginacje, plakietki Pulpitu, KPiR „Kol. 13” i „Przychód”, „Zwolniony VAT”, aktywna zakładka ustawień w ciemnym, opis formatu eksportu) miał 3,4–4,44:1 → `text-accent-foreground` 6,1–9,0:1 w obu motywach; ikony (3:1) bez zmian; wspólny pomocnik `tests/unit/helpers/kontrast.ts`. Weryfikacja znalazła 3 przeoczone miejsca — poprawione w tym samym PR |
 
 **Decyzje po E3 (Bartosz 17.10: „odpowiedz sam, ma być jak najbardziej
 poprawnie”):** (1) lista `/invoices` dalej pokazuje faktury ze wszystkich
@@ -1439,18 +1447,53 @@ przykładowych; FLO poza Pulpitem (miejsce z projektu Claude Design). Wygląd
 naszego projektu porzucamy — przyjmujemy wyłącznie Finorę. „Wrócimy do tego”:
 podpięcie prawdziwych danych w karty Finory.
 
-**Następny krok:** E4 jest na produkcji (`19bbe9cc`, 19.10 ok. 22:25;
-to samo wdrożenie wniosło też niewdrożone wcześniej #282 E1–E3, #285 zmianę
-marki FaktWay i #286). **Odbiór wizualny po wdrożeniu** (zamiast przed
-scaleniem — Bartosz kazał scalić od razu): `/dashboard` w jasnym i ciemnym
-motywie, 375 / 768 / 1440 px, pasek rozwinięty i zwinięty, obok demo Finory;
-FLO w slocie 640 px (Masło); konto bez certyfikatu KSeF; firma zwolniona
-podmiotowo (karta limitu z datą i bez, pole w `/settings`); Playwright 03,
-06 i `flo-*`. Poprawki z odbioru osobnym PR. Dalej **E5** (P2 Przepływy:
-odczyt `/przeplywy` do `lib/dashboard/`, karty P1 „Ten miesiąc”
-i „Przychody i koszty” `lg:hidden` nad siatką, pierścień „Limit zwolnienia
-z VAT” / „Odłóż na podatek” na `getVatLimit` i `estimateIncomeTaxThisYear`).
-Osobno, bez zmian: #283 (`limit(50)` formularza korekty), #288/#289 (kafle
-i alerty listy faktur bez angielskich treści wyjątków — stos był na #287,
-sprawdzić bazę po scaleniu) i migracja nazwy FaktWay w bazie po
-rozstrzygnięciu szkicu #248.
+**Następny krok (21.10.2026):** na produkcji (`b2c595c4`, z typami po 00154 (#299) i kontrastem (#300)) są:
+- Pulpit Finance (#292);
+- ekrany E3b, E5, E6, E7, E8, E10a, E10b (#294);
+- P5 „Wystaw fakturę” (#295);
+- E9 faktury cykliczne (#296), z migracją 00154 wgraną na db-1.
+
+Plan Finora ma w układzie Finory wszystkie istniejące ekrany. Zostaje:
+- odbiór wizualny (niżej) i poprawki z niego osobnym PR;
+- P12 Bank (N5, etap późniejszy);
+- N1b (przypomnienie e‑mailem o „Do wystawienia”);
+- podpięcie prawdziwych danych w karty Pulpitu (Bartosz: „wrócimy do tego”).
+
+**Dla Bartosza:**
+- (1) #298: ten sam pułap sterty w CI co na produkcji. To zmiana w
+  `.github/`, więc czeka na Twoją decyzję.
+- (2) Swap `app-1` w buildzie dochodzi do 6,2 z 8 GB. Przy dalszym wzroście
+  kodu trzeba będzie albo dołożyć swap, albo zdecydować o mapach źródeł
+  (−1250 MB sterty, ale bez czytelnych stosów w Sentry), albo budować poza
+  `app-1`.
+- (3) Dependabot zgłasza na `main` 10 podatności (1 krytyczna, 1 wysoka).
+- (4) N5 Bank nie ruszony: plan wymaga parserów wyciągów 6 banków, każdy
+  z prawdziwym, zanonimizowanym plikiem przykładowym. Takich plików nie mamy,
+  a parser pisany z pamięci formatu to zgadywanie przy zapisie wpłat. N5
+  potrzebuje też zgody na zmiany w `lib/jobs/` i na RPC `SECURITY DEFINER`
+  (CODEOWNERS).
+- (5) N1b (e-mail o „Do wystawienia”) dodaje 28. cron. Kontrola po
+  wdrożeniu w `AGENTS.md` (CODEOWNERS) zmienia się wtedy na „28/28 cronów”.
+  To decyzja Bartosza.
+
+**Odbiór wizualny po wdrożeniu.** Każdy ekran obok demo Finory, w jasnym i
+ciemnym motywie, przy 375 / 768 / 1440 px, z paskiem rozwiniętym i zwiniętym:
+- `/invoices/new/*`: 4 rodzaje;
+- `/invoices` i `/invoices/[id]`;
+- `/invoices/recurring`, po E9;
+- `/przeplywy`;
+- `/expenses` i `/inbox`;
+- `/analizy/*`;
+- `/payments/overdue`;
+- `/settings/*`;
+- logowanie.
+
+Poprawki z odbioru idą osobnym PR. Zostaje też P12 Bank (N5, etap
+późniejszy) i podpięcie prawdziwych danych w karty Pulpitu (Bartosz:
+„wrócimy do tego”).
+
+**Bez zmian zostają:**
+- #283 (`limit(50)` formularza korekty);
+- #288 i #289 (kafle i alerty listy z E3). E3b przepisało listę, więc
+  prawdopodobnie są nieaktualne — sprawdzić przed scaleniem;
+- migracja nazwy FaktWay w bazie, po rozstrzygnięciu szkicu #248.

@@ -9,8 +9,11 @@ import {
   RiFileAddLine,
   RiFileList3Line,
   RiInboxArchiveLine,
+  RiLineChartLine,
   RiMoreLine,
+  RiPieChart2Line,
   RiReceiptLine,
+  RiRepeatLine,
   RiSettings3Line,
   RiUpload2Line,
   RiWallet3Line,
@@ -34,8 +37,8 @@ export interface DashboardNavSection {
 
 /**
  * Sekcje menu wg planu Finora §4 — tylko trasy, które istnieją. Trasy
- * z kolejnych etapów (faktury cykliczne, analizy, bank) dochodzą razem
- * ze stronami.
+ * z kolejnych etapów (bank) dochodzą razem ze stronami; analizy doszły
+ * w E7, faktury cykliczne w E9.
  */
 export const dashboardNavSections: DashboardNavSection[] = [
   {
@@ -52,6 +55,12 @@ export const dashboardNavSections: DashboardNavSection[] = [
     items: [
       { href: "/invoices", label: "Faktury", icon: RiFileList3Line },
       { href: "/invoices/new", label: "Wystaw fakturę", icon: RiFileAddLine },
+      // Plan Finora E9 (P6, N1): trasa dochodzi razem ze stroną; ⌘K czyta to samo menu.
+      {
+        href: "/invoices/recurring",
+        label: "Faktury cykliczne",
+        icon: RiRepeatLine,
+      },
       {
         href: "/payments/overdue",
         label: "Przypomnienia",
@@ -65,6 +74,24 @@ export const dashboardNavSections: DashboardNavSection[] = [
     items: [
       { href: "/expenses", label: "Wydatki", icon: RiReceiptLine },
       { href: "/inbox", label: "Skrzynka KSeF", icon: RiInboxArchiveLine },
+    ],
+  },
+  {
+    // Plan Finora E7 (P10, P11): ciężkie agregaty — bez prefetchu (§4).
+    title: "Analizy",
+    items: [
+      {
+        href: "/analizy/sprzedaz",
+        label: "Analiza sprzedaży",
+        icon: RiLineChartLine,
+        prefetch: false,
+      },
+      {
+        href: "/analizy/koszty",
+        label: "Analiza kosztów",
+        icon: RiPieChart2Line,
+        prefetch: false,
+      },
     ],
   },
   {

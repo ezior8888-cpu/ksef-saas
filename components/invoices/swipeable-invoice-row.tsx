@@ -26,6 +26,7 @@ import {
 import { saveBlob } from '@/lib/download';
 import { shortenLegalForm } from '@/lib/format/legal-form';
 import { formatPlMoney } from '@/lib/format/pl';
+import { formatInvoiceDate } from '@/lib/invoices/display-date';
 import type { InvoiceListRowFacts } from '@/lib/invoices/list-row-facts';
 
 export type SwipeableInvoiceRowInvoice = InvoiceRow;
@@ -111,7 +112,7 @@ export function SwipeableInvoiceRow({ invoice, facts, today }: Props) {
         dragElastic={0.2}
         style={{ x }}
         onDragEnd={handleDragEnd}
-        className="bg-card text-card-foreground ring-foreground/10 relative touch-pan-y rounded-none ring-1"
+        className="bg-card text-card-foreground relative touch-pan-y"
       >
         <Link
           href={`/invoices/${invoice.id}`}
@@ -119,11 +120,11 @@ export function SwipeableInvoiceRow({ invoice, facts, today }: Props) {
         >
           <div className="mb-2 flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate font-mono text-sm font-medium">
+              <p className="truncate text-sm font-medium">
                 {invoice.internal_number ?? '(bez numeru)'}
               </p>
-              <p className="text-muted-foreground text-xs">
-                {invoice.issue_date ?? '—'}
+              <p className="text-muted-foreground text-xs tabular-nums">
+                {formatInvoiceDate(invoice.issue_date)}
               </p>
             </div>
             <StatusBadge status={invoice.ksef_status} errorCode={invoice.last_error_code} />
@@ -134,8 +135,8 @@ export function SwipeableInvoiceRow({ invoice, facts, today }: Props) {
                 {buyerName ? shortenLegalForm(buyerName) : '—'}
               </p>
               {invoice.buyer_data?.nip ? (
-                <p className="text-muted-foreground truncate font-mono text-xs">
-                  {invoice.buyer_data.nip}
+                <p className="text-muted-foreground truncate text-xs">
+                  NIP {invoice.buyer_data.nip}
                 </p>
               ) : null}
             </div>

@@ -125,6 +125,7 @@ export function BottomNav() {
                     href={item.href}
                     label={item.label}
                     icon={item.icon}
+                    prefetch={item.prefetch !== false}
                     active={isActiveNavPath(pathname, item.href)}
                   />
                 ))}
@@ -277,16 +278,19 @@ function MoreRow({
   label,
   icon: Icon,
   active,
+  prefetch = true,
 }: {
   href: string;
   label: string;
   icon: RemixiconComponentType;
+  /** `false` dla ciężkich stron (`/analizy/*`, plan Finora §4). */
+  prefetch?: boolean;
   active: boolean;
 }) {
   return (
     <Link
       href={href}
-      prefetch
+      prefetch={prefetch}
       className={cn(
         "flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
         active

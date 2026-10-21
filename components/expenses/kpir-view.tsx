@@ -1,33 +1,58 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Download, ExternalLink } from 'lucide-react';
+import type { ColumnDef, ColumnFiltersState, PaginationState } from '@tanstack/react-table';
+import {
+  getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from '@tanstack/react-table';
+import {
+  RiArrowLeftDownLine,
+  RiArrowLeftSLine,
+  RiArrowRightSLine,
+  RiArrowRightUpLine,
+  RiBook2Line,
+  RiDownload2Line,
+  RiEyeLine,
+  RiScales3Line,
+} from '@remixicon/react';
 
+import StatsCards from '@/components/dashboard/stats-cards';
+import {
+  ColumnSelectFilter,
+  DataTablePagination,
+  DataTableView,
+  FinoraListCard,
+  PageSizeSelect,
+  TableSearch,
+} from '@/components/lists/finora-data-table';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { nonDeductedVat, kpirCostAmount } from '@/lib/categorization/kpir-cost';
+import { earlierSaleRemark, kpirSaleEventDate } from '@/lib/categorization/kpir-revenue';
+import { formatIsoDatePl } from '@/lib/format/iso-date';
+import { companyInitials, shortenLegalForm } from '@/lib/format/legal-form';
+import { formatPlInt, formatPlMoney } from '@/lib/format/pl';
+import {
+  kpirInvoiceRevenue,
+  kpirTotals,
+  type KpirExpenseRow,
+  type KpirInvoiceRow,
+} from '@/lib/reports/kpir-totals';
 import { cn } from '@/lib/utils';
-import type { Database } from '@/types/database';
-import { formatPlMoney } from '@/lib/format/pl';
-import { kpirCostAmount, nonDeductedVat } from '@/lib/categorization/kpir-cost';
-import { earlierSaleRemark, kpirRevenueNet, kpirSaleEventDate } from '@/lib/categorization/kpir-revenue';
 
-export type KpirExpenseRow = Database['public']['Tables']['expenses']['Row'];
-
-export type KpirInvoiceRow = Pick<
-  Database['public']['Tables']['invoices']['Row'],
-  'id' | 'internal_number' | 'issue_date' | 'sale_date' | 'gross_total' | 'net_total' | 'buyer_data' | 'invoice_kind'
-> & {
-  /** ROZ: suma netto zaliczek, które KPiR już liczy (`fetchSettledAdvancesNet`). */
-  settled_advances_net?: number | null;
-};
-
-function revenueOf(inv: KpirInvoiceRow): number {
-  return kpirRevenueNet({
-    kind: inv.invoice_kind,
-    net: inv.net_total,
-    settledAdvancesNet: inv.settled_advances_net,
-  });
-}
+export type { KpirExpenseRow, KpirInvoiceRow } from '@/lib/reports/kpir-totals';
 
 const MONTHS = [
   'Styczeń',
@@ -59,26 +84,239 @@ function buyerName(buyerData: KpirInvoiceRow['buyer_data']): string {
   return typeof name === 'string' && name.trim() ? name : '—';
 }
 
-
-function formatPlDate(iso: string): string {
-  const day = iso.slice(0, 10);
-  const [y, m, dd] = day.split('-').map(Number);
-  if (!y || !m || !dd) return iso;
-  return new Date(y, m - 1, dd).toLocaleDateString('pl-PL');
+function buyerNip(buyerData: KpirInvoiceRow['buyer_data']): string | null {
+  if (!buyerData || typeof buyerData !== 'object' || Array.isArray(buyerData)) return null;
+  const nip = (buyerData as Record<string, unknown>).nip;
+  return typeof nip === 'string' && nip.trim() ? nip : null;
 }
 
-const navIconBtn =
-  'ff-glass-pane ff-glass-pane-hover size-10 shrink-0 border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_40%,transparent)] hover:text-[var(--ff-primary)]';
+const INVOICE_KIND_LABELS: Record<string, string> = {
+  regular: 'Sprzedaż',
+  advance: 'Zaliczka',
+  final: 'Faktura rozliczeniowa',
+  correction: 'Korekta sprzedaży',
+};
 
-const exportBtnClass =
-  'ff-glass-pane ff-glass-pane-hover border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--ff-primary)_8%,transparent)] hover:text-[var(--ff-primary)]';
+/** Jeden wpis księgi: przychód (faktura) albo koszt (wydatek). */
+interface KpirEntry {
+  id: string;
+  /** Lp. — kolejność w księdze (data zdarzenia, przychody przed kosztami w tym samym dniu). */
+  lp: number;
+  kind: 'revenue' | 'cost';
+  /** RRRR-MM-DD — dzień sprzedaży (kol. 2) albo data dowodu kosztu. */
+  date: string;
+  dateRemark: string | null;
+  documentNumber: string | null;
+  counterparty: string;
+  counterpartyNip: string | null;
+  description: string;
+  /** Numer kolumny KPiR: „7”, „10”… */
+  column: string;
+  amount: number;
+  /** Dopisek pod kwotą (rozbicie ROZ, VAT bez odliczenia). */
+  amountRemark: string | null;
+  href: string;
+}
 
-const tableLinkClass =
-  'inline-flex text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] transition-colors hover:text-[var(--ff-primary)]';
+const KIND_LABELS: Record<KpirEntry['kind'], string> = { revenue: 'Przychód', cost: 'Koszt' };
+
+// Kolory grup jak `TRANSACTION_GROUP_STYLES` / kierunki jak `TRANSACTION_DIRECTION_STYLES` w Finorze.
+const COLUMN_STYLES: Record<KpirEntry['kind'], string> = {
+  // Odstępstwo od Finory (WCAG 1.4.3): chart-2 na chart-2/10 daje 4,44:1 (ciemny 3,60:1).
+  revenue: 'bg-chart-2/10 text-accent-foreground',
+  // Odstępstwo od Finory (WCAG 1.4.3): tekst `accent-foreground`, nie `primary` — `text-primary` na
+  // `bg-primary/10` ma 4,44:1 na karcie i 4,20:1 w zaznaczonym wierszu (jasny motyw);
+  // `accent-foreground` daje 9,00 / 8,52:1 (jasny) i 8,93:1 (ciemny).
+  cost: 'bg-primary/10 text-accent-foreground',
+};
+const AMOUNT_STYLES: Record<KpirEntry['kind'], string> = {
+  revenue: 'text-green-700 dark:text-green-400',
+  cost: 'text-destructive',
+};
+
+function buildEntries(invoices: KpirInvoiceRow[], expenses: KpirExpenseRow[], periodStart: string): KpirEntry[] {
+  const revenue: Omit<KpirEntry, 'lp'>[] = invoices.map((inv) => {
+    const dates = { saleDate: inv.sale_date, issueDate: inv.issue_date };
+    return {
+      id: `inv-${inv.id}`,
+      kind: 'revenue',
+      // Data zdarzenia gospodarczego — dzień sprzedaży, jak kol. 2 w eksporcie.
+      date: kpirSaleEventDate(dates),
+      dateRemark: earlierSaleRemark(dates, periodStart),
+      documentNumber: inv.internal_number,
+      counterparty: buyerName(inv.buyer_data),
+      counterpartyNip: buyerNip(inv.buyer_data),
+      description: INVOICE_KIND_LABELS[inv.invoice_kind ?? ''] ?? 'Sprzedaż',
+      column: '7',
+      amount: kpirInvoiceRevenue(inv),
+      amountRemark: inv.invoice_kind === 'final'
+        ? `zamówienie ${formatPlMoney(Number(inv.net_total ?? 0))}, minus zaliczki ${formatPlMoney(Number(inv.settled_advances_net ?? 0))}`
+        : null,
+      href: `/invoices/${inv.id}`,
+    };
+  });
+  const costs: Omit<KpirEntry, 'lp'>[] = expenses.map((exp) => ({
+    id: `exp-${exp.id}`,
+    kind: 'cost',
+    date: exp.issue_date,
+    dateRemark: null,
+    documentNumber: exp.document_number,
+    counterparty: exp.seller_name || '—',
+    counterpartyNip: exp.seller_nip,
+    description: exp.category_label ?? 'Koszt',
+    column: exp.kpir_column?.replace('col_', '') ?? '—',
+    amount: kpirCostAmount(exp),
+    amountRemark: nonDeductedVat(exp) > 0 ? `w tym VAT bez odliczenia ${formatPlMoney(nonDeductedVat(exp))}` : null,
+    href: `/expenses/${exp.id}`,
+  }));
+  // Stabilne sortowanie: wejście jest już ułożone (data, id) przez stronę.
+  return [...revenue, ...costs]
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) =>
+      a.entry.date.slice(0, 10).localeCompare(b.entry.date.slice(0, 10)) ||
+      (a.entry.kind === b.entry.kind ? 0 : a.entry.kind === 'revenue' ? -1 : 1) ||
+      a.index - b.index)
+    .map(({ entry }, i) => ({ ...entry, lp: i + 1 }));
+}
+
+/** Kwota ze znakiem jak w Finorze: przychód „+”, koszt „−” (minus typograficzny, §7.1). */
+function signedMoney(entry: KpirEntry): string {
+  // Korekta in minus to ujemny przychód — dostaje „−”, nie „+-”.
+  const signed = entry.kind === 'revenue' ? entry.amount : -entry.amount;
+  return `${signed < 0 ? '−' : '+'}${formatPlMoney(Math.abs(signed))} zł`;
+}
+
+function EntryActions({ entry }: { entry: KpirEntry }) {
+  const label = entry.kind === 'revenue' ? 'Szczegóły faktury' : 'Szczegóły wydatku';
+  return (
+    <div className="flex items-center justify-center gap-1">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={label}
+              render={<Link href={entry.href} />}
+              nativeButton={false}
+            />
+          }
+        >
+          <RiEyeLine className="size-4.5" />
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Szczegóły</p>
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
+function ColumnBadge({ entry }: { entry: KpirEntry }) {
+  return <Badge className={COLUMN_STYLES[entry.kind]}>Kol. {entry.column}</Badge>;
+}
+
+/** Kolumny tabeli KPiR (stałe). Eksport dla testu filtrów „Rodzaj” i „Kolumna”. */
+export const KPIR_COLUMNS: ColumnDef<KpirEntry>[] = [
+  {
+    header: 'Lp.',
+    accessorKey: 'lp',
+    cell: ({ row }) => <span className="text-muted-foreground tabular-nums">{row.original.lp}</span>,
+    size: 70,
+  },
+  {
+    header: 'Data',
+    accessorKey: 'date',
+    cell: ({ row }) => (
+      <div className="flex flex-col">
+        <span className="text-muted-foreground tabular-nums">{formatIsoDatePl(row.original.date)}</span>
+        {row.original.dateRemark ? (
+          <span className="text-xs text-amber-700 dark:text-amber-400">{row.original.dateRemark}</span>
+        ) : null}
+      </div>
+    ),
+    size: 120,
+  },
+  {
+    header: 'Nr dowodu',
+    id: 'documentNumber',
+    accessorFn: (row) => row.documentNumber ?? '',
+    cell: ({ row }) => <span className="font-mono">{row.original.documentNumber ?? '—'}</span>,
+    size: 150,
+  },
+  {
+    header: 'Kontrahent',
+    id: 'counterparty',
+    accessorKey: 'counterparty',
+    cell: ({ row }) => (
+      <div className="flex items-center gap-2">
+        <Avatar className="size-9 items-center justify-center">
+          <AvatarFallback className="text-xs">{companyInitials(row.original.counterparty)}</AvatarFallback>
+        </Avatar>
+        <div className="flex min-w-0 flex-col">
+          <span className="max-w-56 truncate font-medium" title={row.original.counterparty}>
+            {row.original.counterparty === '—' ? '—' : shortenLegalForm(row.original.counterparty)}
+          </span>
+          {row.original.counterpartyNip ? (
+            <span className="text-muted-foreground font-mono">{row.original.counterpartyNip}</span>
+          ) : null}
+        </div>
+      </div>
+    ),
+    size: 260,
+  },
+  {
+    header: 'Opis',
+    accessorKey: 'description',
+    cell: ({ row }) => <span className="text-muted-foreground">{row.original.description}</span>,
+    size: 180,
+  },
+  {
+    header: 'Kolumna',
+    id: 'column',
+    accessorFn: (row) => row.column,
+    filterFn: 'equalsString', // filtr select: cała wartość, jak w Finorze
+    cell: ({ row }) => <ColumnBadge entry={row.original} />,
+    size: 110,
+  },
+  {
+    header: 'Rodzaj',
+    id: 'kind',
+    accessorKey: 'kind',
+    filterFn: 'equalsString',
+    enableHiding: true,
+  },
+  {
+    header: 'Kwota',
+    id: 'amount',
+    accessorFn: (row) => (row.kind === 'revenue' ? row.amount : -row.amount),
+    cell: ({ row }) => (
+      <div className="flex flex-col">
+        <span className={cn('font-medium tabular-nums', AMOUNT_STYLES[row.original.kind])}>
+          {signedMoney(row.original)}
+        </span>
+        {row.original.amountRemark ? (
+          <span className="text-muted-foreground text-xs">{row.original.amountRemark}</span>
+        ) : null}
+      </div>
+    ),
+    size: 170,
+  },
+  {
+    id: 'actions',
+    header: () => 'Akcje',
+    enableSorting: false,
+    cell: ({ row }) => <EntryActions entry={row.original} />,
+    size: 90,
+  },
+];
 
 export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
   const router = useRouter();
   const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [globalFilter, setGlobalFilter] = useState('');
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
 
   const navigate = (deltaMonths: number) => {
     const d = new Date(year, month - 1 + deltaMonths, 1);
@@ -87,349 +325,166 @@ export function KpirView({ month, year, expenses, invoices }: KpirViewProps) {
     );
   };
 
-  const sums = {
-    col_7: invoices.reduce((s, i) => s + revenueOf(i), 0),
-    col_8: 0,
-    col_10: expenses
-      .filter((e) => e.kpir_column === 'col_10')
-      .reduce((s, e) => s + kpirCostAmount(e), 0),
-    col_11: expenses
-      .filter((e) => e.kpir_column === 'col_11')
-      .reduce((s, e) => s + kpirCostAmount(e), 0),
-    col_12: expenses
-      .filter((e) => e.kpir_column === 'col_12')
-      .reduce((s, e) => s + kpirCostAmount(e), 0),
-    col_13: expenses
-      .filter((e) => e.kpir_column === 'col_13')
-      .reduce((s, e) => s + kpirCostAmount(e), 0),
-    col_15: expenses
-      .filter((e) => e.kpir_column === 'col_15')
-      .reduce((s, e) => s + kpirCostAmount(e), 0),
-  };
-
-  const totalRevenue = sums.col_7 + sums.col_8;
-  const totalExpenses =
-    sums.col_10 + sums.col_11 + sums.col_12 + sums.col_13 + sums.col_15;
-  const profit = totalRevenue - totalExpenses;
+  const sums = kpirTotals(expenses, invoices);
+  const { totalRevenue, totalExpenses, profit } = sums;
+  const entries = useMemo(() => buildEntries(invoices, expenses, periodStart), [invoices, expenses, periodStart]);
 
   const monthLabel = MONTHS[Math.min(12, Math.max(1, month)) - 1] ?? '';
   const exportHref = `/reports/exports?period=${year}-${String(month).padStart(2, '0')}&format=kpir_excel`;
 
-  return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-          Książka Przychodów i Rozchodów
-        </h1>
-        <p className="text-sm text-[var(--ff-text-muted)]">
-          Automatycznie generowana z faktur i wydatków
-        </p>
-      </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
+  // eslint-disable-next-line react-hooks/incompatible-library -- tanstack zwraca funkcje, których React Compiler nie zapamiętuje (jak w Finorze)
+  const table = useReactTable({
+    data: entries,
+    columns: KPIR_COLUMNS,
+    state: { columnFilters, globalFilter, pagination, columnVisibility: { kind: false } },
+    onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn: (row, _columnId, filterValue) => {
+      const search = String(filterValue).toLowerCase();
+      return (
+        (row.original.documentNumber ?? '').toLowerCase().includes(search) ||
+        row.original.counterparty.toLowerCase().includes(search) ||
+        row.original.description.toLowerCase().includes(search)
+      );
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
+    enableSortingRemoval: false,
+    getPaginationRowModel: getPaginationRowModel(),
+    onPaginationChange: setPagination,
+  });
+
+  const columnLabels: Record<string, string> = Object.fromEntries(
+    ['7', '10', '11', '12', '13', '15'].map((c) => [c, `Kol. ${c}`]),
+  );
+
+  const stats = [
+    { label: 'Przychody (kol. 7–8)', value: `${formatPlMoney(totalRevenue)} zł`, icon: RiArrowLeftDownLine },
+    { label: 'Wydatki (kol. 14)', value: `${formatPlMoney(totalExpenses)} zł`, icon: RiArrowRightUpLine },
+    {
+      label: profit >= 0 ? 'Dochód' : 'Strata',
+      value: `${formatPlMoney(profit)} zł`,
+      icon: RiScales3Line,
+      valueClassName: profit >= 0 ? 'text-green-700 dark:text-green-400' : 'text-destructive',
+    },
+    { label: 'Wpisy w księdze', value: formatPlInt(entries.length), icon: RiBook2Line },
+  ];
+
+  const columnRows: Array<[string, number]> = [
+    ['Kol. 10 — Towary handlowe i materiały', sums.col_10],
+    ['Kol. 11 — Koszty uboczne zakupu', sums.col_11],
+    ['Kol. 12 — Wynagrodzenia', sums.col_12],
+    ['Kol. 13 — Pozostałe wydatki', sums.col_13],
+    ['Kol. 15 — Koszty B+R', sums.col_15],
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between gap-3 max-sm:flex-col sm:items-center">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Książka Przychodów i Rozchodów</h1>
+          <p className="text-muted-foreground text-sm">Automatycznie generowana z faktur i wydatków</p>
+        </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className={navIconBtn}
-            onClick={() => navigate(-1)}
-            aria-label="Poprzedni miesiąc"
-          >
-            <ChevronLeft className="h-4 w-4" />
+          <Button variant="outline" size="icon" onClick={() => navigate(-1)} aria-label="Poprzedni miesiąc">
+            <RiArrowLeftSLine aria-hidden />
           </Button>
-          <div className="ff-glass-pane min-w-[180px] rounded-[var(--ff-radius-lg)] px-5 py-3 text-center">
-            <p className="text-[15px] font-bold text-[var(--ff-on-surface)]">
-              {monthLabel} {year}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="icon"
-            className={navIconBtn}
-            onClick={() => navigate(1)}
-            aria-label="Następny miesiąc"
-          >
-            <ChevronRight className="h-4 w-4" />
+          <p className="min-w-40 text-center text-sm font-medium">
+            {monthLabel} {year}
+          </p>
+          <Button variant="outline" size="icon" onClick={() => navigate(1)} aria-label="Następny miesiąc">
+            <RiArrowRightSLine aria-hidden />
           </Button>
         </div>
-        <Link
-          href={exportHref}
-          className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), exportBtnClass)}
-        >
-          <Download className="mr-2 h-4 w-4" />
-          Eksport KPiR
-        </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-[var(--ff-gutter)] md:grid-cols-3">
-        <SummaryCard
-          label="Przychody"
-          value={totalRevenue}
-          className="border-emerald-400/20 bg-[color-mix(in_srgb,#34d399_10%,transparent)]"
-        />
-        <SummaryCard
-          label="Wydatki"
-          value={totalExpenses}
-          className="border-red-400/20 bg-[color-mix(in_srgb,#f87171_10%,transparent)]"
-        />
-        <SummaryCard
-          label={profit >= 0 ? 'Dochód' : 'Strata'}
-          value={profit}
-          className={
-            profit >= 0
-              ? 'border-[color-mix(in_srgb,var(--ff-primary)_35%,transparent)] bg-[color-mix(in_srgb,var(--ff-primary)_10%,transparent)]'
-              : 'border-orange-400/25 bg-[color-mix(in_srgb,#fb923c_12%,transparent)]'
-          }
-          highlight
-        />
-      </div>
+      <StatsCards stats={stats} iconPosition="right" />
 
-      <section className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-6 sm:p-8">
-        <div className="mb-5 border-b border-white/10 pb-4">
-          <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
-            Wydatki według kolumn KPiR
-          </h2>
-        </div>
-        <div className="space-y-1">
-          <KpirRow
-            label="Kol. 10 — Towary handlowe i materiały"
-            sum={sums.col_10}
-          />
-          <KpirRow label="Kol. 11 — Koszty uboczne zakupu" sum={sums.col_11} />
-          <KpirRow label="Kol. 12 — Wynagrodzenia" sum={sums.col_12} />
-          <KpirRow label="Kol. 13 — Pozostałe wydatki" sum={sums.col_13} />
-          <KpirRow label="Kol. 15 — Koszty B+R" sum={sums.col_15} />
-          <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
-            <span className="text-[14px] font-bold text-[var(--ff-on-surface)]">
-              Razem (kol. 14)
-            </span>
-            <span className="text-right text-[16px] font-bold tabular-nums text-[var(--ff-on-surface)]">
-              {formatPlMoney(totalExpenses)}{' '}
-              <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-                PLN
-              </span>
-            </span>
+      <Card className="shadow-none">
+        <div className="w-full">
+          <div className="border-b">
+            <div className="flex items-start gap-6 p-4 pt-0 max-lg:flex-col lg:justify-between">
+              <div className="flex items-center gap-4">
+                <PageSizeSelect table={table} />
+                <Link href={exportHref} className={buttonVariants({ variant: 'default' })}>
+                  <RiDownload2Line aria-hidden />
+                  Eksport KPiR
+                </Link>
+              </div>
+              <div className="flex flex-1 flex-wrap items-center gap-4 lg:justify-end">
+                <TableSearch
+                  value={globalFilter}
+                  onChange={setGlobalFilter}
+                  placeholder="Szukaj po numerze, kontrahencie, opisie…"
+                />
+                <ColumnSelectFilter
+                  column={table.getColumn('kind')!}
+                  labels={KIND_LABELS}
+                  allLabel="Przychody i koszty"
+                  label="Rodzaj wpisu"
+                />
+                <ColumnSelectFilter
+                  column={table.getColumn('column')!}
+                  labels={columnLabels}
+                  allLabel="Wszystkie kolumny"
+                  label="Kolumna KPiR"
+                />
+              </div>
+            </div>
+            <DataTableView
+              table={table}
+              emptyText="Brak przychodów i wydatków w tym okresie"
+              renderCard={(row) => {
+                const entry = row.original;
+                return (
+                  <FinoraListCard
+                    title={entry.counterparty === '—' ? '—' : shortenLegalForm(entry.counterparty)}
+                    subtitle={entry.documentNumber ?? undefined}
+                    amount={<span className={AMOUNT_STYLES[entry.kind]}>{signedMoney(entry)}</span>}
+                    amountNote={entry.amountRemark}
+                    meta={
+                      <>
+                        <span>Lp. {entry.lp}</span>
+                        <span>{formatIsoDatePl(entry.date)}</span>
+                        <ColumnBadge entry={entry} />
+                        <span>{entry.description}</span>
+                        {entry.dateRemark ? (
+                          <span className="text-amber-700 dark:text-amber-400">{entry.dateRemark}</span>
+                        ) : null}
+                      </>
+                    }
+                    actions={<EntryActions entry={entry} />}
+                  />
+                );
+              }}
+            />
           </div>
+          <DataTablePagination table={table} />
         </div>
-      </section>
+      </Card>
 
-      <section className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
-        <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
-          <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
-            Przychody (kol. 7–8) — {invoices.length} faktur
-          </h2>
-        </div>
-        {invoices.length === 0 ? (
-          <p className="px-6 py-10 pb-8 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
-            Brak przychodów w tym okresie
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-[14px]">
-              <thead>
-                <tr className="border-b border-[var(--ff-border)]">
-                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Data
-                  </th>
-                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Numer
-                  </th>
-                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Nabywca
-                  </th>
-                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Netto
-                  </th>
-                  <th className="w-12 px-6 py-3.5 sm:px-8" aria-hidden />
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    className="border-b border-[var(--ff-row-divider)] transition-colors last:border-0 hover:bg-[var(--ff-row-hover)]"
-                  >
-                    <td className="px-6 py-3.5 text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_70%,transparent)] sm:px-8">
-                      {/* Data zdarzenia gospodarczego — dzień sprzedaży, jak kol. 2 w eksporcie. */}
-                      {formatPlDate(kpirSaleEventDate({ saleDate: inv.sale_date, issueDate: inv.issue_date }))}
-                      {earlierSaleRemark({ saleDate: inv.sale_date, issueDate: inv.issue_date }, periodStart) ? (
-                        <p className="text-[11px] font-normal text-amber-300/80">
-                          {earlierSaleRemark({ saleDate: inv.sale_date, issueDate: inv.issue_date }, periodStart)}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="px-6 py-3.5 font-mono text-[13px] sm:px-8">
-                      {inv.internal_number ?? '—'}
-                    </td>
-                    <td className="px-6 py-3.5 font-medium text-[var(--ff-on-surface)] sm:px-8">
-                      {buyerName(inv.buyer_data)}
-                    </td>
-                    <td className="px-6 py-3.5 text-right font-semibold tabular-nums text-[var(--ff-on-surface)] sm:px-8">
-                      {formatPlMoney(revenueOf(inv))}{' '}
-                      <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-                        PLN
-                      </span>
-                      {inv.invoice_kind === 'final' ? (
-                        <p className="text-[11px] font-normal text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-                          zamówienie {formatPlMoney(Number(inv.net_total ?? 0))}, minus zaliczki{' '}
-                          {formatPlMoney(Number(inv.settled_advances_net ?? 0))}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="px-6 py-3.5 sm:px-8">
-                      <Link
-                        href={`/invoices/${inv.id}`}
-                        className={tableLinkClass}
-                        aria-label="Szczegóły faktury"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <Card className="shadow-none">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">Wydatki według kolumn KPiR</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          {columnRows.map(([label, sum]) => (
+            <div key={label} className="flex items-center justify-between gap-4 py-2 text-sm">
+              <span className="text-muted-foreground">{label}</span>
+              <span className="shrink-0 font-medium tabular-nums">{formatPlMoney(sum)} zł</span>
+            </div>
+          ))}
+          <Separator />
+          <div className="flex items-center justify-between gap-4 pt-3 text-sm">
+            <span className="font-medium">Razem (kol. 14)</span>
+            <span className="shrink-0 font-semibold tabular-nums">{formatPlMoney(totalExpenses)} zł</span>
           </div>
-        )}
-      </section>
-
-      <section className="ff-glass-pane overflow-hidden rounded-[var(--ff-radius-lg)]">
-        <div className="border-b border-[var(--ff-border)] px-[22px] py-[18px]">
-          <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
-            Wydatki (kol. 10–15) — {expenses.length} pozycji
-          </h2>
-        </div>
-        {expenses.length === 0 ? (
-          <p className="px-6 py-10 pb-8 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] sm:px-8">
-            Brak wydatków w tym okresie
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-[14px]">
-              <thead>
-                <tr className="border-b border-[var(--ff-border)]">
-                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Data
-                  </th>
-                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Sprzedawca
-                  </th>
-                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Kategoria
-                  </th>
-                  <th className="px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Kol.
-                  </th>
-                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ff-text-dim)]">
-                    Koszt
-                  </th>
-                  <th className="w-12 px-6 py-3.5 sm:px-8" aria-hidden />
-                </tr>
-              </thead>
-              <tbody>
-                {expenses.map((exp) => (
-                  <tr
-                    key={exp.id}
-                    className="border-b border-[var(--ff-row-divider)] transition-colors last:border-0 hover:bg-[var(--ff-row-hover)]"
-                  >
-                    <td className="px-6 py-3.5 text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_70%,transparent)] sm:px-8">
-                      {formatPlDate(exp.issue_date)}
-                    </td>
-                    <td className="px-6 py-3.5 sm:px-8">
-                      <p className="max-w-[220px] truncate font-medium text-[var(--ff-on-surface)]">
-                        {exp.seller_name}
-                      </p>
-                      <p className="font-mono text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_50%,transparent)]">
-                        {exp.document_number ?? '—'}
-                      </p>
-                    </td>
-                    <td className="px-6 py-3.5 text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_75%,transparent)] sm:px-8">
-                      {exp.category_label ?? '—'}
-                    </td>
-                    <td className="px-6 py-3.5 font-mono text-[13px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_70%,transparent)] sm:px-8">
-                      {exp.kpir_column?.replace('col_', '') ?? '—'}
-                    </td>
-                    <td className="px-6 py-3.5 text-right font-semibold tabular-nums text-[var(--ff-on-surface)] sm:px-8">
-                      {formatPlMoney(kpirCostAmount(exp))}{' '}
-                      <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-                        PLN
-                      </span>
-                      {nonDeductedVat(exp) > 0 ? (
-                        <p className="text-[11px] font-normal text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-                          w tym VAT bez odliczenia {formatPlMoney(nonDeductedVat(exp))}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="px-6 py-3.5 sm:px-8">
-                      <Link
-                        href={`/expenses/${exp.id}`}
-                        className={tableLinkClass}
-                        aria-label="Szczegóły wydatku"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  className,
-  highlight,
-}: {
-  label: string;
-  value: number;
-  className: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        'ff-glass-pane ff-glass-pane-hover rounded-[var(--ff-radius-lg)] border p-6',
-        className,
-      )}
-    >
-      <p className="text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-        {label}
-      </p>
-      <p
-        className={cn(
-          'mt-3 tabular-nums text-[var(--ff-on-surface)]',
-          highlight
-            ? 'text-[40px] font-bold leading-none tracking-[-0.02em]'
-            : 'text-[28px] font-bold leading-none',
-        )}
-      >
-        {formatPlMoney(value)}{' '}
-        <span className="text-[12px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-          PLN
-        </span>
-      </p>
-    </div>
-  );
-}
-
-function KpirRow({ label, sum }: { label: string; sum: number }) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-lg py-2.5 pl-1 pr-1 transition-colors hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]">
-      <span className="text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_85%,transparent)]">
-        {label}
-      </span>
-      <span className="shrink-0 text-right text-[14px] font-semibold tabular-nums text-[var(--ff-on-surface)]">
-        {formatPlMoney(sum)}{' '}
-        <span className="text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-          PLN
-        </span>
-      </span>
+        </CardContent>
+      </Card>
     </div>
   );
 }

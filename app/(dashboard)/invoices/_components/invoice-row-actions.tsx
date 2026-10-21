@@ -9,9 +9,11 @@ import {
   RiEditLine,
   RiEyeLine,
   RiFileCodeLine,
+  RiFileCopyLine,
   RiFilePdf2Line,
   RiLoader4Line,
-  RiMoreLine,
+  RiMore2Line,
+  RiRepeatLine,
 } from '@remixicon/react';
 
 import { downloadInvoiceXmlAction } from '@/components/invoices/actions-detail';
@@ -34,23 +36,37 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { saveBlob } from '@/lib/download';
 import type { InvoiceListRowFacts } from '@/lib/invoices/list-row-facts';
+import {
+  canDuplicateInvoice,
+  canSetAsRecurring,
+  duplicateInvoiceHref,
+  setAsRecurringHref,
+} from '@/lib/invoices/recurring/visibility';
 
-export type RowMenuEntry = 'correction' | 'xml' | 'delete';
+export type RowMenuEntry = 'correction' | 'duplicate' | 'recurring' | 'xml' | 'delete';
 
 /**
  * Pozycje menu „⋯” wiersza. Korekta: tylko faktury, które przyjmuje formularz
- * korekty i bez korekty w toku (`facts.canCorrect`). XML: gdy jest plik.
- * Usuń: wyłącznie szkic — akcja sama odmawia dla szkiców wycofanych, a
- * odmowę widać w toaście.
+ * korekty i bez korekty w toku (`facts.canCorrect`). Duplikuj: zwykła faktura
+ * wystawiona w FaktWay (nie korekta, zaliczka ani import — N1). Ustaw jako
+ * cykliczną: tylko faktura spełniająca warunki wzoru N1, te same co w akcji
+ * tworzenia. XML: gdy jest plik. Usuń: wyłącznie szkic — akcja sama odmawia
+ * dla szkiców wycofanych, a odmowę widać w toaście.
  */
 export function rowMenuEntries(
-  invoice: Pick<InvoiceRow, 'ksef_status' | 'xml_storage_path'>,
+  invoice: Pick<
+    InvoiceRow,
+    'ksef_status' | 'xml_storage_path' | 'invoice_kind' | 'origin' | 'invoice_type' | 'currency'
+  >,
   facts: Pick<InvoiceListRowFacts, 'canCorrect'> | undefined,
 ): RowMenuEntry[] {
   const entries: RowMenuEntry[] = [];
   if (facts?.canCorrect === true) entries.push('correction');
+  if (canDuplicateInvoice(invoice)) entries.push('duplicate');
+  if (canSetAsRecurring(invoice)) entries.push('recurring');
   if (invoice.xml_storage_path) entries.push('xml');
   if (invoice.ksef_status === 'draft') entries.push('delete');
   return entries;
@@ -123,40 +139,68 @@ export function InvoiceRowActions({ invoice, facts, defaultMenuOpen = false }: P
   };
 
   return (
-    <div className="flex items-center justify-end gap-0.5">
-      <Link
-        href={`/invoices/${invoice.id}`}
-        className={buttonVariants({ variant: 'ghost', size: 'icon' })}
-        aria-label={`Podgląd faktury ${number}`}
-        title="Podgląd"
-      >
-        <RiEyeLine />
-      </Link>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={`Pobierz PDF faktury ${number}`}
-        title="Pobierz PDF"
-        disabled={pdfPending}
-        onClick={() => startPdf(() => downloadInvoicePdf(invoice.id))}
-      >
-        {pdfPending ? <RiLoader4Line className="animate-spin" /> : <RiFilePdf2Line />}
-      </Button>
+    <div className="flex items-center justify-center gap-1">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Link
+              href={`/invoices/${invoice.id}`}
+              className={buttonVariants({ variant: 'ghost', size: 'icon' })}
+              aria-label={`Podgląd faktury ${number}`}
+            />
+          }
+        >
+          <RiEyeLine className="size-4.5" />
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Podgląd</p>
+        </TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Pobierz PDF faktury ${number}`}
+              disabled={pdfPending}
+              onClick={() => startPdf(() => downloadInvoicePdf(invoice.id))}
+            />
+          }
+        >
+          {pdfPending ? <RiLoader4Line className="size-4.5 animate-spin" /> : <RiFilePdf2Line className="size-4.5" />}
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Pobierz PDF</p>
+        </TooltipContent>
+      </Tooltip>
 
       {entries.length > 0 ? (
         <DropdownMenu defaultOpen={defaultMenuOpen}>
           <DropdownMenuTrigger
             render={<Button variant="ghost" size="icon" aria-label={`Więcej akcji dla faktury ${number}`} />}
           >
-            <RiMoreLine />
+            <RiMore2Line className="size-4.5" aria-hidden="true" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-44">
+          <DropdownMenuContent align="end" className="min-w-44 p-0.5">
             <DropdownMenuGroup>
               <DropdownMenuLabel>Akcje faktury</DropdownMenuLabel>
               {entries.includes('correction') ? (
                 <DropdownMenuItem render={<Link href={`/invoices/new/correction?parentId=${invoice.id}`} />}>
                   <RiEditLine />
                   Korekta
+                </DropdownMenuItem>
+              ) : null}
+              {entries.includes('duplicate') ? (
+                <DropdownMenuItem render={<Link href={duplicateInvoiceHref(invoice.id)} />}>
+                  <RiFileCopyLine />
+                  Duplikuj
+                </DropdownMenuItem>
+              ) : null}
+              {entries.includes('recurring') ? (
+                <DropdownMenuItem render={<Link href={setAsRecurringHref(invoice.id)} />}>
+                  <RiRepeatLine />
+                  Ustaw jako cykliczną
                 </DropdownMenuItem>
               ) : null}
               {entries.includes('xml') ? (
@@ -174,7 +218,10 @@ export function InvoiceRowActions({ invoice, facts, defaultMenuOpen = false }: P
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-      ) : null}
+      ) : (
+        // Finora ma „⋯” w każdym wierszu; bez pozycji menu trzymamy jego miejsce, żeby ikony stały w kolumnie.
+        <span aria-hidden className="inline-block size-8 shrink-0" />
+      )}
 
       {entries.includes('delete') ? (
         <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>

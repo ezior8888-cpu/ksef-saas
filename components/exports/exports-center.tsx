@@ -3,20 +3,28 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  Download,
-  FileText,
-  Loader2,
-} from 'lucide-react';
+  RiCheckLine,
+  RiCloseLine,
+  RiDownloadLine,
+  RiFileChart2Line,
+  RiFileCodeLine,
+  RiFileExcel2Line,
+  RiFileTextLine,
+  RiFolderOpenLine,
+  RiLoader4Line,
+  RiTimeLine,
+  type RemixiconComponentType,
+} from '@remixicon/react';
 import { toast } from 'sonner';
 
 import {
   downloadExportFileAction,
   startExportAction,
 } from '@/app/actions/exports';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -24,6 +32,7 @@ import { Constants, type Tables } from '@/types/database';
 import { saveBlob } from '@/lib/download';
 import { isExportFormatSuspended, SUSPENDED_EXPORT_FORMATS } from '@/lib/exports/suspended-formats';
 import { includeReceivedAfterFormatChange, receivedLabelForFormat } from '@/lib/exports/form-defaults';
+import { formatIsoDatePl } from '@/lib/format/iso-date';
 
 /** Wiersz joba + pliki z nested select (historia ręcznych eksportów). */
 export type ManualExportJobWithFiles = Tables<'export_jobs'> & {
@@ -61,6 +70,29 @@ const FORMAT_LABELS: Record<ExportFormat, string> = {
   csv_universal: 'CSV uniwersalny',
 };
 
+/** Rodzaj pliku pod nazwą formatu (karta w stylu Accounts Finory). */
+const FORMAT_KINDS: Record<ExportFormat, string> = {
+  jpk_fa: 'Plik XML',
+  jpk_v7m: 'Plik XML',
+  kpir_excel: 'Arkusz Excel',
+  comarch_optima: 'Program księgowy',
+  insert_subiekt: 'Program księgowy',
+  symfonia: 'Program księgowy',
+  wapro: 'Program księgowy',
+  csv_universal: 'Plik CSV',
+};
+
+const FORMAT_ICONS: Record<ExportFormat, RemixiconComponentType> = {
+  jpk_fa: RiFileCodeLine,
+  jpk_v7m: RiFileCodeLine,
+  kpir_excel: RiFileExcel2Line,
+  comarch_optima: RiFileChart2Line,
+  insert_subiekt: RiFileChart2Line,
+  symfonia: RiFileChart2Line,
+  wapro: RiFileChart2Line,
+  csv_universal: RiFileTextLine,
+};
+
 function toIsoLocal(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -78,14 +110,6 @@ function getCurrentMonthEnd(): string {
   return toIsoLocal(new Date(d.getFullYear(), d.getMonth() + 1, 0));
 }
 
-function formatDate(iso: string): string {
-  if (!iso) return '';
-  const day = iso.slice(0, 10);
-  const [y, m, dd] = day.split('-').map(Number);
-  if (!y || !m || !dd) return iso;
-  return new Date(y, m - 1, dd).toLocaleDateString('pl-PL');
-}
-
 function base64ToBlob(base64: string, mimeType: string): Blob {
   const binaryString = atob(base64);
   const bytes = new Uint8Array(binaryString.length);
@@ -99,18 +123,20 @@ export interface ExportsCenterProps {
   recentJobs: ManualExportJobWithFiles[];
 }
 
+/** Nagłówek strony eksportu (jak nagłówek Accounts w Finorze). */
+export function ExportsHeading() {
+  return (
+    <div>
+      <h1 className="text-2xl font-semibold tracking-tight">Eksport danych księgowych</h1>
+      <p className="text-muted-foreground text-sm">Wygeneruj plik dla księgowego za dowolny okres</p>
+    </div>
+  );
+}
+
 export function ExportsCenter({ recentJobs }: ExportsCenterProps) {
   return (
-    <div className="space-y-8 pb-10 text-[var(--ff-on-surface)]">
-      <div>
-        <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-          Eksport danych księgowych
-        </h1>
-        <p className="text-sm text-[var(--ff-text-muted)]">
-          Wygeneruj plik dla księgowego za dowolny okres
-        </p>
-      </div>
-
+    <div className="space-y-6 pb-10">
+      <ExportsHeading />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <NewExportForm />
         <RecentExports jobs={recentJobs} />
@@ -186,154 +212,138 @@ export function NewExportForm() {
   };
 
   return (
-    <div className="ff-glass-pane space-y-5 rounded-[var(--ff-radius-lg)] p-7 lg:p-8">
-      <div className="border-b border-white/10 pb-4">
-        <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
-          Nowy eksport
-        </h2>
-        <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
-          Wygeneruj plik za wybrany okres
-        </p>
-      </div>
-
-      <div>
-        <Label className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-          Format
-        </Label>
-        <div className="grid grid-cols-2 gap-2">
-          {EXPORT_FORMATS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              disabled={isStarting}
-              onClick={() => chooseFormat(value)}
-              className={cn(
-                'rounded-[var(--ff-radius-lg)] border p-3 text-left transition-all duration-200 active:scale-[0.98] disabled:opacity-50',
-                format === value
-                  ? 'border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] bg-[color-mix(in_srgb,var(--ff-primary)_12%,transparent)] ring-1 ring-[color-mix(in_srgb,var(--ff-primary)_25%,transparent)]'
-                  : 'border-white/10 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)] hover:border-white/20 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_7%,transparent)]',
-              )}
-            >
-              <p className="text-[13px] font-bold text-[var(--ff-on-surface)]">
-                {FORMAT_LABELS[value]}
-              </p>
-            </button>
+    <Card className="shadow-none">
+      <CardHeader>
+        <CardTitle className="text-lg font-semibold">Nowy eksport</CardTitle>
+        <CardDescription>Wygeneruj plik za wybrany okres</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="space-y-3">
+          <Label className="text-muted-foreground">Format</Label>
+          {/* Karty formatów w układzie kart rachunków z Accounts (Finora `account-card`). */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {EXPORT_FORMATS.map((value) => {
+              const Icon = FORMAT_ICONS[value];
+              const selected = format === value;
+              return (
+                <Button
+                  key={value}
+                  type="button"
+                  variant="outline"
+                  disabled={isStarting}
+                  onClick={() => chooseFormat(value)}
+                  aria-pressed={selected}
+                  className={cn(
+                    'h-auto w-full flex-col items-stretch gap-4 p-4 text-left whitespace-normal',
+                    selected && 'border-primary ring-primary/30 ring-1',
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <Avatar className="size-9 items-center justify-center">
+                      <AvatarFallback className="bg-transparent">
+                        <Icon className="text-foreground size-5" />
+                      </AvatarFallback>
+                    </Avatar>
+                    {selected ? (
+                      <Badge variant="secondary" className="font-normal">
+                        Wybrany
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div>
+                    <p className="text-foreground font-medium wrap-break-word">{FORMAT_LABELS[value]}</p>
+                    <p className="text-muted-foreground text-sm wrap-break-word">{FORMAT_KINDS[value]}</p>
+                  </div>
+                </Button>
+              );
+            })}
+          </div>
+          {SUSPENDED_NOTES.map((note) => (
+            <p key={note} className="text-muted-foreground text-xs">
+              {note}
+            </p>
           ))}
         </div>
-        {SUSPENDED_NOTES.map((note) => (
-          <p key={note} className="mt-2 text-[12px] text-[var(--ff-text-muted)]">
-            {note}
-          </p>
-        ))}
-      </div>
 
-      <div>
-        <Label className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-          Okres
-        </Label>
-
-        <div className="mb-3 flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            type="button"
-            disabled={isStarting}
-            onClick={setPreviousMonth}
-            className="ff-glass-pane ff-glass-pane-hover border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_40%,transparent)] hover:text-[var(--ff-primary)]"
-          >
-            Poprzedni miesiąc
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            type="button"
-            disabled={isStarting}
-            onClick={setCurrentMonth}
-            className="ff-glass-pane ff-glass-pane-hover border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_40%,transparent)] hover:text-[var(--ff-primary)]"
-          >
-            Bieżący miesiąc
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            type="button"
-            disabled={isStarting}
-            onClick={setCurrentQuarter}
-            className="ff-glass-pane ff-glass-pane-hover border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_40%,transparent)] hover:text-[var(--ff-primary)]"
-          >
-            Kwartał
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <Label className="mb-1 block text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
-              Od
-            </Label>
-            <Input
-              type="date"
-              value={periodStart}
-              disabled={isStarting}
-              onChange={(e) => setPeriodStart(e.target.value)}
-            />
+        <div className="space-y-3">
+          <Label className="text-muted-foreground">Okres</Label>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" type="button" disabled={isStarting} onClick={setPreviousMonth}>
+              Poprzedni miesiąc
+            </Button>
+            <Button variant="outline" size="sm" type="button" disabled={isStarting} onClick={setCurrentMonth}>
+              Bieżący miesiąc
+            </Button>
+            <Button variant="outline" size="sm" type="button" disabled={isStarting} onClick={setCurrentQuarter}>
+              Kwartał
+            </Button>
           </div>
-          <div>
-            <Label className="mb-1 block text-[11px] font-bold text-[color-mix(in_srgb,var(--ff-on-surface-variant)_60%,transparent)]">
-              Do
-            </Label>
-            <Input
-              type="date"
-              value={periodEnd}
-              disabled={isStarting}
-              onChange={(e) => setPeriodEnd(e.target.value)}
-            />
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="export-period-start">Od</Label>
+              <Input
+                id="export-period-start"
+                type="date"
+                value={periodStart}
+                disabled={isStarting}
+                onChange={(e) => setPeriodStart(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="export-period-end">Do</Label>
+              <Input
+                id="export-period-end"
+                type="date"
+                value={periodEnd}
+                disabled={isStarting}
+                onChange={(e) => setPeriodEnd(e.target.value)}
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="space-y-2">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
-          Co dołączyć
-        </Label>
+        <div className="space-y-2">
+          <Label className="text-muted-foreground">Co dołączyć</Label>
 
-        <CheckboxItem
-          label="Faktury wystawione"
-          checked={includeIssued}
-          disabled={isStarting}
-          onChange={setIncludeIssued}
-        />
-        <CheckboxItem
-          label={receivedLabelForFormat(format)}
-          checked={includeReceived}
-          disabled={isStarting}
-          onChange={setIncludeReceived}
-        />
-        <CheckboxItem
-          label="Korekty"
-          checked={includeCorrections}
-          disabled={isStarting}
-          onChange={setIncludeCorrections}
-        />
-      </div>
+          <CheckboxItem
+            label="Faktury wystawione"
+            checked={includeIssued}
+            disabled={isStarting}
+            onChange={setIncludeIssued}
+          />
+          <CheckboxItem
+            label={receivedLabelForFormat(format)}
+            checked={includeReceived}
+            disabled={isStarting}
+            onChange={setIncludeReceived}
+          />
+          <CheckboxItem
+            label="Korekty"
+            checked={includeCorrections}
+            disabled={isStarting}
+            onChange={setIncludeCorrections}
+          />
+        </div>
 
-      <Button
-        variant="outline"
-        size="lg"
-        type="button"
-        onClick={handleStart}
-        disabled={
-          isStarting || (!includeIssued && !includeReceived)
-        }
-        className="ff-glass-pane ff-glass-pane-hover w-full border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--ff-primary)_8%,transparent)] hover:text-[var(--ff-primary)] disabled:opacity-40"
-      >
-        {isStarting ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <FileText className="mr-2 h-4 w-4" />
-        )}
-        Wygeneruj plik
-      </Button>
-    </div>
+        <Button
+          size="lg"
+          type="button"
+          onClick={handleStart}
+          disabled={
+            isStarting || (!includeIssued && !includeReceived)
+          }
+          className="w-full"
+        >
+          {isStarting ? (
+            <RiLoader4Line className="animate-spin" aria-hidden />
+          ) : (
+            <RiFileTextLine aria-hidden />
+          )}
+          Wygeneruj plik
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -344,43 +354,71 @@ export function NewExportForm() {
 export function RecentExports({ jobs }: { jobs: ManualExportJobWithFiles[] }) {
   if (jobs.length === 0) {
     return (
-      <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] p-7 lg:p-8">
-        <h2 className="mb-1 text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
-          Historia eksportów
-        </h2>
-        <div className="py-12 text-center">
-          <div className="mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ff-primary)_18%,transparent)]">
-            <span className="material-symbols-outlined text-[32px] text-[var(--ff-primary)]">
-              folder_open
-            </span>
+      <Card className="shadow-none">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">Historia eksportów</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+          <div className="bg-muted flex size-12 items-center justify-center">
+            <RiFolderOpenLine className="text-foreground size-6" aria-hidden />
           </div>
-          <p className="mx-auto max-w-sm text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+          <p className="text-muted-foreground mx-auto max-w-sm text-sm">
             Brak eksportów. Wygeneruj pierwszy plik po lewej.
           </p>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="ff-glass-pane space-y-4 rounded-[var(--ff-radius-lg)] p-7 lg:p-8">
-      <div className="border-b border-white/10 pb-4">
-        <h2 className="text-xl font-bold tracking-tight text-[var(--ff-on-surface)]">
-          Historia eksportów
-        </h2>
-        <p className="mt-1 text-[13px] text-[var(--ff-text-muted)]">
-          Ostatnie {jobs.length} eksportów
-        </p>
-      </div>
-
-      <div className="max-h-[600px] space-y-2 overflow-y-auto pr-1">
-        {jobs.map((job) => (
-          <ExportJobRow key={job.id} job={job} />
-        ))}
-      </div>
-    </div>
+    <Card className="shadow-none">
+      <CardHeader>
+        <CardTitle className="text-lg font-semibold">Historia eksportów</CardTitle>
+        <CardDescription>Ostatnie {jobs.length} eksportów</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="max-h-[600px] divide-y overflow-y-auto border-y">
+          {jobs.map((job) => (
+            <ExportJobRow key={job.id} job={job} />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
+
+// Kolory statusów jak `TRANSACTION_STATUS_STYLES` w Finorze.
+const STATUS_MAP: Record<
+  JobStatus,
+  { icon: RemixiconComponentType; label: string; className: string; spin?: boolean }
+> = {
+  completed: {
+    icon: RiCheckLine,
+    label: 'Gotowe',
+    className: 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400',
+  },
+  failed: {
+    icon: RiCloseLine,
+    label: 'Błąd',
+    className: 'bg-destructive/10 text-destructive',
+  },
+  generating: {
+    icon: RiLoader4Line,
+    label: 'Generowanie',
+    className: 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
+    spin: true,
+  },
+  pending: {
+    icon: RiTimeLine,
+    label: 'Oczekuje',
+    className: 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
+  },
+  expired: {
+    icon: RiTimeLine,
+    label: 'Wygasłe',
+    className: 'bg-muted text-muted-foreground',
+  },
+};
 
 function ExportJobRow({ job }: { job: ManualExportJobWithFiles }) {
   const router = useRouter();
@@ -409,59 +447,30 @@ function ExportJobRow({ job }: { job: ManualExportJobWithFiles }) {
     });
   };
 
-  const statusMap: Record<
-    JobStatus,
-    { icon: typeof CheckCircle2; label: string; className: string; spin?: boolean }
-  > = {
-    completed: {
-      icon: CheckCircle2,
-      label: 'Gotowe',
-      className: 'text-emerald-300',
-    },
-    failed: {
-      icon: AlertCircle,
-      label: 'Błąd',
-      className: 'text-red-300',
-    },
-    generating: {
-      icon: Loader2,
-      label: 'Generowanie',
-      className: 'text-orange-300 animate-spin',
-    },
-    pending: {
-      icon: Clock,
-      label: 'Oczekuje',
-      className: 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]',
-    },
-    expired: {
-      icon: Clock,
-      label: 'Wygasłe',
-      className: 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]',
-    },
-  };
-
-  const statusConfig = statusMap[job.status];
+  const statusConfig = STATUS_MAP[job.status];
 
   const StatusIcon = statusConfig.icon;
-  const periodLabel = `${formatDate(job.period_start)} — ${formatDate(job.period_end)}`;
+  const periodLabel = `${formatIsoDatePl(job.period_start)} — ${formatIsoDatePl(job.period_end)}`;
 
   return (
-    <div className="ff-glass-pane ff-glass-pane-hover flex items-center justify-between gap-3 rounded-[var(--ff-radius-lg)] border border-white/8 p-3 transition-transform active:scale-[0.99]">
+    <div className="flex items-center justify-between gap-3 py-3">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <StatusIcon
-          className={cn('h-4 w-4 shrink-0', statusConfig.className)}
-          aria-hidden
-        />
+        <Avatar className="after:border-none" title={statusConfig.label}>
+          <AvatarFallback className={statusConfig.className}>
+            <StatusIcon className={cn('size-4', statusConfig.spin && 'animate-spin')} aria-hidden />
+            <span className="sr-only">{statusConfig.label}</span>
+          </AvatarFallback>
+        </Avatar>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-bold text-[var(--ff-on-surface)]">
+          <p className="text-foreground truncate text-sm font-medium">
             {FORMAT_LABELS[job.format] ?? job.format}
           </p>
-          <p className="text-[12px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)]">
+          <p className="text-muted-foreground text-xs">
             {periodLabel} • {job.invoices_count ?? 0} faktur
           </p>
           {/* Powód odmowy dla człowieka (np. W9: „JPK wstrzymany: faktura …”). */}
           {job.status === 'failed' && job.error_message ? (
-            <p className="mt-1 text-[12px] text-red-300">{job.error_message}</p>
+            <p className="text-destructive mt-1 text-xs">{job.error_message}</p>
           ) : null}
         </div>
       </div>
@@ -473,12 +482,12 @@ function ExportJobRow({ job }: { job: ManualExportJobWithFiles }) {
           type="button"
           onClick={handleDownload}
           disabled={isDownloading}
-          className="ff-glass-pane ff-glass-pane-hover shrink-0 border-[color-mix(in_srgb,var(--ff-on-surface-variant)_18%,transparent)] font-bold text-[var(--ff-on-surface)] shadow-none hover:border-[color-mix(in_srgb,var(--ff-primary)_45%,transparent)] hover:text-[var(--ff-primary)]"
+          className="shrink-0"
         >
           {isDownloading ? (
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            <RiLoader4Line className="animate-spin" aria-hidden />
           ) : (
-            <Download className="mr-1.5 h-3.5 w-3.5" />
+            <RiDownloadLine aria-hidden />
           )}
           Pobierz
         </Button>
@@ -491,6 +500,11 @@ function ExportJobRow({ job }: { job: ManualExportJobWithFiles }) {
 // Helpers
 // ============================================================================
 
+/**
+ * Pole wyboru jako przycisk z rolą `checkbox` (etykieta w środku — klik
+ * w całość przełącza). Wygląd pola wyboru Finory: kwadrat `border-input`,
+ * po zaznaczeniu `bg-primary` z ikoną zaznaczenia.
+ */
 function CheckboxItem({
   label,
   checked,
@@ -509,26 +523,18 @@ function CheckboxItem({
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="flex w-full items-center gap-3 rounded-[var(--ff-radius-lg)] border border-transparent p-2.5 text-left transition-colors hover:border-white/10 hover:bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)] disabled:pointer-events-none disabled:opacity-50"
+      className="hover:bg-muted focus-visible:ring-ring/50 flex w-full items-center gap-3 p-2 text-left transition-colors outline-none focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50"
     >
-      <div
+      <span
+        aria-hidden
         className={cn(
-          'flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors',
-          checked
-            ? 'border-[var(--ff-primary)] bg-[color-mix(in_srgb,var(--ff-primary)_22%,transparent)]'
-            : 'border-white/20 bg-[color-mix(in_srgb,var(--ff-on-surface)_4%,transparent)]',
+          'flex size-4 shrink-0 items-center justify-center rounded-none border transition-colors',
+          checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input',
         )}
       >
-        {checked ? (
-          <CheckCircle2
-            className="h-3 w-3 text-[var(--ff-primary)]"
-            aria-hidden
-          />
-        ) : null}
-      </div>
-      <span className="text-[14px] font-medium text-[var(--ff-on-surface)]">
-        {label}
+        {checked ? <RiCheckLine className="size-3.5" /> : null}
       </span>
+      <span className="text-foreground text-sm">{label}</span>
     </button>
   );
 }

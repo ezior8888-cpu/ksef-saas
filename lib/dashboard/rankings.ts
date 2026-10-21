@@ -21,7 +21,7 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
 export const PRODUCTS_NOTE = 'Bez korekt i nierozliczonych zaliczek';
 
 /** Nazwa jednej pozycji rankingu klientów dla nabywców B2C (`is_b2c`). */
-const CONSUMERS_NAME = 'Konsumenci';
+export const CONSUMERS_NAME = 'Konsumenci';
 /** Pozycja faktury bez nazwy — w bazie `name` dopuszcza NULL. */
 const UNNAMED_PRODUCT = 'Pozycja bez nazwy';
 /** Tyle identyfikatorów faktur na jedno `.in()` — długość adresu PostgREST. */
@@ -157,7 +157,9 @@ export function rankProducts(lines: readonly ProductLine[], limit = 5): TopProdu
 }
 
 /**
- * „Najlepiej sprzedające się” — 12 miesięcy po `issue_date`.
+ * Pozycje faktur do rankingu produktów z zakresu `[from, toExclusive)` po
+ * `issue_date` (§2.4 pkt 13). Wspólny odczyt „Najlepiej sprzedających się”
+ * na Pulpicie i „Sprzedaży według produktów” na `/analizy/sprzedaz`.
  *
  * Tylko faktury `regular` i `final`: zaliczka ma wartość w pozycjach ROZ
  * (ROZ trzyma w bazie stan PEŁNEGO zamówienia) albo na nią czeka, a pozycje
@@ -167,14 +169,13 @@ export function rankProducts(lines: readonly ProductLine[], limit = 5): TopProdu
  * `invoice_line_items` nie ma `tenant_id`, więc najpierw faktury tej firmy,
  * potem ich pozycje paczkami po 100 identyfikatorów.
  */
-export async function getTopProducts(
+export async function fetchProductLines(
   supabase: PageContext['supabase'],
   tenantId: string,
-  now: Date = new Date(),
-  limit = 5,
-): Promise<TopProduct[]> {
+  range: MonthWindow,
+): Promise<ProductLine[]> {
   const environment = requireConfiguredKsefEnvironment();
-  const { from, toExclusive } = warsawMonthWindow(now, 12);
+  const { from, toExclusive } = range;
 
   await assertAcceptedEnvironmentKnown(supabase, tenantId, from, toExclusive);
   const invoices = await readCompletePages('Nie można odczytać faktur do rankingu produktów', (start, end) => supabase
@@ -208,7 +209,17 @@ export async function getTopProducts(
       lines.push({ id: item.id, issue_date: issueDate, name: item.name, unit: item.unit, net_amount: item.net_amount });
     }
   }
-  return rankProducts(lines, limit);
+  return lines;
+}
+
+/** „Najlepiej sprzedające się” — 12 miesięcy po `issue_date` (`fetchProductLines`). */
+export async function getTopProducts(
+  supabase: PageContext['supabase'],
+  tenantId: string,
+  now: Date = new Date(),
+  limit = 5,
+): Promise<TopProduct[]> {
+  return rankProducts(await fetchProductLines(supabase, tenantId, warsawMonthWindow(now, 12)), limit);
 }
 
 // ─── Klienci ───────────────────────────────────────────────────────────────
@@ -224,13 +235,17 @@ export interface ClientInvoice {
   is_b2c: boolean | null;
 }
 
-function buyerNameOf(buyerData: unknown): string | null {
+export function buyerNameOf(buyerData: unknown): string | null {
   if (typeof buyerData !== 'object' || buyerData === null || Array.isArray(buyerData)) return null;
   const name = (buyerData as Record<string, unknown>).name;
   return typeof name === 'string' && name.trim() !== '' ? name : null;
 }
 
-function clientIdentity(inv: ClientInvoice): { key: string; nip: string | null; consumers: boolean } | null {
+/**
+ * Klucz klienta (plan Finora P1, P11, N3): B2C → jedna pozycja „Konsumenci”,
+ * potem NIP (same cyfry), potem nazwa małymi literami; `null` bez NIP-u i nazwy.
+ */
+export function clientIdentity(inv: Pick<ClientInvoice, 'buyer_nip' | 'buyer_data' | 'is_b2c'>): { key: string; nip: string | null; consumers: boolean } | null {
   if (inv.is_b2c === true) return { key: 'b2c', nip: null, consumers: true };
   const nip = (inv.buyer_nip ?? '').replace(/\D/g, '');
   if (nip !== '') return { key: `nip:${nip}`, nip, consumers: false };

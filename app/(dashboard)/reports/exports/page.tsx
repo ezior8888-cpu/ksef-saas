@@ -1,10 +1,13 @@
 import { Suspense } from 'react';
 
 import {
+  ExportsHeading,
   NewExportForm,
   RecentExports,
   type ManualExportJobWithFiles,
 } from '@/components/exports/exports-center';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -30,23 +33,25 @@ async function RecentExportsSection() {
 
 function RecentExportsFallback() {
   return (
-    <div className="ff-glass-pane flex min-h-[280px] items-center justify-center rounded-[var(--ff-radius-lg)] p-7 text-[14px] text-[color-mix(in_srgb,var(--ff-on-surface-variant)_55%,transparent)] lg:p-8">
-      Wczytywanie historii eksportów…
-    </div>
+    <Card className="shadow-none" aria-busy="true">
+      <CardHeader>
+        <CardTitle className="text-lg font-semibold">Historia eksportów</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-muted-foreground text-sm">Wczytywanie historii eksportów…</p>
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+      </CardContent>
+    </Card>
   );
 }
 
+/** Eksport (P13): karty formatów w stylu Accounts Finory; logika bez zmian. */
 export default function ExportsCenterPage() {
   return (
-    <div className="space-y-8 pb-10 text-[var(--ff-on-surface)]">
-      <div>
-        <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-          Eksport danych księgowych
-        </h1>
-        <p className="text-sm text-[var(--ff-text-muted)]">
-          Wygeneruj plik dla księgowego za dowolny okres
-        </p>
-      </div>
+    <div className="space-y-6 pb-10">
+      <ExportsHeading />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <NewExportForm />

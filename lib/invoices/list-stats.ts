@@ -21,10 +21,12 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
 const ENVIRONMENT_ERROR = 'Przyjęte faktury wymagają uzgodnienia środowiska KSeF';
 const KNOWN_ENVIRONMENTS: ReadonlySet<string> = new Set(['test', 'demo', 'production']);
 
-/** Podpis karty „Opłacone” (§2.4 pkt 14). */
-export const PAID_NOTE = 'według oznaczonych wpłat';
-/** Pusty stan karty „Opłacone”, gdy `paidThisMonth` zwraca null — nigdy „0 zł”. */
-export const PAID_EMPTY_STATE = 'Oznaczaj wpłaty, a pokażemy wpływy';
+/**
+ * Podpis karty „Opłacone” (§2.4 pkt 14) i jej pusty stan, gdy `paidThisMonth`
+ * zwraca null — nigdy „0 zł”. Teksty mieszkają w module bez importów, bo
+ * biorą je też komponenty klienckie `/przeplywy`.
+ */
+export { PAID_EMPTY_STATE, PAID_NOTE } from '@/lib/invoices/paid-labels';
 
 export interface WarsawMonthBounds {
   /** Pierwszy dzień miesiąca, RRRR-MM-DD. */

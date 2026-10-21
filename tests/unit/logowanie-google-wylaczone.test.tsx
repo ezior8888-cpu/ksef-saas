@@ -96,7 +96,7 @@ describe('Google wyłączone w GoTrue', () => {
     goTrue(false);
     const html = await loginPage('oauth_disabled');
     expect(html).toContain('Logowanie przez Google jest teraz wyłączone');
-    expect(html).toContain('Zapomniałeś hasła?');
+    expect(html).toContain('Nie pamiętasz hasła?');
     expect(html).toMatch(/pomoc@[a-z]+\.pl/);
   });
 });

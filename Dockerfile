@@ -91,7 +91,16 @@ ENV NEXT_OUTPUT=standalone \
 #
 # Zanim obniżysz tę liczbę: 1958 MB (domyślne dla Node 22) było testowane
 # i NIE WYSTARCZA. Zanim ją podniesiesz: patrz na swap, nie na RAM.
-ENV NODE_OPTIONS="--max-old-space-size=3072"
+#
+# 20.10.2026: 3072 → 3584 MB. Po ekranach Finory (#293–#295) build padł
+# z „JavaScript heap out of memory” (exit 134 — pułap sterty, nie zabójca
+# OOM) w kompilacji webpacka, przy serializacji map źródeł dla Sentry.
+# Pomiar lokalny szczytu sterty kompilacji (Node 24, zawyża względem
+# produkcji): wdrożony 67251ef6 3296 MB, main 4365 MB, main
+# z `experimental.webpackMemoryOptimizations` (next.config.ts) 3526 MB.
+# Optymalizacje + 3584 MB przechodzą lokalnie (także z E9). Swap app-1
+# 20.10: 8 GB, w spoczynku zajęte ~1.6 GB — +512 MB sterty mieści się.
+ENV NODE_OPTIONS="--max-old-space-size=3584"
 RUN pnpm build
 
 # ── worker: proces jobów pg-boss (Etap 7 migracji Hetzner) ──

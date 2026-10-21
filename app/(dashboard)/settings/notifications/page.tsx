@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 
 import { NotificationsSettings } from '@/components/pwa/notifications-settings';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
 import {
   getEmailConsents,
   getUnsubscribedCategories,
@@ -13,6 +15,11 @@ import { EmailPreferences } from './_components/email-preferences';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Zakładka „Powiadomienia” = Notifications z Finory (`views/settings/
+ * notifications`): u góry push na urządzeniach, pod separatorem e-maile
+ * (w Finorze w tym miejscu stoją „Quiet hours”).
+ */
 export default async function NotificationsPage() {
   const supabase = await createClient();
   const {
@@ -44,14 +51,19 @@ export default async function NotificationsPage() {
       : null;
 
   return (
-    <div className="space-y-12 max-w-3xl">
+    <div className="flex flex-col gap-6">
       <NotificationsSettings
         subscriptions={
           (subscriptions ?? []) as Tables<'push_subscriptions'>[]
         }
       />
+
+      <Separator />
+
       {unsubscribedCategories === null ? (
-        <p role="alert">Nie udało się odczytać ustawień email. Odśwież stronę, zanim je zmienisz.</p>
+        <Alert variant="destructive">
+          <AlertDescription>Nie udało się odczytać ustawień email. Odśwież stronę, zanim je zmienisz.</AlertDescription>
+        </Alert>
       ) : (
         <EmailPreferences unsubscribedCategories={unsubscribedCategories} />
       )}

@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { ArrowRight, Check, Loader2, Sparkles } from 'lucide-react';
+import { RiArrowRightLine, RiCheckLine, RiLoader4Line, RiSparklingLine } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { LegalInline } from '@/components/legal/legal-document';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { PRICE_GROSS, PRICE_NET, TRIAL_DAYS } from '@/lib/billing/pricing';
 import { CHECKOUT_STATEMENT } from '@/lib/legal/versions';
 
@@ -33,74 +35,69 @@ interface PlanCardProps {
 /**
  * Jeden plan miesięczny (decyzja z 1 października 2026, lib/billing/pricing.ts).
  * Plan roczny nie jest sprzedawany — akcja zakupu też go odrzuca.
+ *
+ * Wygląd: `Card` Finory (nagłówek, treść, stopka), odznaka jak jej `Badge`.
+ * Oświadczenie przed płatnością (art. 15 ust. 3 i art. 35 ustawy o prawach
+ * konsumenta) — brzmienie z lib/legal/versions.ts; serwer odrzuca zakup bez
+ * niego (`startCheckoutAction`, `statement-required`).
  */
 function PlanCard({ isPending, onSelect, statementAccepted, onStatementChange }: PlanCardProps) {
   return (
-    <div className="ff-glass-pane relative rounded-[var(--ff-radius-lg)] border-emerald-500/40 bg-emerald-500/5 p-6 shadow-glass-lg">
-      <div className="absolute -top-3 right-6 rounded-full bg-emerald-500/90 px-3 py-1 text-xs font-semibold text-white">
-        <Sparkles className="mr-1 inline h-3 w-3" />
-        {TRIAL_DAYS} dni za darmo
-      </div>
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <CardTitle className="text-lg">Miesięcznie</CardTitle>
+            <CardDescription>Płać co miesiąc, anuluj kiedy chcesz</CardDescription>
+          </div>
+          <Badge className="bg-green-600/10 text-green-800 dark:bg-green-400/10 dark:text-green-400">
+            <RiSparklingLine aria-hidden />
+            {TRIAL_DAYS} dni za darmo
+          </Badge>
+        </div>
+      </CardHeader>
 
-      <h3 className="font-display text-2xl font-semibold tracking-tighter-display">
-        Miesięcznie
-      </h3>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Płać co miesiąc, anuluj kiedy chcesz
-      </p>
+      <CardContent className="flex flex-col gap-4">
+        <div>
+          <p className="text-3xl font-semibold">
+            {PRICE_GROSS}
+            <span className="text-muted-foreground ml-1 text-base font-normal">/ mc</span>
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs">z VAT · {PRICE_NET} netto</p>
+        </div>
 
-      <div className="mt-6 flex items-baseline gap-1">
-        <p className="font-display text-5xl font-bold tracking-tighter-display">
-          {PRICE_GROSS}
-          <span className="ml-1 text-lg font-normal text-muted-foreground">
-            / mc
+        <ul className="flex flex-col gap-2">
+          {FEATURES.map((f) => (
+            <li key={f} className="flex items-start gap-2 text-sm">
+              <RiCheckLine className="text-primary mt-0.5 size-4 shrink-0" aria-hidden />
+              <span className="text-muted-foreground">{f}</span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+
+      <CardFooter className="flex flex-col items-stretch gap-2">
+        <label className="text-muted-foreground flex items-start gap-2.5 text-xs leading-relaxed">
+          <input
+            type="checkbox"
+            checked={statementAccepted}
+            onChange={(e) => onStatementChange(e.target.checked)}
+            className="accent-primary mt-0.5 size-4 shrink-0"
+          />
+          <span>
+            <LegalInline text={CHECKOUT_STATEMENT.text} linkClassName="underline underline-offset-2" />
           </span>
+        </label>
+        <Button size="lg" className="w-full" disabled={isPending || !statementAccepted} onClick={onSelect}>
+          {isPending ? <RiLoader4Line className="animate-spin" aria-hidden /> : null}
+          Zacznij {TRIAL_DAYS} dni za darmo
+          <RiArrowRightLine aria-hidden />
+        </Button>
+        <p className="text-muted-foreground text-center text-xs">
+          Kartę podajesz teraz, pierwsza płatność po {TRIAL_DAYS} dniach.
         </p>
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">
-        z VAT · {PRICE_NET} netto
-      </p>
-
-      {/* Oświadczenie przed płatnością — brzmienie z lib/legal/versions.ts,
-          serwer odrzuca zakup bez niego (startCheckoutAction). */}
-      <label className="mt-6 flex items-start gap-2.5 text-xs leading-relaxed text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={statementAccepted}
-          onChange={(e) => onStatementChange(e.target.checked)}
-          className="mt-0.5 h-4 w-4 shrink-0"
-        />
-        <span>
-          <LegalInline text={CHECKOUT_STATEMENT.text} linkClassName="underline underline-offset-2" />
-        </span>
-      </label>
-
-      <Button
-        size="lg"
-        variant="glass-primary"
-        className="mt-4 w-full"
-        disabled={isPending || !statementAccepted}
-        onClick={onSelect}
-      >
-        {isPending ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : null}
-        Zacznij {TRIAL_DAYS} dni za darmo
-        <ArrowRight className="ml-2 h-4 w-4" />
-      </Button>
-      <p className="mt-2 text-center text-xs text-muted-foreground">
-        Kartę podajesz teraz, pierwsza płatność po {TRIAL_DAYS} dniach.
-      </p>
-
-      <ul className="mt-6 space-y-2">
-        {FEATURES.map((f) => (
-          <li key={f} className="flex items-start gap-2 text-sm">
-            <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <span className="text-muted-foreground">{f}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+      </CardFooter>
+    </Card>
   );
 }
 

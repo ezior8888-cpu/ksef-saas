@@ -1,5 +1,6 @@
 import { DeleteAccountForm } from '@/components/settings/delete-account-form';
-import { Card } from '@/components/ui/card';
+import { FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Separator } from '@/components/ui/separator';
 import { getPageContext } from '@/lib/supabase/page-context';
 import { getActiveGdprRequest } from '@/lib/gdpr/deletion';
 import { SUPPORT_EMAIL } from '@/lib/site';
@@ -7,6 +8,11 @@ import { GdprSection } from './_components/gdpr-section';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Zakładka „Konto i dane (RODO)” = Privacy & Data z Finory
+ * (`views/settings/privacy`): eksport danych (art. 15), usunięcie konta
+ * (art. 17) i — jedyne miejsce w aplikacji — usunięcie firmy.
+ */
 export default async function AccountSettingsPage() {
   const { supabase, tenantId, role, user } = await getPageContext();
   const gdprRequest = await getActiveGdprRequest(supabase, user.id);
@@ -21,37 +27,31 @@ export default async function AccountSettingsPage() {
   const isOwner = role === 'owner';
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <FieldGroup>
       <div>
-        <h1 className="text-2xl font-bold mb-2">Konto i firma</h1>
-        <p className="text-sm text-muted-foreground">
-          Zarządzanie kontem użytkownika (RODO) i organizacją (admin).
-        </p>
+        <FieldLabel>Twoje dane (RODO)</FieldLabel>
+        <FieldDescription>
+          Prawo dostępu (art. 15) i prawo do bycia zapomnianym (art. 17).
+        </FieldDescription>
       </div>
 
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-2">Twoje dane (RODO)</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Prawo dostępu (art. 15) i prawo do bycia zapomnianym (art. 17).
-        </p>
-        <GdprSection initialRequest={gdprRequest ? {
-          status: gdprRequest.status,
-          scheduledFor: new Date(gdprRequest.scheduled_for).toLocaleDateString('pl-PL', {
-            year: 'numeric', month: 'long', day: 'numeric',
-          }),
-        } : null} />
-      </Card>
+      <GdprSection initialRequest={gdprRequest ? {
+        status: gdprRequest.status,
+        scheduledFor: new Date(gdprRequest.scheduled_for).toLocaleDateString('pl-PL', {
+          year: 'numeric', month: 'long', day: 'numeric',
+        }),
+      } : null} />
 
-      <Card className="p-6 ring-destructive/30">
-        <h2 className="text-lg font-semibold text-destructive mb-2">
-          Usuń organizację (firmę)
-        </h2>
+      <Separator />
+
+      <div>
+        <FieldLabel className="text-destructive">Usuń organizację (firmę)</FieldLabel>
         {/* Opis zgodny z regulaminem (§ 14 ust. 2 i 6) i umową powierzenia
             (§ 9). Usunięcie firmy idzie przez pomoc techniczną: aplikacja
             nie umie firmy wyłączyć ani usunąć (flag tenants.deleted_at /
-            is_active nic nie sprawdza). Do 15.10.2026 opis obiecywał „od
-            razu wyłączona” i usunięcie danych w 30 + 30 dni. */}
-        <p className="text-sm text-muted-foreground mb-4">
+            is_active nic nie sprawdza). Do 15.10.2026 opis obiecywał
+            usunięcie i wyłączenie firmy, których nic nie wykonywało. */}
+        <FieldDescription>
           Usunięcie firmy rozwiązuje umowę. Zlecasz je przez pomoc techniczną:
           napisz na {SUPPORT_EMAIL} z adresu właściciela i podaj NIP firmy. Do
           czasu wykonania zlecenia firma i abonament działają bez zmian.{' '}
@@ -59,15 +59,15 @@ export default async function AccountSettingsPage() {
           Eksport). Faktury wysłane do KSeF przechowuje też Ministerstwo
           Finansów. To nie jest usunięcie Twojego konta — do tego służy sekcja
           &laquo;Twoje dane (RODO)&raquo; powyżej.
-        </p>
-        {!isOwner ? (
-          <p className="text-sm text-muted-foreground">
-            Tylko właściciel konta może zlecić usunięcie firmy.
-          </p>
-        ) : (
-          <DeleteAccountForm tenantNipHint={nip} />
-        )}
-      </Card>
-    </div>
+        </FieldDescription>
+      </div>
+      {!isOwner ? (
+        <FieldDescription>
+          Tylko właściciel konta może zlecić usunięcie firmy.
+        </FieldDescription>
+      ) : (
+        <DeleteAccountForm tenantNipHint={nip} />
+      )}
+    </FieldGroup>
   );
 }

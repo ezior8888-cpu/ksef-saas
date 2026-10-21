@@ -31,8 +31,7 @@ import type { KsefEnvironment } from '@/types/ksef';
  * stara, opłacona faktura bez środowiska nie blokuje karty.
  */
 
-/** Podpis każdej karty z tą sumą (jak `/payments/overdue`). */
-export const RECEIVABLES_NOTE = 'Bez importów i faktur skorygowanych';
+export { RECEIVABLES_NOTE } from '@/lib/dashboard/receivables-note';
 
 const ENVIRONMENT_ERROR = 'Przyjęte faktury wymagają uzgodnienia środowiska KSeF';
 const KNOWN_ENVIRONMENTS: ReadonlySet<string> = new Set(['test', 'demo', 'production']);
@@ -55,7 +54,7 @@ const DAY_MS = 86_400_000;
 export const RECEIVABLE_BASE_COLUMNS =
   'id, direction, origin, ksef_status, ksef_environment, invoice_kind, invoice_type, currency, gross_total, paid_amount, payment_data, payment_due_date, payment_status';
 
-const RECEIVABLE_COLUMNS = `${RECEIVABLE_BASE_COLUMNS}, internal_number, buyer_data` as const;
+const RECEIVABLE_COLUMNS = `${RECEIVABLE_BASE_COLUMNS}, internal_number, buyer_data, buyer_nip` as const;
 
 /** Wiersz faktury z kolumnami `RECEIVABLE_BASE_COLUMNS`. */
 export interface ReceivableBaseRow {
@@ -84,6 +83,11 @@ export interface ReceivableInvoice {
   id: string;
   internalNumber: string | null;
   buyerName: string | null;
+  /**
+   * NIP nabywcy (`buyer_nip`, a bez niego `buyer_data.nip` — jak widok
+   * `invoices_overdue`); null dla nabywcy bez NIP. Do sum per kontrahent (P13).
+   */
+  buyerNip?: string | null;
   /** RRRR-MM-DD albo null (brak terminu = „nie po terminie”). */
   paymentDueDate: string | null;
   /** `outstandingOf`, PLN. */
@@ -229,6 +233,13 @@ export async function loadTenantChildIds(
   return childIds;
 }
 
+function buyerNipOf(buyerNip: string | null | undefined, buyerData: unknown): string | null {
+  if (typeof buyerNip === 'string' && buyerNip.trim() !== '') return buyerNip.trim();
+  if (typeof buyerData !== 'object' || buyerData === null || Array.isArray(buyerData)) return null;
+  const nip = (buyerData as Record<string, unknown>).nip;
+  return typeof nip === 'string' && nip.trim() !== '' ? nip.trim() : null;
+}
+
 function buyerNameOf(buyerData: unknown): string | null {
   if (typeof buyerData !== 'object' || buyerData === null || Array.isArray(buyerData)) return null;
   const name = (buyerData as Record<string, unknown>).name;
@@ -291,6 +302,7 @@ export async function getReceivables(
       id: row.id,
       internalNumber: row.internal_number,
       buyerName: buyerNameOf(row.buyer_data),
+      buyerNip: buyerNipOf(row.buyer_nip, row.buyer_data),
       paymentDueDate: due,
       outstanding,
       daysOverdue,
