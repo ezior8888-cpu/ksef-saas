@@ -197,7 +197,7 @@ const transactionsData: Item[] = [
     avatar: '/images/avatars/avatar-9.webp',
     avatarFallback: 'RO',
     counterparty: 'Rachunek oszczędnościowy',
-    email: 'przelewy@faktway.pl',
+    email: 'przelewy@przyklad.example',
     category: 'transfer',
     direction: 'out',
     amount: 1500,

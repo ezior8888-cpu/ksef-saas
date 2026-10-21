@@ -17,10 +17,12 @@ describe('Pulpit — strona Finance Finory', () => {
     for (const text of [
       'Finanse', 'Przegląd roczny', 'Raport', 'Zobacz raport', 'Zamówienia', 'Zysk łącznie',
       'Przychód łącznie', 'Wyświetlenia', 'Odwiedzający', 'Szczegóły',
-      'Najlepiej sprzedające się', 'Najczęściej kupowane', 'Użytkownik', 'Następna',
+      'Najlepiej sprzedające się', 'Najczęściej kupowane',
     ]) {
       expect(html).toContain(text);
     }
+    // Tabela z rolami usunięta z Pulpitu (Bartosz, 21.10.2026).
+    expect(html).not.toContain('Użytkownik');
   });
 
   it('bez angielskich podpisów szablonu i bez dolarów', () => {

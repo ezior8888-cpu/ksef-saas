@@ -79,17 +79,13 @@ afterEach(() => {
 });
 
 describe('strona /przeplywy', () => {
-  it('nie czyta bazy na swoim poziomie — tylko kontekst sesji i siatka kart', async () => {
-    const from = vi.fn(() => {
-      throw new Error('strona nie może czytać danych sama');
-    });
-    mocks.context.mockResolvedValue({ supabase: { from }, tenantId: TENANT });
+  it('strona to Cash Flow Finory 1:1 na danych przykładowych — bez sesji i bazy (Bartosz, 21.10.2026)', () => {
+    const page = PrzeplywyPage() as ReactElement<{ children: ReactElement[] }>;
 
-    const page = (await PrzeplywyPage()) as ReactElement<{ children: ReactElement[] }>;
-
-    expect(from).not.toHaveBeenCalled();
-    const children = page.props.children;
-    expect(children.some((child) => (child as ReactElement).type === PrzeplywyGrid)).toBe(true);
+    expect(mocks.context).not.toHaveBeenCalled();
+    const [heading, grid] = page.props.children as [ReactElement<{ children: string }>, ReactElement<{ className: string }>];
+    expect(heading.props.children).toBe('Przepływy pieniężne');
+    expect(grid.props.className).toBe('grid grid-cols-6 gap-6');
   });
 
   it('siatka: każda karta w osobnej granicy błędu i Suspense', () => {
