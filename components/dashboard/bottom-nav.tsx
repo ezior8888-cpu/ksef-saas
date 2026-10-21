@@ -156,11 +156,11 @@ export function BottomNav() {
             </button>
           </div>
 
-          {/* Wylogowanie zeszło tu z górnego paska — na 375 px nie mieściło
-              się obok wordmarku i przełącznika organizacji, a jest czynnością
-              rzadką. Przełącznika motywu tu NIE MA celowo: księżyc stoi
-              w pasku nagłówka (tak jak w makiecie), a ten sam przełącznik
-              w dwóch miejscach to zagadka, nie wygoda. */}
+          {/* Ustawienia i Wyloguj są też w menu profilu paska górnego (od
+              21.10.2026 pasek 1:1 z Finory, widoczny na każdej szerokości).
+              Tu zostają celowo: arkusz „Więcej” to nawigacja telefonu, a sama
+              Finora też dubluje zębatkę i „Settings” w menu profilu.
+              Przełącznika motywu tu NIE MA: księżyc stoi w pasku górnym. */}
           <form
             action={signOut}
             className="border-t border-[var(--ff-border)] pt-2"

@@ -1,14 +1,11 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { assertDashboardShellAccess } from '@/lib/dashboard-shell-data';
-import DashboardOrgHeader, {
-  OrgSwitcherHeaderSkeleton,
-} from '@/app/(dashboard)/_components/dashboard-org-header';
-import { DashboardPageHeading } from '@/app/(dashboard)/_components/dashboard-page-heading';
+import DashboardProfileMenu from '@/app/(dashboard)/_components/dashboard-profile-menu';
 import { DashboardRouteFlags } from '@/components/dashboard/dashboard-route-flags';
-import { DashboardVerificationBannerSlot } from '@/app/(dashboard)/_components/dashboard-verification-banner';
 import { KsefHealthBanner } from '@/app/(dashboard)/_components/ksef-health-banner';
 import { AppHeader } from '@/components/dashboard/app-header';
+import { ProfileMenu } from '@/components/dashboard/profile-menu';
 import { AppSidebar } from '@/components/dashboard/app-sidebar';
 import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { Footer } from '@/components/dashboard/footer';
@@ -87,7 +84,7 @@ export default async function DashboardLayout({
   // animacji trasy nie przypinał ich do pudełka strony.
   //
   // ŁAŃCUCH WYSOKOŚCI EKRANU AGENTA — nie wstawiaj opakowań:
-  // `.ff-shell-scroll` > JEDEN `<div>` (kontener max-w) > baner, baner KSeF,
+  // `.ff-shell-scroll` > JEDEN `<div>` (kontener max-w) > baner KSeF,
   // `{children}` jako OSTATNIE dziecko. Blokada z `globals.css`
   // (`html.ff-route-dashboard .ff-shell-scroll > div`) liczy na tę budowę,
   // dlatego stopka obok kontenera jest `<footer>`, nie `<div>`.
@@ -102,24 +99,23 @@ export default async function DashboardLayout({
 
           <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
             <AppHeader
-              orgSwitcher={
-                <Suspense fallback={<OrgSwitcherHeaderSkeleton />}>
-                  <DashboardOrgHeader />
-                </Suspense>
+              profile={
+                user?.email ? (
+                  // Do czasu wczytania firm menu działa bez nich (e‑mail,
+                  // Ustawienia, Analiza, Wyloguj) — pasek nie czeka na bazę.
+                  <Suspense
+                    fallback={
+                      <ProfileMenu email={user.email} name={userName} company={null} memberships={[]} />
+                    }
+                  >
+                    <DashboardProfileMenu email={user.email} name={userName} />
+                  </Suspense>
+                ) : null
               }
-              pageHeading={<DashboardPageHeading />}
-              user={user?.email ? { email: user.email, name: userName } : null}
             />
 
             <div className="ff-shell-scroll min-h-0 flex-1 overflow-y-auto">
               <div className="mx-auto min-h-0 w-full max-w-[1500px] px-4 pb-12 sm:px-[var(--ff-container-padding)]">
-                {/* Na dashboardzie ten baner stoi w prawej szynie — szeroki
-                    wariant chowa CSS. Na pozostałych stronach zostaje. */}
-                <div className="ff-shell-banner">
-                  <Suspense fallback={null}>
-                    <DashboardVerificationBannerSlot />
-                  </Suspense>
-                </div>
                 <Suspense fallback={null}>
                   <KsefHealthBanner />
                 </Suspense>

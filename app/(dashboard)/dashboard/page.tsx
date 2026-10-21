@@ -163,6 +163,8 @@ const userData: Item[] = [
 export default function DashboardHomePage() {
   return (
     <div className="grid grid-cols-6 gap-6 py-6">
+      {/* Tytuł strony był w pasku górnym; pasek Finory go nie ma (21.10.2026). */}
+      <h1 className="sr-only">Pulpit</h1>
       <FinanceCard className="col-span-full xl:col-span-4" />
 
       <div className="col-span-full grid grid-cols-2 gap-6 lg:col-span-3 xl:col-span-2">

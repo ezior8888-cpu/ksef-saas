@@ -7,7 +7,7 @@ import { ACTIVE_ORG_COOKIE, isUuid } from '@/lib/supabase/active-org';
 import type { UserRole } from '@/lib/supabase/auth-context';
 import { hasConfiguredKsefProof } from '@/lib/ksef/claim-environment';
 
-/** Kształt listy przekazywanej do `OrgSwitcher`. */
+/** Kształt listy firm w menu profilu (`ProfileMenu`, „Moje firmy”). */
 export interface DashboardOrgMembershipPreview {
   organizationId: string;
   name: string;
@@ -129,7 +129,7 @@ export async function assertDashboardShellAccess(): Promise<void> {
 }
 
 /**
- * Dane do `OrgSwitcher` — wywołanie po `assertDashboardShellAccess()`; zero dodatkowych
+ * Dane do menu profilu („Moje firmy”) — wywołanie po `assertDashboardShellAccess()`; zero dodatkowych
  * zapytań do bazy dzięki `getCachedMembershipRowsWithTenants`.
  */
 export async function getDashboardOrgSwitcherProps(): Promise<{
@@ -165,7 +165,7 @@ export async function getDashboardOrgSwitcherProps(): Promise<{
 }
 
 /**
- * Czy aktywna organizacja ma zweryfikowany KSeF (do banera w layoucie).
+ * Czy aktywna organizacja ma zweryfikowany KSeF (puste stany kart: „Podłącz KSeF”).
  */
 export async function getDashboardActiveOrgVerified(): Promise<boolean> {
   const [user, cookieStore] = await Promise.all([
