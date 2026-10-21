@@ -5,6 +5,8 @@ import {
   RiDownload2Line,
   RiFileAddLine,
   RiInboxArchiveLine,
+  RiLineChartLine,
+  RiPieChart2Line,
   RiReceiptLine,
   RiRepeatLine,
   type RemixiconComponentType,
@@ -31,10 +33,11 @@ export const PALETTE_NAV_GROUP = 'Przejdź do';
 export const PALETTE_ACTIONS_GROUP = 'Akcje';
 
 /**
- * Zakładki ekranów Faktur, Kosztów i Księgowości, które do 21.10.2026 były
- * pozycjami menu — paleta dalej prowadzi do nich wprost (stare nazwy jako słowa
- * kluczowe). „KPiR” ma inną etykietę niż pozycja menu „Księgowość” (ten sam
- * adres), więc wartości cmdk (`grupa:etykieta`) się nie powtarzają.
+ * Zakładki ekranów Faktur, Kosztów i Księgowości oraz dwie analizy, które do
+ * 21.10.2026 były pozycjami menu — paleta dalej prowadzi do nich wprost (stare
+ * nazwy jako słowa kluczowe). „KPiR” ma inną etykietę niż pozycja menu
+ * „Księgowość”, a „Analiza sprzedaży” niż „Analizy” (ten sam adres), więc
+ * wartości cmdk (`grupa:etykieta`) się nie powtarzają.
  */
 const PALETTE_EXTRA_NAV: readonly { label: string; href: string; icon: RemixiconComponentType; keywords: string[] }[] = [
   {
@@ -61,6 +64,22 @@ const PALETTE_EXTRA_NAV: readonly { label: string; href: string; icon: Remixicon
     icon: RiInboxArchiveLine,
     keywords: ['Skrzynka KSeF', 'Koszty', 'KSeF', 'faktury zakupowe', 'faktury kosztowe', 'przychodzące'],
   },
+  // Poprawka Bartosza 21.10.2026 (Analizy 1:1 z Finory): w menu jedna pozycja
+  // „Analizy” (/analizy/sprzedaz), a koszty przełącza się w nagłówku — ⌘K
+  // prowadzi do każdej analizy wprost. Etykiety różnią się od pozycji menu
+  // „Analizy”, więc wartości cmdk (`grupa:etykieta`) się nie powtarzają.
+  {
+    label: 'Analiza sprzedaży',
+    href: '/analizy/sprzedaz',
+    icon: RiLineChartLine,
+    keywords: ['Analiza sprzedaży', 'Analizy', 'Sprzedaż', 'przychody', 'produkty', 'należności', 'stali klienci', 'wykresy'],
+  },
+  {
+    label: 'Analiza kosztów',
+    href: '/analizy/koszty',
+    icon: RiPieChart2Line,
+    keywords: ['Analiza kosztów', 'Analizy', 'Koszty', 'wydatki', 'kategorie', 'VAT', 'stałe koszty', 'wykresy'],
+  },
   {
     label: 'KPiR',
     href: '/reports/kpir',
@@ -78,7 +97,7 @@ const PALETTE_EXTRA_NAV: readonly { label: string; href: string; icon: Remixicon
 export const MIN_SEARCH_LENGTH = 2;
 export const MAX_SEARCH_LENGTH = 80;
 
-/** Pozycje menu + zakładki Faktur, Kosztów i Księgowości + ustawienia + dwie akcje. Czysta funkcja — bez dostępu do DOM. */
+/** Pozycje menu + zakładki Faktur, Kosztów i Księgowości + obie analizy + ustawienia + dwie akcje. Czysta funkcja — bez dostępu do DOM. */
 export function buildPaletteNavEntries(): PaletteEntry[] {
   const nav: PaletteEntry[] = dashboardNavSections.flatMap((section) =>
     section.items.map((item) => ({

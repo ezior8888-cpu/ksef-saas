@@ -34,7 +34,10 @@ import {
   defaultRecurringName,
   templateLabel,
 } from '@/app/(dashboard)/invoices/recurring/_components/recurring-invoice-sheet';
-import SubscriptionsCard from '@/components/analizy/finora/subscriptions-card';
+// Świadoma zmiana: Analizy 1:1 z Finory (21.10.2026) — karta „Stali klienci” to teraz kopia
+// Finory z `finora-1do1/`, a wiersze przygotowuje adapter `toSubscriptionItems`.
+import { toSubscriptionItems } from '@/components/analizy/adapters';
+import SubscriptionsCard from '@/components/analizy/finora-1do1/subscriptions-card';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
 import { monthKeysEnding } from '@/lib/analytics-finance/months';
 import { recurringClients } from '@/lib/analytics-finance/recurring';
@@ -238,10 +241,13 @@ describe('„Stali klienci” (P11): „Zrób fakturę cykliczną” z najnowsze
         title="Stali klienci"
         description="d"
         empty={EMPTY}
-        items={[
-          { key: 'nip:1', name: 'Stały S.A.', averageAmount: 200, typicalDay: 6, months: 3, templateInvoiceId: ID },
-          { key: 'nip:2', name: 'Inny', averageAmount: 50, typicalDay: 2, months: 3 },
-        ]}
+        data={toSubscriptionItems(
+          [
+            { key: 'nip:1', name: 'Stały S.A.', averageAmount: 200, typicalDay: 6, months: 3, templateInvoiceId: ID },
+            { key: 'nip:2', name: 'Inny', averageAmount: 50, typicalDay: 2, months: 3 },
+          ],
+          'client',
+        )}
       />,
     );
     expect(html).toContain(`href="/invoices/recurring?wzor=${ID}"`);

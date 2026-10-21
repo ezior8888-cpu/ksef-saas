@@ -1,10 +1,18 @@
 import { AnalizyHeader } from '@/components/analizy/analizy-header';
 import { KosztyGrid } from '@/components/analizy/koszty-grid';
-import { ANALYTICS_MONTH_PARAM, analyticsMonthOptions, resolveAnalyticsMonth } from '@/lib/analytics-finance/months';
+import {
+  ANALYTICS_MONTH_PARAM,
+  analyticsMonthOptions,
+  currentMonthKey,
+  resolveAnalyticsMonth,
+} from '@/lib/analytics-finance/months';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 /**
  * Analiza kosztów (plan Finora P10 ← Finora `money-management/monthly-analytics`).
+ * Poprawka Bartosza 21.10.2026 (Analizy 1:1 z Finory): siatka 9 kart jak
+ * Monthly Analytics; z analizą sprzedaży łączy ją przełącznik „Sprzedaż |
+ * Koszty” w nagłówku (jedna pozycja menu „Analizy”).
  * Strona nie liczy niczego sama (§2.4 pkt 15): każda karta w `KosztyGrid`
  * pobiera dane osobno, więc awaria jednego odczytu zabiera jedną kartę.
  * Wybrany miesiąc w adresie: `?miesiac=RRRR-MM` (Finora: `?month=`).
@@ -23,12 +31,16 @@ export default async function AnalizaKosztowPage({
   const month = resolveAnalyticsMonth(params[ANALYTICS_MONTH_PARAM], now);
 
   return (
-    <div className="space-y-6">
+    // Ciemny motyw: w naszym `.dark` `--muted` == `--card`, więc Finorowe
+    // `bg-muted` (wiersze, kółka ikon, tor paska, puste pola kalendarza,
+    // szkielety) znikałyby na karcie. Na tej stronie `--muted` dostaje kolor
+    // wnęki (`--background`, jak `--ff-surface-inset`); znaczniki Finory bez zmian.
+    <div className="space-y-6 dark:[--muted:var(--background)]">
       <AnalizyHeader
-        title="Analiza kosztów"
-        description="Śledź wydatki, kategorie i stałe koszty miesiąc po miesiącu."
+        mode="koszty"
         options={analyticsMonthOptions(now)}
         month={month}
+        currentMonth={currentMonthKey(now)}
       />
       <KosztyGrid supabase={supabase} tenantId={tenantId} nowIso={now.toISOString()} month={month} />
     </div>

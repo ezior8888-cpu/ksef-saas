@@ -158,12 +158,11 @@ describe('struktura menu (plan Finora §4)', () => {
       },
       // Plan Finora E7: sekcja „Analizy” dochodzi razem ze stronami P10/P11
       // (zasada wpinania §4) — świadoma zmiana oczekiwanej struktury menu.
+      // Świadoma zmiana: Analizy 1:1 z Finory (21.10.2026) — jedna pozycja
+      // „Analizy”, a analizę kosztów przełącza się w nagłówku (Analizy: 2 → 1).
       {
         title: 'Analizy',
-        items: [
-          ['Analiza sprzedaży', '/analizy/sprzedaz'],
-          ['Analiza kosztów', '/analizy/koszty'],
-        ],
+        items: [['Analizy', '/analizy/sprzedaz']],
       },
       {
         title: 'Księgowość',
@@ -243,15 +242,25 @@ describe('struktura menu (plan Finora §4)', () => {
 
   it('/analizy/* bez prefetchu (ciężkie agregaty, plan Finora §4)', () => {
     const analizy = dashboardNavItems.filter((i) => i.href.startsWith('/analizy/'));
-    expect(analizy.map((i) => i.href)).toEqual(['/analizy/sprzedaz', '/analizy/koszty']);
+    // Świadoma zmiana: Analizy 1:1 z Finory (21.10.2026) — w menu jedna pozycja
+    // „Analizy” (/analizy/sprzedaz); /analizy/koszty jest za przełącznikiem.
+    expect(analizy.map((i) => i.href)).toEqual(['/analizy/sprzedaz']);
     for (const item of analizy) expect(item.prefetch, item.href).toBe(false);
     const hrefs = getDashboardPrefetchHrefs();
     expect(hrefs.filter((h) => h.startsWith('/analizy'))).toEqual([]);
   });
 
-  it('/analizy/sprzedaz i /analizy/koszty aktywne po regule ogólnej, bez przecieku między sobą', () => {
-    expect(isActiveNavPath('/analizy/sprzedaz', '/analizy/sprzedaz')).toBe(true);
-    expect(isActiveNavPath('/analizy/koszty', '/analizy/sprzedaz')).toBe(false);
-    expect(isActiveNavPath('/analizy/sprzedazx', '/analizy/sprzedaz')).toBe(false);
+  // Świadoma zmiana: Analizy 1:1 z Finory (21.10.2026) — jedna pozycja „Analizy”
+  // świeci na obu analizach (przełącznik „Sprzedaż | Koszty” w nagłówku),
+  // więc /analizy/koszty świadomie aktywuje /analizy/sprzedaz (wcześniej false).
+  it('„Analizy” są aktywne dla /analizy/sprzedaz* i /analizy/koszty*, ale nie dla …x', () => {
+    for (const p of ['/analizy/sprzedaz', '/analizy/sprzedaz/x', '/analizy/koszty', '/analizy/koszty/x']) {
+      expect(isActiveNavPath(p, '/analizy/sprzedaz'), p).toBe(true);
+    }
+    for (const p of ['/analizy/sprzedazx', '/analizy/kosztyx', '/analizy', '/expenses']) {
+      expect(isActiveNavPath(p, '/analizy/sprzedaz'), p).toBe(false);
+    }
+    // Analiza kosztów nie zapala pozycji „Koszty” (/expenses).
+    expect(isActiveNavPath('/analizy/koszty', '/expenses')).toBe(false);
   });
 });

@@ -1,14 +1,13 @@
 import {
   RiAddLine,
+  RiBarChart2Line,
   RiBook2Line,
   RiContactsBook3Line,
   RiDashboardLine,
   RiExchangeFundsLine,
   RiFileAddLine,
   RiFileList3Line,
-  RiLineChartLine,
   RiMoreLine,
-  RiPieChart2Line,
   RiReceiptLine,
   RiSettings3Line,
   RiUpload2Line,
@@ -34,11 +33,12 @@ export interface DashboardNavSection {
 /**
  * Sekcje menu wg planu Finora §4 — tylko trasy, które istnieją. Trasy
  * z kolejnych etapów (bank) dochodzą razem ze stronami; analizy doszły
- * w E7. Faktury cykliczne (E9) i przypomnienia są od 21.10.2026 zakładkami
+ * w E7 (od 21.10.2026 jedna pozycja „Analizy” z przełącznikiem „Sprzedaż |
+ * Koszty”). Faktury cykliczne (E9) i przypomnienia są od 21.10.2026 zakładkami
  * ekranu „Faktury” (`INVOICES_TABS`), Wydatki i Skrzynka KSeF — zakładkami
  * ekranu „Koszty” (`COSTS_TABS`), a KPiR i Eksport — zakładkami ekranu
  * „Księgowość” (`KSIEGOWOSC_TABS`), nie osobnymi pozycjami. ⌘K znajduje je
- * przez `PALETTE_EXTRA_NAV` w `lib/command-palette.ts`.
+ * przez `PALETTE_EXTRA_NAV` w `lib/command-palette.ts` (tam też obie analizy).
  */
 export const dashboardNavSections: DashboardNavSection[] = [
   {
@@ -66,18 +66,15 @@ export const dashboardNavSections: DashboardNavSection[] = [
   },
   {
     // Plan Finora E7 (P10, P11): ciężkie agregaty — bez prefetchu (§4).
+    // Jedna pozycja (poprawka Bartosza 21.10.2026: Analizy 1:1 z Finory):
+    // analiza sprzedaży (/analizy/sprzedaz) i kosztów (/analizy/koszty) to
+    // dwie strony przełączane w nagłówku „Sprzedaż | Koszty”.
     title: "Analizy",
     items: [
       {
         href: "/analizy/sprzedaz",
-        label: "Analiza sprzedaży",
-        icon: RiLineChartLine,
-        prefetch: false,
-      },
-      {
-        href: "/analizy/koszty",
-        label: "Analiza kosztów",
-        icon: RiPieChart2Line,
+        label: "Analizy",
+        icon: RiBarChart2Line,
         prefetch: false,
       },
     ],
@@ -190,6 +187,16 @@ export function isActiveNavPath(pathname: string, href: string): boolean {
       pathname.startsWith("/expenses/") ||
       pathname === "/inbox" ||
       pathname.startsWith("/inbox/")
+    );
+  }
+  // „Analizy” to dwie strony przełączane w nagłówku: sprzedaż (/analizy/sprzedaz*)
+  // i koszty (/analizy/koszty*). /analizy/sprzedazx i /analizy/kosztyx — nie.
+  if (href === "/analizy/sprzedaz") {
+    return (
+      pathname === "/analizy/sprzedaz" ||
+      pathname.startsWith("/analizy/sprzedaz/") ||
+      pathname === "/analizy/koszty" ||
+      pathname.startsWith("/analizy/koszty/")
     );
   }
   // „Księgowość" to zakładki KPiR (/reports/kpir*) i Eksport (/reports/exports*).

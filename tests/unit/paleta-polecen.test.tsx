@@ -112,6 +112,29 @@ describe('buildPaletteNavEntries — zakładki Księgowości (poprawka 21.10.202
   });
 });
 
+describe('buildPaletteNavEntries — obie analizy (Analizy 1:1 z Finory, 21.10.2026)', () => {
+  // Świadoma zmiana: Analizy 1:1 z Finory (21.10.2026) — w menu jedna pozycja
+  // „Analizy” (/analizy/sprzedaz), analiza kosztów jest za przełącznikiem
+  // w nagłówku; ⌘K dalej prowadzi do każdej analizy wprost.
+  it('„Analizy” są w menu, a „Analiza sprzedaży” i „Analiza kosztów” w ⌘K', () => {
+    const entries = buildPaletteNavEntries().filter((e) => e.group === 'Przejdź do');
+    const menu = entries.find((e) => e.label === 'Analizy');
+    expect(menu?.href).toBe('/analizy/sprzedaz');
+    const sprzedaz = entries.find((e) => e.label === 'Analiza sprzedaży');
+    expect(sprzedaz?.href).toBe('/analizy/sprzedaz');
+    expect(sprzedaz?.keywords).toEqual(
+      expect.arrayContaining(['Analizy', 'Sprzedaż', 'przychody', 'produkty', 'należności', 'stali klienci', 'wykresy']),
+    );
+    const koszty = entries.find((e) => e.href === '/analizy/koszty');
+    expect(koszty?.label).toBe('Analiza kosztów');
+    expect(koszty?.keywords).toEqual(
+      expect.arrayContaining(['Analizy', 'Koszty', 'wydatki', 'kategorie', 'VAT', 'stałe koszty', 'wykresy']),
+    );
+    // Ten sam adres co pozycja menu „Analizy”, ale inna etykieta — inna wartość cmdk.
+    expect(sprzedaz?.value).not.toBe(menu?.value);
+  });
+});
+
 describe('buildPaletteNavEntries — unikalne wartości cmdk', () => {
   it('„Wystaw fakturę” jest i w menu, i w akcjach, a wartości (value) się nie powtarzają', () => {
     const entries = buildPaletteNavEntries();
