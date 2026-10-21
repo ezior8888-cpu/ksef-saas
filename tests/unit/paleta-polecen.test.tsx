@@ -95,6 +95,23 @@ describe('buildPaletteNavEntries — zakładki Kosztów (poprawka 21.10.2026)', 
   });
 });
 
+describe('buildPaletteNavEntries — zakładki Księgowości (poprawka 21.10.2026)', () => {
+  // KPiR i Eksport wyszły z menu (są zakładkami ekranu „Księgowość”), ale ⌘K
+  // dalej prowadzi do każdej wprost — także po słowie „Księgowość” i „JPK”.
+  it('„Księgowość” jest w menu, a „KPiR” i „Eksport” w ⌘K ze starymi nazwami', () => {
+    const entries = buildPaletteNavEntries().filter((e) => e.group === 'Przejdź do');
+    expect(entries.find((e) => e.label === 'Księgowość')?.href).toBe('/reports/kpir');
+    const kpir = entries.find((e) => e.label === 'KPiR');
+    expect(kpir?.href).toBe('/reports/kpir');
+    expect(kpir?.keywords).toEqual(expect.arrayContaining(['Księgowość', 'książka przychodów i rozchodów', 'PIT']));
+    const eksport = entries.find((e) => e.href === '/reports/exports');
+    expect(eksport?.label).toBe('Eksport');
+    expect(eksport?.keywords).toEqual(expect.arrayContaining(['Księgowość', 'JPK', 'CSV', 'plik dla księgowej']));
+    // Ten sam adres co pozycja menu „Księgowość”, ale inna etykieta — inna wartość cmdk.
+    expect(kpir?.value).not.toBe(entries.find((e) => e.label === 'Księgowość')?.value);
+  });
+});
+
 describe('buildPaletteNavEntries — unikalne wartości cmdk', () => {
   it('„Wystaw fakturę” jest i w menu, i w akcjach, a wartości (value) się nie powtarzają', () => {
     const entries = buildPaletteNavEntries();

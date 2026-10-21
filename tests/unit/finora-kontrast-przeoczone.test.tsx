@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { JSDOM } from 'jsdom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -10,7 +11,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 import TotalVisitorsCard from '@/components/dashboard/finora/chart-total-visitors';
-import { KpirView, type KpirInvoiceRow } from '@/components/expenses/kpir-view';
+import { KpirView, type KpirExpenseRow, type KpirInvoiceRow } from '@/components/expenses/kpir-view';
 import SettingsNav from '@/components/settings/finora/settings-nav';
 
 import { color, contrast, oklch, over, rowBackgrounds, themes, type Rgb, type Theme } from './helpers/kontrast';
@@ -27,6 +28,12 @@ function escapeRegExp(text: string): string {
  * (primary/15 i /25), aktywna zakładka ustawień w ciemnym motywie
  * (primary/20, hover /30), plakietka „Przychód” w KPiR (chart-2/10) i opis
  * zaznaczonego formatu w ustawieniach eksportu (muted-foreground na primary/10).
+ *
+ * Poprawka Bartosza 21.10.2026 (przeprojektowanie Księgowości): plakietka
+ * przychodu w KPiR jest zielona (`bg-green-600/10`, tekst -800 / -300) —
+ * w jasnym motywie `primary` = `chart-2`, więc chart-2/10 nie odróżniał
+ * przychodu od kosztu (`bg-primary/10`). Doszła bursztynowa plakietka kosztu
+ * poza sumą („Bez kolumny” / „Poza sumą”).
  */
 
 /** Klasy elementu, którego `class` zawiera wszystkie `needles`. */
@@ -36,6 +43,21 @@ function classOf(html: string, ...needles: string[]): string {
     .find((c) => needles.every((n) => c.split(/\s+/).includes(n)));
   expect(cls, `brak elementu z ${needles.join(' ')}`).toBeDefined();
   return cls!;
+}
+
+/**
+ * Klasy KAŻDEJ plakietki (Badge) z danym tekstem. Pierwszy element z `bg-green-600/10`
+ * to plakietka „Marża” karty wyniku, nie plakietka kolumny — test sprawdzał więc
+ * nie to, co obiecuje (weryfikacja 21.10.2026: mutacja `'7': 'bg-chart-2/10 text-chart-2'`
+ * przechodziła na zielono).
+ */
+function badgeClassesByText(html: string, text: string): string[] {
+  const doc = new JSDOM(html).window.document;
+  const classes = [...doc.querySelectorAll('[class~="group/badge"]')]
+    .filter((el) => el.textContent?.trim() === text)
+    .map((el) => el.getAttribute('class') ?? '');
+  expect(classes.length, `brak plakietki „${text}”`).toBeGreaterThan(0);
+  return classes;
 }
 
 /** Kolor (`text-x` / `bg-x/NN`) dla wariantu (`''`, `dark:`, `hover:`, `dark:hover:`); `null`, gdy brak. */
@@ -82,16 +104,38 @@ describe('kontrast tekstu na tle primary/chart-2 (przeoczone)', () => {
     expect(ratio(cls, themes.jasny, ['hover:', ''], oklch(themes.jasny['--background']))).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('KPiR: plakietka „Przychód” (chart-2/10) na karcie i w wierszach tabeli', () => {
+  it('KPiR: plakietka przychodu „7 · Sprzedaż” (green-600/10) na karcie i w wierszach tabeli', () => {
     const faktura = {
       id: 'inv', internal_number: 'FV/1/09/2026', issue_date: '2026-09-03', sale_date: '2026-09-03',
       gross_total: 1230, net_total: 1000, buyer_data: { name: 'Klient' }, invoice_kind: 'regular',
     } as KpirInvoiceRow;
-    const cls = classOf(renderToStaticMarkup(<KpirView month={9} year={2026} invoices={[faktura]} expenses={[]} />), 'bg-chart-2/10');
-    for (const [name, variants] of [['jasny', ['']], ['ciemny', ['dark:', '']]] as const) {
-      const t = themes[name];
-      for (const base of [oklch(t['--card']), ...Object.values(rowBackgrounds(t))]) {
-        expect(ratio(cls, t, [...variants], base), name).toBeGreaterThanOrEqual(4.5);
+    const html = renderToStaticMarkup(<KpirView month={9} year={2026} invoices={[faktura]} expenses={[]} />);
+    // Każda plakietka kolumny (tabela i karta telefonu), nie pierwsza zielona na stronie.
+    for (const cls of badgeClassesByText(html, '7 · Sprzedaż')) {
+      expect(cls).toContain('text-green-800');
+      for (const [name, variants] of [['jasny', ['']], ['ciemny', ['dark:', '']]] as const) {
+        const t = themes[name];
+        for (const base of [oklch(t['--card']), ...Object.values(rowBackgrounds(t))]) {
+          expect(ratio(cls, t, [...variants], base), name).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  it('KPiR: plakietka kosztu poza sumą „Bez kolumny” (amber-500/15) na karcie i w wierszach tabeli', () => {
+    const wydatek = {
+      id: 'exp', issue_date: '2026-09-03', seller_name: 'Dostawca', seller_nip: '1234567890', document_number: 'ZAK/7',
+      category_label: 'Paliwo', kpir_column: null, is_deductible: true, net_amount: 100, vat_amount: 23,
+      gross_amount: 123, vat_deductible_amount: 23, document_type: 'invoice',
+    } as KpirExpenseRow;
+    const html = renderToStaticMarkup(<KpirView month={9} year={2026} invoices={[]} expenses={[wydatek]} />);
+    for (const cls of badgeClassesByText(html, 'Bez kolumny')) {
+      expect(cls).toContain('bg-amber-500/15');
+      for (const [name, variants] of [['jasny', ['']], ['ciemny', ['dark:', '']]] as const) {
+        const t = themes[name];
+        for (const base of [oklch(t['--card']), ...Object.values(rowBackgrounds(t))]) {
+          expect(ratio(cls, t, [...variants], base), name).toBeGreaterThanOrEqual(4.5);
+        }
       }
     }
   });

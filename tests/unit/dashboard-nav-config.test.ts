@@ -47,7 +47,9 @@ describe('isActiveNavPath (plan Finora §4)', () => {
     expect(isActiveNavPath('/reports/kpir', '/reports/kpir')).toBe(true);
     expect(isActiveNavPath('/reports/kpir/2026', '/reports/kpir')).toBe(true);
     expect(isActiveNavPath('/reports/kpirx', '/reports/kpir')).toBe(false);
-    expect(isActiveNavPath('/reports/exports', '/reports/kpir')).toBe(false);
+    // Poprawka Bartosza 21.10.2026 (przeprojektowanie Księgowości): Eksport to
+    // zakładka ekranu „Księgowość” (pozycja /reports/kpir) — świadomie true.
+    expect(isActiveNavPath('/reports/exports', '/reports/kpir')).toBe(true);
     expect(isActiveNavPath('/settings/ksef', '/settings')).toBe(true);
     expect(isActiveNavPath('/settingsx', '/settings')).toBe(false);
     expect(isActiveNavPath('/expenses/abc', '/expenses')).toBe(true);
@@ -73,6 +75,28 @@ describe('zakładki ekranu Kosztów (poprawka 21.10.2026)', () => {
   it('w menu nie ma osobnej pozycji Skrzynki KSeF, a zakładka ma prefetch', () => {
     expect(dashboardNavItems.map((i) => i.href)).not.toContain('/inbox');
     expect(getDashboardPrefetchHrefs()).toEqual(expect.arrayContaining(['/expenses', '/inbox']));
+  });
+});
+
+describe('zakładki ekranu Księgowości (poprawka 21.10.2026)', () => {
+  // KPiR i Eksport to zakładki ekranu „Księgowość” (pozycja /reports/kpir) —
+  // w menu świeci „Księgowość” na obu zakładkach i ich podstronach.
+  it('„Księgowość” jest aktywna dla /reports/kpir* i /reports/exports*, ale nie dla /reports/exportsx ani /reports', () => {
+    for (const p of ['/reports/kpir', '/reports/kpir/2026', '/reports/exports', '/reports/exports/x']) {
+      expect(isActiveNavPath(p, '/reports/kpir'), p).toBe(true);
+    }
+    for (const p of ['/reports/exportsx', '/reports/kpirx', '/reports', '/import-danych']) {
+      expect(isActiveNavPath(p, '/reports/kpir'), p).toBe(false);
+    }
+    // Import danych nie świeci na zakładkach Księgowości.
+    expect(isActiveNavPath('/reports/exports', '/import-danych')).toBe(false);
+  });
+
+  it('w menu nie ma osobnej pozycji Eksportu, a zakładka ma prefetch', () => {
+    const hrefs = dashboardNavItems.map((i) => i.href);
+    expect(hrefs).not.toContain('/reports/exports');
+    expect(hrefs.filter((h) => h === '/reports/kpir')).toHaveLength(1);
+    expect(getDashboardPrefetchHrefs()).toEqual(expect.arrayContaining(['/reports/kpir', '/reports/exports']));
   });
 });
 
@@ -143,9 +167,11 @@ describe('struktura menu (plan Finora §4)', () => {
       },
       {
         title: 'Księgowość',
+        // Poprawka 21.10.2026 (przeprojektowanie Księgowości): KPiR i Eksport są
+        // zakładkami ekranu „Księgowość” — świadoma zmiana struktury menu
+        // (Księgowość: 3 → 2 pozycje).
         items: [
-          ['KPiR', '/reports/kpir'],
-          ['Eksport', '/reports/exports'],
+          ['Księgowość', '/reports/kpir'],
           ['Import danych', '/import-danych'],
         ],
       },

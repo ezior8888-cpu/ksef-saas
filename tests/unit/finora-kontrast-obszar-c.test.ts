@@ -17,6 +17,17 @@ const FILES = [
   'components/exports/exports-center.tsx',
   'components/exports/co-pilot-settings-form.tsx',
   'app/(dashboard)/import-danych/page.tsx',
+  // Poprawka Bartosza 21.10.2026 (przeprojektowanie Księgowości): nowe pliki
+  // ekranów KPiR i Eksport (plakietki przychodu i ostrzeżeń, notka „poza sumą”).
+  'components/reports/ksiegowosc-tabs.tsx',
+  'components/reports/segmented-control.tsx',
+  'components/reports/kpir/kpir-toolbar.tsx',
+  'components/reports/kpir/kpir-result-card.tsx',
+  'components/reports/kpir/kpir-cost-structure-card.tsx',
+  'components/reports/kpir/kpir-blocked.tsx',
+  'app/(dashboard)/reports/kpir/error.tsx',
+  'components/exports/new-export-form.tsx',
+  'components/exports/export-history.tsx',
 ];
 
 const LIGHT_TOO_PALE = /(?<![\w:-])text-(green|amber)-600\b/g;

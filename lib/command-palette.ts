@@ -1,6 +1,8 @@
 import {
   RiAddLine,
   RiAlarmWarningLine,
+  RiBook2Line,
+  RiDownload2Line,
   RiFileAddLine,
   RiInboxArchiveLine,
   RiReceiptLine,
@@ -29,8 +31,10 @@ export const PALETTE_NAV_GROUP = 'Przejdź do';
 export const PALETTE_ACTIONS_GROUP = 'Akcje';
 
 /**
- * Zakładki ekranów Faktur i Kosztów, które do 21.10.2026 były pozycjami menu —
- * paleta dalej prowadzi do nich wprost (stare nazwy jako słowa kluczowe).
+ * Zakładki ekranów Faktur, Kosztów i Księgowości, które do 21.10.2026 były
+ * pozycjami menu — paleta dalej prowadzi do nich wprost (stare nazwy jako słowa
+ * kluczowe). „KPiR” ma inną etykietę niż pozycja menu „Księgowość” (ten sam
+ * adres), więc wartości cmdk (`grupa:etykieta`) się nie powtarzają.
  */
 const PALETTE_EXTRA_NAV: readonly { label: string; href: string; icon: RemixiconComponentType; keywords: string[] }[] = [
   {
@@ -57,12 +61,24 @@ const PALETTE_EXTRA_NAV: readonly { label: string; href: string; icon: Remixicon
     icon: RiInboxArchiveLine,
     keywords: ['Skrzynka KSeF', 'Koszty', 'KSeF', 'faktury zakupowe', 'faktury kosztowe', 'przychodzące'],
   },
+  {
+    label: 'KPiR',
+    href: '/reports/kpir',
+    icon: RiBook2Line,
+    keywords: ['KPiR', 'Księgowość', 'książka przychodów i rozchodów', 'księga', 'dochód', 'PIT'],
+  },
+  {
+    label: 'Eksport',
+    href: '/reports/exports',
+    icon: RiDownload2Line,
+    keywords: ['Eksport', 'Księgowość', 'JPK', 'JPK_FA', 'CSV', 'Excel', 'plik dla księgowej'],
+  },
 ];
 
 export const MIN_SEARCH_LENGTH = 2;
 export const MAX_SEARCH_LENGTH = 80;
 
-/** Pozycje menu + zakładki Faktur i Kosztów + ustawienia + dwie akcje. Czysta funkcja — bez dostępu do DOM. */
+/** Pozycje menu + zakładki Faktur, Kosztów i Księgowości + ustawienia + dwie akcje. Czysta funkcja — bez dostępu do DOM. */
 export function buildPaletteNavEntries(): PaletteEntry[] {
   const nav: PaletteEntry[] = dashboardNavSections.flatMap((section) =>
     section.items.map((item) => ({

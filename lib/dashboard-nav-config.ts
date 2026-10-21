@@ -3,7 +3,6 @@ import {
   RiBook2Line,
   RiContactsBook3Line,
   RiDashboardLine,
-  RiDownload2Line,
   RiExchangeFundsLine,
   RiFileAddLine,
   RiFileList3Line,
@@ -36,8 +35,9 @@ export interface DashboardNavSection {
  * Sekcje menu wg planu Finora §4 — tylko trasy, które istnieją. Trasy
  * z kolejnych etapów (bank) dochodzą razem ze stronami; analizy doszły
  * w E7. Faktury cykliczne (E9) i przypomnienia są od 21.10.2026 zakładkami
- * ekranu „Faktury” (`INVOICES_TABS`), a Wydatki i Skrzynka KSeF — zakładkami
- * ekranu „Koszty” (`COSTS_TABS`), nie osobnymi pozycjami. ⌘K znajduje je
+ * ekranu „Faktury” (`INVOICES_TABS`), Wydatki i Skrzynka KSeF — zakładkami
+ * ekranu „Koszty” (`COSTS_TABS`), a KPiR i Eksport — zakładkami ekranu
+ * „Księgowość” (`KSIEGOWOSC_TABS`), nie osobnymi pozycjami. ⌘K znajduje je
  * przez `PALETTE_EXTRA_NAV` w `lib/command-palette.ts`.
  */
 export const dashboardNavSections: DashboardNavSection[] = [
@@ -84,9 +84,12 @@ export const dashboardNavSections: DashboardNavSection[] = [
   },
   {
     title: "Księgowość",
+    // Jedna pozycja zamiast dwóch (poprawka Bartosza 21.10.2026:
+    // przeprojektowanie Księgowości): KPiR (/reports/kpir) i Eksport
+    // (/reports/exports) to zakładki ekranu „Księgowość”. Import danych
+    // zostaje osobno — to inny ekran, bez tych zakładek.
     items: [
-      { href: "/reports/kpir", label: "KPiR", icon: RiBook2Line },
-      { href: "/reports/exports", label: "Eksport", icon: RiDownload2Line },
+      { href: "/reports/kpir", label: "Księgowość", icon: RiBook2Line },
       { href: "/import-danych", label: "Import danych", icon: RiUpload2Line },
     ],
   },
@@ -189,21 +192,32 @@ export function isActiveNavPath(pathname: string, href: string): boolean {
       pathname.startsWith("/inbox/")
     );
   }
-  // /invoices/new, /reports/kpir, /settings i reszta: sam adres albo podstrona.
+  // „Księgowość" to zakładki KPiR (/reports/kpir*) i Eksport (/reports/exports*).
+  // Sam /reports (przekierowanie na Pulpit) i /reports/exportsx — nie.
+  if (href === "/reports/kpir") {
+    return (
+      pathname === "/reports/kpir" ||
+      pathname.startsWith("/reports/kpir/") ||
+      pathname === "/reports/exports" ||
+      pathname.startsWith("/reports/exports/")
+    );
+  }
+  // /invoices/new, /settings i reszta: sam adres albo podstrona.
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 const EXTRA_PREFETCH_HREFS = [
   "/settings",
   "/invoices/new",
-  // Zakładki ekranów Faktur i Kosztów — przełączenie ma być tak szybkie jak
-  // pozycja menu.
+  // Zakładki ekranów Faktur, Kosztów i Księgowości — przełączenie ma być tak
+  // szybkie jak pozycja menu.
   "/invoices/recurring",
   "/payments/overdue",
   "/inbox",
+  "/reports/exports",
 ] as const;
 
-/** Trasy do `router.prefetch` — pozycje menu + CTA + ustawienia + zakładki Faktur i Kosztów. */
+/** Trasy do `router.prefetch` — pozycje menu + CTA + ustawienia + zakładki Faktur, Kosztów i Księgowości. */
 export function getDashboardPrefetchHrefs(): string[] {
   const set = new Set<string>(
     dashboardNavItems
