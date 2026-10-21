@@ -29,7 +29,7 @@ vi.mock('@/components/settings/cash-method-form', () => ({ CashMethodForm: () =>
 vi.mock('@/components/settings/company-profile-form', () => ({ CompanyProfileForm: () => null }));
 
 import LoginPage from '@/app/(auth)/login/page';
-import SettingsPage from '@/app/(dashboard)/settings/page';
+import { settingsTabsForRole } from '@/components/settings/finora/settings-tabs';
 import { requestAccountDeletionAction } from '@/components/settings/account-actions';
 import { SUPPORT_EMAIL } from '@/lib/site';
 
@@ -111,26 +111,19 @@ describe('usuwanie firmy wstrzymane do czasu prawdziwego mechanizmu', () => {
     expect(html).not.toContain('żądanie usunięcia firmy');
   });
 
-  // Komunikat odmowy kieruje do „Ustawienia → Konto i firma” (sekcja RODO,
-  // jedyne prawdziwe usunięcie konta). Do 15.10 do `/settings/account` nie
-  // prowadził żaden link — wskazówka byłaby drogą donikąd.
-  it.each(['member', 'owner'] as const)('ustawienia (%s) linkują do „Konto i firma”', async (role) => {
-    mocks.getPageContext.mockResolvedValue({
-      supabase: {
-        from: () => ({
-          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { name: 'Fixture', nip: TENANT_NIP, address_json: null }, error: null }) }) }),
-        }),
-        auth: { getUser: async () => ({ data: { user: { created_at: '2026-01-01T00:00:00Z' } }, error: null }) },
-      },
-      user: { id: '00000000-0000-4000-8000-000000000002', email: 'owner@example.test' },
-      tenantId: '00000000-0000-4000-8000-000000000001',
-      role,
-    });
+  // Komunikat odmowy kieruje do „Ustawienia → Konto i dane (RODO)” (sekcja
+  // RODO, jedyne prawdziwe usunięcie konta). Do 15.10 do `/settings/account`
+  // nie prowadził żaden link — wskazówka byłaby drogą donikąd. Od planu
+  // Finora (P14) nawigacja ustawień to zakładki liczone z roli w layoucie,
+  // nie kafelki na stronie `/settings` — sprawdzamy zakładki.
+  it.each(['member', 'admin', 'owner', 'accountant'] as const)(
+    'zakładki ustawień (%s) prowadzą do „Konto i dane (RODO)”, a komunikat odmowy podaje tę nazwę',
+    async (role) => {
+      const tab = settingsTabsForRole(role).find((t) => t.href === '/settings/account');
+      expect(tab?.label).toBe('Konto i dane (RODO)');
 
-    const html = renderToStaticMarkup(await SettingsPage());
-
-    expect(html).toContain('Ustawienia');
-    expect(html).toContain('href="/settings/account"');
-    expect(html).toContain('Konto i firma');
-  });
+      const result = await requestAccountDeletionAction();
+      expect(result.error).toContain(`Ustawienia → ${tab?.label}`);
+    },
+  );
 });

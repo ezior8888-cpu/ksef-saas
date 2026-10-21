@@ -246,7 +246,7 @@ export const REGULAMIN: LegalDocument = {
         // Usunięcia Organizacji nie ma w Serwisie jako samoobsługi (od
         // 15.10.2026 przycisk kieruje do pomocy technicznej) — wypowiedzenie
         // i zlecenie usunięcia idą e-mailem.
-        `Klient może w każdej chwili wypowiedzieć Subskrypcję w Serwisie (Ustawienia → Subskrypcja i rozliczenia) — ze skutkiem na koniec bieżącego Okresu rozliczeniowego — oraz wypowiedzieć Umowę oświadczeniem wysłanym e-mailem na adres ${E.email}, w tym zlecając usunięcie Organizacji. Usługodawca może poprosić o potwierdzenie, że oświadczenie pochodzi od Klienta (np. z adresu e-mail Konta właściciela Organizacji). Usunięcie Konta Użytkownika nie rozwiązuje Umowy z Klientem: dane Organizacji pozostają do dyspozycji Klienta i innych Użytkowników z dostępem.`,
+        `Klient może w każdej chwili wypowiedzieć Subskrypcję w Serwisie (Ustawienia → Abonament) — ze skutkiem na koniec bieżącego Okresu rozliczeniowego — oraz wypowiedzieć Umowę oświadczeniem wysłanym e-mailem na adres ${E.email}, w tym zlecając usunięcie Organizacji. Usługodawca może poprosić o potwierdzenie, że oświadczenie pochodzi od Klienta (np. z adresu e-mail Konta właściciela Organizacji). Usunięcie Konta Użytkownika nie rozwiązuje Umowy z Klientem: dane Organizacji pozostają do dyspozycji Klienta i innych Użytkowników z dostępem.`,
         li(
           'Usługodawca może wypowiedzieć Umowę z zachowaniem 30-dniowego okresu wypowiedzenia wyłącznie z ważnych przyczyn, którymi są:',
           'zaprzestanie świadczenia Usług lub ich istotnej części dla wszystkich klientów;',

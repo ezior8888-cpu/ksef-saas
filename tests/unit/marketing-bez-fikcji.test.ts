@@ -55,7 +55,9 @@ const FORBIDDEN: Array<[file: string, phrases: string[]]> = [
   ['app/(landing)/_components/hero.tsx', ['asset.hero.dashboard']],
   ['app/(landing)/about/page.tsx', ['asset.about.gallery', 'asset.about.founder', 'asset.hero.dashboard', 'bez podawania karty']],
   ['app/(landing)/_assets.ts', ['licencja darmowa', 'logo: `${IMG}/oKmGzYlWFu13ruJRasum68wrh5Y.png`']],
-  ['components/auth/auth-page-shell.tsx', ['oKmGzYlWFu13ruJRasum68wrh5Y']],
+  // Ekrany logowania od planu Finora (E10b): auth-page-shell usunięty, znak
+  // marki rysuje components/auth/finora/auth-logo.tsx.
+  ['components/auth/finora/auth-logo.tsx', ['oKmGzYlWFu13ruJRasum68wrh5Y']],
   ['app/(landing)/_components/faq.tsx', ['dziesięć lat']],
   ['app/(landing)/_components/features-strip.tsx', ['i księgujemy']],
   ['app/(dashboard)/settings/billing/_components/plan-cards.tsx', ['PWA mobilna']],

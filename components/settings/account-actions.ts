@@ -9,7 +9,7 @@ const DELETION_BY_SUPPORT_MESSAGE =
   'Usunięcia firmy nie zlecisz na razie z aplikacji — nic nie zostało usunięte, ' +
   'a firma i abonament działają bez zmian. ' +
   `Napisz na ${SUPPORT_EMAIL} z adresu właściciela i podaj NIP firmy. ` +
-  'Swoje konto użytkownika usuniesz w Ustawienia → Konto i firma, w sekcji „Twoje dane (RODO)”.';
+  'Swoje konto użytkownika usuniesz w Ustawienia → Konto i dane (RODO), w sekcji „Twoje dane (RODO)”.';
 
 /**
  * Usunięcie firmy (organizacji) — samoobsługa wstrzymana 15.10.2026.

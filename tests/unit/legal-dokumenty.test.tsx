@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -168,6 +168,32 @@ describe('treść odpowiada rzeczywistości', () => {
     if (doc !== POLITYKA_COOKIES) expect(t).toContain('FaktWay');
     expect(t).not.toContain('FaktFlow');
     expect(t.replace(/@faktflow\.pl/g, '')).not.toMatch(/faktflow\.pl/i);
+  });
+
+  // Zakładki ustawień zmieniły nazwy z planem Finora (20.10.2026: „Subskrypcja
+  // i rozliczenia” → „Abonament”, „Konto i firma” → „Konto i dane (RODO)”).
+  // Dokument, pomoc albo komunikat, który odsyła do nieistniejącej zakładki,
+  // zostawia klienta bez drogi (np. do anulowania abonamentu).
+  it('każde „Ustawienia → X” w dokumentach, pomocy i komunikatach to istniejąca zakładka', () => {
+    const tabs = [...readFileSync('components/settings/finora/settings-tabs.ts', 'utf8').matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
+    expect(tabs.length).toBeGreaterThan(5);
+    const sources: Array<[string, string]> = [
+      ...ALL_DOCS.map((d) => [d.slug, text(d)] as [string, string]),
+      ...readdirSync('content/help').map((f) => [`content/help/${f}`, readFileSync(`content/help/${f}`, 'utf8')] as [string, string]),
+      ...['components/settings/delete-account.tsx', 'components/settings/account-actions.ts', 'app/(dashboard)/settings/account/page.tsx'].map(
+        (f) => [f, readFileSync(f, 'utf8')] as [string, string],
+      ),
+    ];
+    const wrong: string[] = [];
+    for (const [name, src] of sources) {
+      const flat = src.replace(/\s+/g, ' ');
+      for (const m of flat.matchAll(/Ustawienia → /g)) {
+        const rest = flat.slice(m.index + m[0].length);
+        // Bez rozróżniania wielkości liter: „Flo” i zakładka „FLO” to to samo miejsce.
+        if (!tabs.some((t) => rest.toLowerCase().startsWith(t.toLowerCase()))) wrong.push(`${name}: „Ustawienia → ${rest.slice(0, 30)}…”`);
+      }
+    }
+    expect(wrong).toEqual([]);
   });
 
   it('strona RODO: bez nieaktualnych obietnic (treść widoczna dla klienta)', async () => {

@@ -13,13 +13,15 @@
 
 /**
  * Regulamin + umowa powierzenia są akceptowane razem — jedna wersja.
- * 2026-10-20: zmiana nazwy na FaktWay (faktway.pl). Wersja 2026-10-15 nigdy
- * nie była pokazana klientom (pakiet prawny nie był wdrożony), więc nie ma
- * zapisów zgód, które by się do niej odwoływały — zastąpiona, nie dopisana.
+ * 2026-10-20: zmiana nazwy na FaktWay (faktway.pl); 2026-10-21: nazwy
+ * zakładek ustawień z planu Finora (§ 14 ust. 2: „Ustawienia → Abonament”).
+ * Wcześniejsze wersje nigdy nie były pokazane klientom (pakiet prawny nie był
+ * wdrożony), więc nie ma zapisów zgód, które by się do nich odwoływały —
+ * zastąpione, nie dopisane.
  */
-export const CONTRACT_VERSION = '2026-10-20';
-export const PRIVACY_POLICY_VERSION = '2026-10-20';
-export const COOKIE_POLICY_VERSION = '2026-10-20';
+export const CONTRACT_VERSION = '2026-10-21';
+export const PRIVACY_POLICY_VERSION = '2026-10-21';
+export const COOKIE_POLICY_VERSION = '2026-10-21';
 
 /**
  * Oświadczenie przy rejestracji / w bramce (obowiązkowe). Znaczniki linków
@@ -27,7 +29,7 @@ export const COOKIE_POLICY_VERSION = '2026-10-20';
  * (components/legal/legal-document.tsx, `LegalInline`).
  */
 export const TERMS_STATEMENT = {
-  version: '2026-10-20',
+  version: '2026-10-21',
   text:
     'Akceptuję [Regulamin](/legal/regulamin) FaktWay i [Umowę powierzenia przetwarzania danych osobowych](/legal/umowa-powierzenia) ' +
     'oraz potwierdzam, że zapoznałem(-am) się z [Polityką prywatności](/legal/polityka-prywatnosci).',
@@ -38,7 +40,7 @@ export const TERMS_STATEMENT = {
  * komunikacji elektronicznej + art. 6 ust. 1 lit. a RODO).
  */
 export const MARKETING_STATEMENT = {
-  version: '2026-10-20',
+  version: '2026-10-21',
   text:
     'Chcę otrzymywać e-mailem od FaktWay porady dotyczące korzystania z serwisu, ' +
     'informacje o nowościach i oferty. Zgodę mogę wycofać w każdej chwili ' +
@@ -52,7 +54,7 @@ export const MARKETING_STATEMENT = {
  * bez znaczenia, więc zaznacza je każdy.
  */
 export const CHECKOUT_STATEMENT = {
-  version: '2026-10-20',
+  version: '2026-10-21',
   text:
     'Zamawiam subskrypcję z obowiązkiem zapłaty po okresie próbnym i akceptuję [Regulamin](/legal/regulamin). ' +
     'Jeśli zawieram umowę jako konsument lub przedsiębiorca na prawach konsumenta: żądam ' +
