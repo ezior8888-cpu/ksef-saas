@@ -21,6 +21,8 @@ import {
 } from '@remixicon/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { tekstBezZnacznikow } from './helpers/tekst-html';
+
 vi.mock('next/navigation', () => ({
   usePathname: () => '/analizy/koszty',
   useRouter: () => ({ prefetch: () => {}, push: () => {}, refresh: () => {}, replace: () => {} }),
@@ -450,7 +452,7 @@ describe('RecentExpensesFeed', () => {
     // Separator z zachowanymi spacjami — w flexie spacja na brzegu fragmentu by zniknęła.
     expect(body).toContain('<span class="shrink-0 whitespace-pre" aria-hidden="true"> · </span>');
     // Czytnik słyszy całość w kolejności (separatory pomija, fragmenty czyta po kolei).
-    expect(body.replace(/<span class="shrink-0 whitespace-pre" aria-hidden="true"> · <\/span>/g, ' · ').replace(/<[^>]+>/g, '')).toBe(subtitle);
+    expect(tekstBezZnacznikow(body.replace(/<span class="shrink-0 whitespace-pre" aria-hidden="true"> · <\/span>/g, ' · '))).toBe(subtitle);
   });
 
   it('pusto: akapit py-6 z akcją z §7.3', () => {

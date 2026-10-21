@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { act, type ReactNode } from 'react';
@@ -230,11 +230,13 @@ describe('baner „Organizacja niezweryfikowana” usunięty', () => {
 
   it('żaden ekran nie pokazuje tekstu „Organizacja niezweryfikowana”', () => {
     const hits: string[] = [];
+    // Typ wpisu z `readdirSync({ withFileTypes })`, bez osobnego `statSync` przed
+    // odczytem — CodeQL (js/file-system-race) odrzuca sprawdzenie i odczyt rozdzielone w czasie.
     const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        const path = join(dir, name);
-        if (statSync(path).isDirectory()) walk(path);
-        else if (/\.(tsx?|mdx)$/.test(name) && /Organizacja niezweryfikowana/.test(readFileSync(path, 'utf8'))) hits.push(path);
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (/\.(tsx?|mdx)$/.test(entry.name) && /Organizacja niezweryfikowana/.test(readFileSync(path, 'utf8'))) hits.push(path);
       }
     };
     for (const dir of ['app', 'components', 'content']) walk(join(ROOT, dir));
