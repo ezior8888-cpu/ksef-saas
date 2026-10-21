@@ -7,7 +7,8 @@
  * Moduł bez importów — parsowanie i budowa filtrów są czystymi funkcjami.
  */
 
-export const INVOICE_PAGE_SIZE = 50;
+// Jak w Finorze (`pageSize = 10`, wybór 5 / 10 / 25 / 50) — poprawka Bartosza 21.10.2026.
+export const INVOICE_PAGE_SIZE = 10;
 
 /** Maksymalna długość frazy wyszukiwania (dłuższa i tak nic nie znajdzie). */
 const MAX_QUERY_LENGTH = 80;
@@ -47,7 +48,7 @@ export const INVOICE_KIND_FILTERS = {
 export type InvoiceKindFilter = keyof typeof INVOICE_KIND_FILTERS;
 
 /** „Pokaż 10” — parametr `na_stronie`; domyślnie 50, żeby stare linki działały. */
-export const INVOICE_PAGE_SIZES = [10, 25, INVOICE_PAGE_SIZE] as const;
+export const INVOICE_PAGE_SIZES = [5, INVOICE_PAGE_SIZE, 25, 50] as const;
 
 export type InvoicePageSize = (typeof INVOICE_PAGE_SIZES)[number];
 

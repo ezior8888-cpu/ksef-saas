@@ -30,6 +30,11 @@ interface Props {
   selectedIds: ReadonlySet<string>;
   onToggleRow: (id: string, checked: boolean) => void;
   onToggleAll: (checked: boolean) => void;
+  /**
+   * Ile wierszy ma tabela (wybrane „Pokaż N”). Brakujące do pełnej strony są
+   * puste — wysokość tabeli jak w Finorze, niezależnie od liczby faktur.
+   */
+  minRows?: number;
 }
 
 function money(amount: string | number | null | undefined, currency: string | null | undefined): string {
@@ -46,8 +51,8 @@ function money(amount: string | number | null | undefined, currency: string | nu
  */
 const COLUMNS: Array<{ id: string; header: ReactNode; size?: number }> = [
   { id: 'select', header: null, size: 50 },
-  { id: 'number', header: 'Numer', size: 140 },
-  { id: 'payment', header: 'Płatność', size: 200 },
+  { id: 'number', header: 'Numer', size: 100 },
+  { id: 'payment', header: 'Płatność', size: 100 },
   { id: 'buyer', header: 'Nabywca', size: 280 },
   { id: 'gross', header: 'Brutto' },
   { id: 'issued', header: 'Wystawiona' },
@@ -63,7 +68,7 @@ const COLUMNS: Array<{ id: string; header: ReactNode; size?: number }> = [
  * filtrowanie, sortowanie i stronicowanie robi baza (adres listy), więc
  * `@tanstack/react-table` nie miałby tu nic do liczenia.
  */
-export function InvoicesTable({ invoices, facts, today, selectedIds, onToggleRow, onToggleAll }: Props) {
+export function InvoicesTable({ invoices, facts, today, selectedIds, onToggleRow, onToggleAll, minRows = 0 }: Props) {
   const selectedOnPage = invoices.filter((inv) => selectedIds.has(inv.id)).length;
   const allSelected = invoices.length > 0 && selectedOnPage === invoices.length;
 
@@ -159,6 +164,11 @@ export function InvoicesTable({ invoices, facts, today, selectedIds, onToggleRow
             </TableRow>
           );
         })}
+        {Array.from({ length: Math.max(0, minRows - invoices.length) }, (_, i) => (
+          <TableRow key={`pusty-${i}`} aria-hidden className="hover:bg-transparent">
+            <TableCell colSpan={COLUMNS.length} className="h-14" />
+          </TableRow>
+        ))}
       </TableBody>
     </Table>
   );

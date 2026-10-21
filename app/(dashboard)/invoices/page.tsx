@@ -190,6 +190,7 @@ export default async function InvoicesPage({
                   today={today}
                   filtered={filtered}
                   summary={total === 0 ? undefined : 'Sortowanie wg daty utworzenia'}
+                  perPage={params.perPage}
                 />
               </>
             )}
