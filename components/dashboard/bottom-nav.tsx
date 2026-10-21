@@ -188,8 +188,14 @@ function shouldHandlePrimaryInAppNav(e: ReactPointerEvent): boolean {
 
 /**
  * Jeden slot paska. Wyróżniony („Nowa") rysuje się jako niebieskie koło
- * wyniesione ponad krawędź — tak jak w makiecie i tak, jak działa to
- * w aplikacjach, z których klient korzysta na co dzień.
+ * z plusem, bez widocznego podpisu.
+ *
+ * Poprawka Bartosza 21.10.2026: koło nie jest już wyniesione ponad krawędź
+ * paska (dawne `-mt-5`) i nie ma pod sobą napisu „Nowa” (dawne `-mt-3`).
+ * Napis nachodził na dół koła, więc zamiast go przesuwać, koło stoi teraz
+ * dokładnie tam, gdzie był napis, a sam napis zostaje tylko dla czytników
+ * ekranu (`sr-only`) — link nadal ma nazwę dostępną „Nowa”. Odstępy
+ * paska od bezpiecznego obszaru (`--ff-safe-b`) zostają bez zmian.
  */
 function BottomNavSlot({
   tab,
@@ -219,15 +225,19 @@ function BottomNavSlot({
           if (!shouldHandlePrimaryInAppNav(e)) return;
           onBeginNav(tab.href!);
         }}
-        className={cn(slotClass, "text-[var(--ff-accent)]")}
+        // `pb-[var(--ff-safe-b)]` jak w pozostałych slotach: bez niego na iPhonie
+        // z paskiem domowym koło, już nie uniesione, zjeżdżałoby w strefę paska.
+        className={cn(slotClass, "pb-[var(--ff-safe-b)]", "text-[var(--ff-accent)]")}
       >
         <span
           aria-hidden
-          className="-mt-5 flex size-11 items-center justify-center rounded-full bg-[var(--ff-primary)] text-[var(--ff-on-primary)] shadow-md shadow-primary/30 transition-transform active:scale-95"
+          className="flex size-11 items-center justify-center rounded-full bg-[var(--ff-primary)] text-[var(--ff-on-primary)] shadow-md shadow-primary/30 transition-transform active:scale-95"
         >
           <tab.icon aria-hidden className="size-6" />
         </span>
-        <span className="-mt-3">{tab.label}</span>
+        {/* Nazwa dostępna dla czytników ekranu i testów; wzrokowo zasłania ją
+            koło (poprawka Bartosza 21.10.2026). */}
+        <span className="sr-only">{tab.label}</span>
       </Link>
     );
   }

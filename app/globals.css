@@ -1127,8 +1127,8 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
  * nie być jeszcze w arkuszu, a przezroczysty pasek nawigacji nad treścią
  * wygląda jak zepsuta strona.
  *
- * Wysokość niesie `--ff-bottom-nav-h` + pasek domowy. Żadnego `overflow`:
- * wyróżniony przycisk „Nowa" celowo wystaje ponad górną krawędź. */
+ * Wysokość niesie `--ff-bottom-nav-h` + pasek domowy. Wyróżnione koło „Nowa”
+ * od 21.10.2026 nie wystaje ponad krawędź — stoi w pasku na miejscu napisu. */
 .ff-bottom-nav {
   height: calc(var(--ff-bottom-nav-h) + var(--ff-safe-b));
   background-color: var(--background);

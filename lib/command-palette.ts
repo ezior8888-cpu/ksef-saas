@@ -2,6 +2,8 @@ import {
   RiAddLine,
   RiAlarmWarningLine,
   RiFileAddLine,
+  RiInboxArchiveLine,
+  RiReceiptLine,
   RiRepeatLine,
   type RemixiconComponentType,
 } from '@remixicon/react';
@@ -27,8 +29,8 @@ export const PALETTE_NAV_GROUP = 'Przejdź do';
 export const PALETTE_ACTIONS_GROUP = 'Akcje';
 
 /**
- * Zakładki ekranu Faktur, które do 21.10.2026 były pozycjami menu — paleta dalej
- * prowadzi do nich wprost (stare nazwy jako słowa kluczowe).
+ * Zakładki ekranów Faktur i Kosztów, które do 21.10.2026 były pozycjami menu —
+ * paleta dalej prowadzi do nich wprost (stare nazwy jako słowa kluczowe).
  */
 const PALETTE_EXTRA_NAV: readonly { label: string; href: string; icon: RemixiconComponentType; keywords: string[] }[] = [
   {
@@ -43,12 +45,24 @@ const PALETTE_EXTRA_NAV: readonly { label: string; href: string; icon: Remixicon
     icon: RiAlarmWarningLine,
     keywords: ['Faktury po terminie', 'Faktury', 'Sprzedaż', 'Przypomnienia', 'zaległe', 'windykacja', 'monit'],
   },
+  {
+    label: 'Wydatki',
+    href: '/expenses',
+    icon: RiReceiptLine,
+    keywords: ['Wydatki', 'Koszty', 'paragon', 'faktury kosztowe', 'do opisania'],
+  },
+  {
+    label: 'Skrzynka KSeF',
+    href: '/inbox',
+    icon: RiInboxArchiveLine,
+    keywords: ['Skrzynka KSeF', 'Koszty', 'KSeF', 'faktury zakupowe', 'faktury kosztowe', 'przychodzące'],
+  },
 ];
 
 export const MIN_SEARCH_LENGTH = 2;
 export const MAX_SEARCH_LENGTH = 80;
 
-/** Pozycje menu + zakładki Faktur + ustawienia + dwie akcje. Czysta funkcja — bez dostępu do DOM. */
+/** Pozycje menu + zakładki Faktur i Kosztów + ustawienia + dwie akcje. Czysta funkcja — bez dostępu do DOM. */
 export function buildPaletteNavEntries(): PaletteEntry[] {
   const nav: PaletteEntry[] = dashboardNavSections.flatMap((section) =>
     section.items.map((item) => ({

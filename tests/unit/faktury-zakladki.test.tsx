@@ -158,8 +158,10 @@ describe('zakładka na każdym ekranie Faktur', () => {
       expect(html).toMatch(/^<div class="ff-page-fill /);
       expect(html).toContain('<h1 class="sr-only">Faktury po terminie</h1>');
     }
-    // Zastrzeżenie z dawnego podtytułu zostaje widoczne w nocie nad kaflami.
-    expect(screens[0]).toContain('Stan przypomnień jest orientacyjny.');
+    // Poprawka Bartosza 21.10.2026: noty nad kaflami już nie ma („brzydka”).
+    // Zastrzeżenie o stanie przypomnień zostaje widoczne w podpisie kafla.
+    expect(screens[0]).not.toContain('role="note"');
+    expect(screens[0]).toMatch(/Przypomnień wysłanych w miesiącu<\/p><p[^>]*>Stan przypomnień jest orientacyjny<\/p>/);
   });
 });
 

@@ -7,7 +7,6 @@ import {
   RiExchangeFundsLine,
   RiFileAddLine,
   RiFileList3Line,
-  RiInboxArchiveLine,
   RiLineChartLine,
   RiMoreLine,
   RiPieChart2Line,
@@ -37,8 +36,9 @@ export interface DashboardNavSection {
  * Sekcje menu wg planu Finora §4 — tylko trasy, które istnieją. Trasy
  * z kolejnych etapów (bank) dochodzą razem ze stronami; analizy doszły
  * w E7. Faktury cykliczne (E9) i przypomnienia są od 21.10.2026 zakładkami
- * ekranu „Faktury” (`INVOICES_TABS`), nie osobnymi pozycjami — ⌘K znajduje
- * je przez `PALETTE_EXTRA_NAV` w `lib/command-palette.ts`.
+ * ekranu „Faktury” (`INVOICES_TABS`), a Wydatki i Skrzynka KSeF — zakładkami
+ * ekranu „Koszty” (`COSTS_TABS`), nie osobnymi pozycjami. ⌘K znajduje je
+ * przez `PALETTE_EXTRA_NAV` w `lib/command-palette.ts`.
  */
 export const dashboardNavSections: DashboardNavSection[] = [
   {
@@ -60,10 +60,9 @@ export const dashboardNavSections: DashboardNavSection[] = [
   },
   {
     title: "Koszty",
-    items: [
-      { href: "/expenses", label: "Wydatki", icon: RiReceiptLine },
-      { href: "/inbox", label: "Skrzynka KSeF", icon: RiInboxArchiveLine },
-    ],
+    // Jedna pozycja (poprawka Bartosza 21.10.2026): Wydatki (/expenses)
+    // i Skrzynka KSeF (/inbox) to zakładki ekranu „Koszty”.
+    items: [{ href: "/expenses", label: "Koszty", icon: RiReceiptLine }],
   },
   {
     // Plan Finora E7 (P10, P11): ciężkie agregaty — bez prefetchu (§4).
@@ -180,20 +179,31 @@ export function isActiveNavPath(pathname: string, href: string): boolean {
       pathname.startsWith("/payments/overdue/")
     );
   }
-  // /invoices/new, /reports/kpir, /settings, /expenses i reszta: sam adres
-  // albo podstrona.
+  // „Koszty" to zakładki Wydatki (/expenses*, także szczegóły wydatku)
+  // i Skrzynka KSeF (/inbox*).
+  if (href === "/expenses") {
+    return (
+      pathname === "/expenses" ||
+      pathname.startsWith("/expenses/") ||
+      pathname === "/inbox" ||
+      pathname.startsWith("/inbox/")
+    );
+  }
+  // /invoices/new, /reports/kpir, /settings i reszta: sam adres albo podstrona.
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 const EXTRA_PREFETCH_HREFS = [
   "/settings",
   "/invoices/new",
-  // Zakładki ekranu Faktur — przełączenie ma być tak szybkie jak pozycja menu.
+  // Zakładki ekranów Faktur i Kosztów — przełączenie ma być tak szybkie jak
+  // pozycja menu.
   "/invoices/recurring",
   "/payments/overdue",
+  "/inbox",
 ] as const;
 
-/** Trasy do `router.prefetch` — pozycje menu + CTA + ustawienia + zakładki Faktur. */
+/** Trasy do `router.prefetch` — pozycje menu + CTA + ustawienia + zakładki Faktur i Kosztów. */
 export function getDashboardPrefetchHrefs(): string[] {
   const set = new Set<string>(
     dashboardNavItems

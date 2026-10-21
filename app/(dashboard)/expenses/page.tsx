@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { CaptureButton } from '@/components/expenses/capture-button';
+import { CostsTabs } from '@/components/expenses/costs-tabs';
 import { ExpenseStatsCards } from '@/components/expenses/finora/expense-stat-cells';
 import { ExpensesTable } from '@/components/expenses/finora/expenses-table';
 import MonthSelector from '@/components/expenses/finora/month-selector';
@@ -14,10 +15,14 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Wydatki (plan Finora P8 ← Finora `/transactions`: `TransactionsView` =
- * kafle + karta z tabelą, `space-y-6`). Nagłówek z wyborem miesiąca jak
- * w Finora Monthly Analytics. Lista i jej zapytanie bez zmian (F-087: miesiąc
- * od–do albo wszystkie „Do opisania”); kafle liczą własne zapytania (§2.4
- * pkt 12) w osobnych granicach błędu.
+ * kafle + karta z tabelą). Wybór miesiąca jak w Finora Monthly Analytics.
+ * Lista i jej zapytanie bez zmian (F-087: miesiąc od–do albo wszystkie „Do
+ * opisania”); kafle liczą własne zapytania (§2.4 pkt 12) w osobnych granicach
+ * błędu.
+ *
+ * Poprawka Bartosza 21.10.2026: zakładka „Wydatki” ekranu Koszty (druga to
+ * „Skrzynka KSeF”), jak zakładki Faktur — bez widocznego nagłówka (tytuł dla
+ * czytników ekranu), karta z zakładkami sięga do stopki (`ff-page-fill`).
  */
 export default async function ExpensesPage({
   searchParams,
@@ -49,56 +54,61 @@ export default async function ExpensesPage({
 
   const { data: expenses, error } = await expensesQuery;
 
+  // Bez dolnego odstępu pod pływającym „+ Dodaj wydatek”: karta ma sięgać stopki
+  // jak w Skrzynce KSeF, a na końcu przewijania stopka z `py-6` powłoki i tak
+  // trzyma paginację z dala od przycisku.
   return (
-    <div className="space-y-6 pb-24 lg:pb-10">
-      <div className="flex justify-between gap-3 max-sm:flex-col sm:items-center">
-        <div>
-          <h1 className="text-2xl font-semibold">Wydatki</h1>
-          <p className="text-muted-foreground text-sm">
-            Faktury kosztowe i paragony — automatycznie kategoryzowane do KPiR
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 max-sm:self-end">
-          <nav aria-label="Widok listy wydatków" className="flex">
-            <Link
-              href="/expenses"
-              aria-current={!unreviewedOnly ? 'page' : undefined}
-              className={buttonVariants({ variant: !unreviewedOnly ? 'default' : 'outline' })}
-            >
-              Miesiąc
-            </Link>
-            <Link
-              href="/expenses?filter=unreviewed"
-              aria-current={unreviewedOnly ? 'page' : undefined}
-              className={buttonVariants({ variant: unreviewedOnly ? 'default' : 'outline' })}
-            >
-              Do opisania
-            </Link>
-          </nav>
-          {!unreviewedOnly ? (
-            <MonthSelector month={month} currentMonth={currentMonth} basePath="/expenses" />
-          ) : null}
-        </div>
+    <div className="ff-page-fill flex flex-col gap-6">
+      <h1 className="sr-only">Wydatki</h1>
+
+      {/* Przełącznik i miesiąc sterują i kaflami, i tabelą — dlatego stoją nad kaflami, nie w karcie. */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <nav aria-label="Widok listy wydatków" className="flex">
+          <Link
+            href="/expenses"
+            aria-current={!unreviewedOnly ? 'page' : undefined}
+            className={buttonVariants({ variant: !unreviewedOnly ? 'default' : 'outline' })}
+          >
+            Miesiąc
+          </Link>
+          <Link
+            href="/expenses?filter=unreviewed"
+            aria-current={unreviewedOnly ? 'page' : undefined}
+            className={buttonVariants({ variant: unreviewedOnly ? 'default' : 'outline' })}
+          >
+            Do opisania
+          </Link>
+        </nav>
+        {!unreviewedOnly ? (
+          <MonthSelector month={month} currentMonth={currentMonth} basePath="/expenses" />
+        ) : null}
       </div>
 
       <ExpenseStatsCards supabase={supabase} tenantId={tenantId} month={month} />
 
       {error ? (
-        <>
-          <Alert variant="destructive">
-            <AlertTitle>Nie udało się pobrać wydatków: {error.message}</AlertTitle>
-          </Alert>
-          {/* Od `lg` przycisk stoi w pasku tabeli; bez tabeli dodawanie zostaje tu. */}
-          <div className="flex justify-end max-lg:hidden">
-            <CaptureButton />
+        // Błąd w karcie z zakładkami — z ekranu da się przejść do Skrzynki KSeF.
+        <Card className="flex-1 pt-0">
+          <CostsTabs active="wydatki" />
+          <div className="flex flex-col gap-4 px-4 pt-2">
+            <Alert variant="destructive">
+              <AlertTitle>Nie udało się pobrać wydatków: {error.message}</AlertTitle>
+            </Alert>
+            {/* Od `lg` przycisk stoi w pasku tabeli; bez tabeli dodawanie zostaje tu. */}
+            <div className="flex justify-end max-lg:hidden">
+              <CaptureButton />
+            </div>
           </div>
-        </>
+        </Card>
       ) : (
-        <Card>
-          <ExpensesTable
-            expenses={expenses ?? []}
-            listVariant={unreviewedOnly ? 'unreviewed' : 'month'}
-          />
+        <Card className="flex-1 pt-0">
+          <CostsTabs active="wydatki" />
+          <div className="flex w-full flex-1 flex-col pt-2">
+            <ExpensesTable
+              expenses={expenses ?? []}
+              listVariant={unreviewedOnly ? 'unreviewed' : 'month'}
+            />
+          </div>
         </Card>
       )}
 

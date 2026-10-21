@@ -80,6 +80,21 @@ describe('buildPaletteNavEntries — zakładki Faktur (poprawka 21.10.2026)', ()
   });
 });
 
+describe('buildPaletteNavEntries — zakładki Kosztów (poprawka 21.10.2026)', () => {
+  // Wydatki i Skrzynka KSeF wyszły z menu (są zakładkami ekranu „Koszty”),
+  // ale ⌘K dalej prowadzi do każdej wprost — także po słowie „Koszty”.
+  it('„Koszty” są w menu, a „Wydatki” i „Skrzynka KSeF” w ⌘K ze starymi nazwami', () => {
+    const entries = buildPaletteNavEntries().filter((e) => e.group === 'Przejdź do');
+    expect(entries.find((e) => e.label === 'Koszty')?.href).toBe('/expenses');
+    const wydatki = entries.find((e) => e.label === 'Wydatki');
+    expect(wydatki?.href).toBe('/expenses');
+    expect(wydatki?.keywords).toEqual(expect.arrayContaining(['Koszty', 'paragon']));
+    const skrzynka = entries.find((e) => e.href === '/inbox');
+    expect(skrzynka?.label).toBe('Skrzynka KSeF');
+    expect(skrzynka?.keywords).toEqual(expect.arrayContaining(['Koszty', 'KSeF', 'faktury zakupowe']));
+  });
+});
+
 describe('buildPaletteNavEntries — unikalne wartości cmdk', () => {
   it('„Wystaw fakturę” jest i w menu, i w akcjach, a wartości (value) się nie powtarzają', () => {
     const entries = buildPaletteNavEntries();

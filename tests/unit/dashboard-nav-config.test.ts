@@ -51,9 +51,28 @@ describe('isActiveNavPath (plan Finora §4)', () => {
     expect(isActiveNavPath('/settings/ksef', '/settings')).toBe(true);
     expect(isActiveNavPath('/settingsx', '/settings')).toBe(false);
     expect(isActiveNavPath('/expenses/abc', '/expenses')).toBe(true);
+    expect(isActiveNavPath('/expensesx', '/expenses')).toBe(false);
     expect(isActiveNavPath('/inbox/abc', '/inbox')).toBe(true);
     expect(isActiveNavPath('/inboxx', '/inbox')).toBe(false);
     expect(isActiveNavPath('/contractors', '/contractors')).toBe(true);
+  });
+});
+
+describe('zakładki ekranu Kosztów (poprawka 21.10.2026)', () => {
+  // Wydatki i Skrzynka KSeF to zakładki ekranu „Koszty” (pozycja /expenses) —
+  // w menu świeci „Koszty” na obu zakładkach i na szczegółach wydatku.
+  it('„Koszty” są aktywne dla /expenses* i /inbox*, ale nie dla /inboxx ani analizy kosztów', () => {
+    for (const p of ['/expenses', '/expenses/abc', '/inbox', '/inbox/abc']) {
+      expect(isActiveNavPath(p, '/expenses'), p).toBe(true);
+    }
+    for (const p of ['/inboxx', '/expensesx', '/analizy/koszty']) {
+      expect(isActiveNavPath(p, '/expenses'), p).toBe(false);
+    }
+  });
+
+  it('w menu nie ma osobnej pozycji Skrzynki KSeF, a zakładka ma prefetch', () => {
+    expect(dashboardNavItems.map((i) => i.href)).not.toContain('/inbox');
+    expect(getDashboardPrefetchHrefs()).toEqual(expect.arrayContaining(['/expenses', '/inbox']));
   });
 });
 
@@ -109,10 +128,9 @@ describe('struktura menu (plan Finora §4)', () => {
       },
       {
         title: 'Koszty',
-        items: [
-          ['Wydatki', '/expenses'],
-          ['Skrzynka KSeF', '/inbox'],
-        ],
+        // Poprawka 21.10.2026: Wydatki i Skrzynka KSeF są zakładkami ekranu Koszty
+        // — świadoma zmiana struktury menu (Koszty: 2 → 1 pozycja).
+        items: [['Koszty', '/expenses']],
       },
       // Plan Finora E7: sekcja „Analizy” dochodzi razem ze stronami P10/P11
       // (zasada wpinania §4) — świadoma zmiana oczekiwanej struktury menu.

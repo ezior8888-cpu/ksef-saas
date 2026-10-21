@@ -71,7 +71,9 @@ export async function InboxLastFetchCell({ supabase, tenantId }: InboxStatsProps
     const verified = await getDashboardActiveOrgVerified();
     return {
       value: '—',
-      note: verified ? 'Jeszcze nie pobraliśmy żadnej faktury' : PULPIT_EMPTY.connectKsef,
+      // Rytm pobierania mówił dawny podtytuł skrzynki; bez niego klient czekający
+      // na pierwsze faktury dowiaduje się o nim tutaj.
+      note: verified ? 'Jeszcze nie pobraliśmy żadnej faktury · sprawdzamy KSeF co 15 minut' : PULPIT_EMPTY.connectKsef,
       icon: RiDownloadCloud2Line,
     };
   });

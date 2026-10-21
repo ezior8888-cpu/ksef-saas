@@ -84,6 +84,11 @@ interface Props {
     /** `null`, gdy odczytu nie da się potwierdzić — kafel pokazuje „—”, nie „0”. */
     sentThisMonth: number | null;
   };
+  /**
+   * Lista mogła się nie zmieścić w limicie strony (100 pozycji) — wtedy kafel
+   * „Faktur po terminie” mówi, że to pierwsze z nich. Bez flagi noty nie ma.
+   */
+  limitReached?: boolean;
   /** „Ustawienia przypomnień” tylko dla właściciela (P7). */
   canManageSettings?: boolean;
 }
@@ -384,7 +389,7 @@ export function overdueColumns(onPrepare: (invoice: OverdueInvoice) => void): Co
   ];
 }
 
-export function OverdueDashboard({ overdueInvoices, stats, canManageSettings = false }: Props) {
+export function OverdueDashboard({ overdueInvoices, stats, limitReached = false, canManageSettings = false }: Props) {
   const router = useRouter();
   const [reminderInvoice, setReminderInvoice] = useState<OverdueInvoice | null>(null);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -418,6 +423,12 @@ export function OverdueDashboard({ overdueInvoices, stats, canManageSettings = f
     onPaginationChange: setPagination,
   });
 
+  // Poprawka Bartosza 21.10.2026: stała nota nad kaflami („brzydka”) zniknęła.
+  // Jej zastrzeżenia stoją tam, gdzie dotyczą: zakres sumy w podpisie kafla
+  // „Po terminie” (RECEIVABLES_NOTE), limit 100 pod „Faktur po terminie” tylko
+  // przy ucięciu, orientacyjny stan pod kaflem przypomnień, saldo w oknie zgody.
+  const averageNote = `średnio ${daysOverdueLabel(stats.avgDaysOverdue)}`;
+  const reminderStateNote = overdueInvoices.length > 0 ? 'Stan przypomnień jest orientacyjny' : null;
   const statItems = [
     {
       label: 'Po terminie',
@@ -434,13 +445,24 @@ export function OverdueDashboard({ overdueInvoices, stats, canManageSettings = f
     {
       label: 'Faktur po terminie',
       value: formatPlInt(stats.totalCount),
-      note: stats.totalCount > 0 ? `średnio ${daysOverdueLabel(stats.avgDaysOverdue)}` : undefined,
+      note: stats.totalCount === 0 ? undefined : limitReached ? (
+        <>
+          {averageNote}
+          <br />
+          Pokazujemy pierwsze {formatPlInt(stats.totalCount)}, od najdłużej zaległych
+        </>
+      ) : averageNote,
       icon: RiErrorWarningLine,
     },
     {
       label: 'Przypomnień wysłanych w miesiącu',
       value: stats.sentThisMonth === null ? '—' : formatPlInt(stats.sentThisMonth),
-      note: stats.sentThisMonth === null ? 'Nie udało się odczytać — odśwież za chwilę' : undefined,
+      note: stats.sentThisMonth === null ? (
+        <>
+          Nie udało się odczytać — odśwież za chwilę
+          {reminderStateNote ? <><br />{reminderStateNote}</> : null}
+        </>
+      ) : reminderStateNote ?? undefined,
       icon: RiMailSendLine,
     },
     {
@@ -454,12 +476,6 @@ export function OverdueDashboard({ overdueInvoices, stats, canManageSettings = f
   return (
     <div className="ff-page-fill flex flex-col gap-6">
       <OverdueHeading />
-      <p className="text-muted-foreground max-w-3xl text-sm" role="note">
-        Pokazujemy najwyżej 100 faktur wystawionych w aplikacji bez powiązanych korekt.
-        Importy i dokumenty wymagające uzgodnienia nie wchodzą do tej sumy.
-        Przed zatwierdzeniem przypomnienia sprawdź aktualne saldo. Stan przypomnień jest orientacyjny.
-      </p>
-
       <StatsCards stats={statItems} iconPosition="right" />
 
       {overdueInvoices.length === 0 ? (
