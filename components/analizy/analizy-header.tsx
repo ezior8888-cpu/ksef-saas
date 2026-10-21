@@ -1,5 +1,7 @@
 import type { MonthOption } from '@/lib/analytics-finance/months';
 
+import { DemoBadge } from '@/components/dashboard/demo-badge';
+
 import { AnalizyModeSwitch } from './analizy-mode-switch';
 import { ANALIZY_MODES, type AnalizyMode } from './analizy-modes';
 import MonthSelector from './finora/month-selector';
@@ -23,6 +25,7 @@ export function AnalizyHeader({
   options,
   month,
   currentMonth,
+  demo = false,
 }: {
   mode: AnalizyMode;
   options: MonthOption[];
@@ -30,13 +33,18 @@ export function AnalizyHeader({
   month: string;
   /** Bieżący miesiąc w Polsce — przełącznik nie dokleja go do adresu. */
   currentMonth: string;
+  /** Firma przed weryfikacją KSeF — na stronie są dane przykładowe. */
+  demo?: boolean;
 }) {
   const { title, description } = ANALIZY_MODES[mode];
 
   return (
     <div className="flex justify-between gap-3 max-sm:flex-col sm:items-center">
       <div>
-        <h1 className="text-2xl font-semibold">{title}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold">{title}</h1>
+          {demo ? <DemoBadge /> : null}
+        </div>
         <p className="text-muted-foreground text-sm">{description}</p>
       </div>
       <div className="flex items-center gap-3 max-sm:justify-between">

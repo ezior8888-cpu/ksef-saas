@@ -6,6 +6,7 @@ import {
   currentMonthKey,
   resolveAnalyticsMonth,
 } from '@/lib/analytics-finance/months';
+import { analizyKontekst } from '@/lib/demo/kontekst-przykladowy';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 /**
@@ -25,8 +26,10 @@ export default async function AnalizaSprzedazyPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const [{ supabase, tenantId }, params] = await Promise.all([getPageContext(), searchParams]);
+  const [pageCtx, params] = await Promise.all([getPageContext(), searchParams]);
   const now = new Date();
+  // Przed weryfikacją KSeF: dane przykładowe (lib/demo/kontekst-przykladowy.ts).
+  const { supabase, tenantId, demo } = await analizyKontekst(pageCtx, now);
   const month = resolveAnalyticsMonth(params[ANALYTICS_MONTH_PARAM], now);
 
   return (
@@ -37,6 +40,7 @@ export default async function AnalizaSprzedazyPage({
     <div className="space-y-6 dark:[--muted:var(--background)]">
       <AnalizyHeader
         mode="sprzedaz"
+        demo={demo}
         options={analyticsMonthOptions(now)}
         month={month}
         currentMonth={currentMonthKey(now)}

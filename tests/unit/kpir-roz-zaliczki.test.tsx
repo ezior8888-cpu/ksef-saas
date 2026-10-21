@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ admin: vi.fn() }));
+// Strona KPiR pyta o weryfikację KSeF (dane przykładowe przed nią) — tu firma zweryfikowana.
+vi.mock('@/lib/demo/kontekst-przykladowy', () => ({ czyZweryfikowana: async () => true }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.admin }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 // Strony: sesja = ta sama atrapa bazy; karty panelu spoza tematu — puste.

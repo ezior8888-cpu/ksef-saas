@@ -5,7 +5,9 @@ import { KpirToolbar } from '@/components/reports/kpir/kpir-toolbar';
 import { KsiegowoscTabs } from '@/components/reports/ksiegowosc-tabs';
 import { Card } from '@/components/ui/card';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
-import { getKpirData } from '@/lib/reports/kpir-data';
+import { czyZweryfikowana } from '@/lib/demo/kontekst-przykladowy';
+import { kpirPrzykladowe } from '@/lib/demo/kpir-przykladowe';
+import { getKpirData, resolveKpirPeriod } from '@/lib/reports/kpir-data';
 import { getPageContext } from '@/lib/supabase/page-context';
 
 export const dynamic = 'force-dynamic';
@@ -31,6 +33,19 @@ export default async function KpirPage({
 }) {
   const sp = await searchParams;
   const { supabase, tenantId } = await getPageContext();
+  // Poprawka Bartosza 21.10.2026: przed weryfikacją KSeF księga z danymi
+  // przykładowymi (lib/demo/kpir-przykladowe.ts) i plakietką — klient widzi
+  // pełną okazałość ekranu. Prawdziwych danych wtedy nie czytamy.
+  if (!(await czyZweryfikowana())) {
+    const { month, year } = resolveKpirPeriod(sp);
+    const demo = kpirPrzykladowe(month, year);
+    return (
+      <div className="ff-page-fill flex flex-col gap-6">
+        <h1 className="sr-only">Książka przychodów i rozchodów</h1>
+        <KpirView key={`${year}-${month}`} month={month} year={year} expenses={demo.expenses} invoices={demo.invoices} today={todayInWarsaw()} demo />
+      </div>
+    );
+  }
   const data = await getKpirData(supabase, tenantId, sp);
   const period = `${data.year}-${String(data.month).padStart(2, '0')}`;
   const today = todayInWarsaw();
