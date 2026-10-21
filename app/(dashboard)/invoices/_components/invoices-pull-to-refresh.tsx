@@ -20,7 +20,6 @@ export function InvoicesPullToRefresh({
   summary,
   facts,
   today,
-  perPage,
 }: {
   tenantId: string;
   initialInvoices: InvoiceRow[];
@@ -32,8 +31,6 @@ export function InvoicesPullToRefresh({
   facts?: InvoiceFactsById;
   /** Dziś w Europe/Warsaw (RRRR-MM-DD). */
   today?: string;
-  /** „Pokaż N” — stała liczba wierszy tabeli. */
-  perPage?: number;
 }) {
   const router = useRouter();
 
@@ -46,7 +43,6 @@ export function InvoicesPullToRefresh({
         summary={summary}
         facts={facts}
         today={today}
-        perPage={perPage}
       />
     </PullToRefresh>
   );

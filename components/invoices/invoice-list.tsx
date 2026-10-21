@@ -54,7 +54,6 @@ export function InvoiceList({
   summary,
   facts = {},
   today,
-  perPage,
 }: {
   tenantId: string;
   /** Snapshot z serwera; nowa referencja (po `router.refresh()`) zastępuje stan lokalny. */
@@ -71,8 +70,6 @@ export function InvoiceList({
   filtered?: boolean;
   /** Opis zakresu pozycji z serwera (np. „1–50 z 230”). */
   summary?: string;
-  /** „Pokaż N”: tabela (od `lg`) ma zawsze N wierszy, brakujące są puste (jak w Finorze). */
-  perPage?: number;
 }) {
   const router = useRouter();
   const [invoices, setInvoices] = useState<InvoiceRow[]>(initialInvoices);
@@ -264,7 +261,6 @@ export function InvoiceList({
           selectedIds={selectedSet}
           onToggleRow={toggleRow}
           onToggleAll={toggleAll}
-          minRows={perPage}
         />
       </div>
     </>

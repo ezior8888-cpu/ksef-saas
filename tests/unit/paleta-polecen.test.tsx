@@ -64,11 +64,19 @@ describe('buildPaletteNavEntries', () => {
   });
 });
 
-describe('buildPaletteNavEntries — faktury cykliczne (plan Finora E9)', () => {
-  it('„Faktury cykliczne” są w ⌘K tak jak w menu, z nazwą sekcji w słowach kluczowych', () => {
+describe('buildPaletteNavEntries — zakładki Faktur (poprawka 21.10.2026)', () => {
+  // Cykliczne i przypomnienia wyszły z menu (są zakładkami ekranu „Faktury”),
+  // ale ⌘K dalej prowadzi do nich wprost — także po starej nazwie „Przypomnienia”.
+  it('„Faktury cykliczne” są w ⌘K, z nazwą sekcji w słowach kluczowych', () => {
     const entry = buildPaletteNavEntries().find((e) => e.href === '/invoices/recurring');
     expect(entry).toMatchObject({ group: 'Przejdź do', label: 'Faktury cykliczne' });
     expect(entry?.keywords).toContain('Sprzedaż');
+  });
+
+  it('„Faktury po terminie” są w ⌘K i dają się znaleźć po słowie „Przypomnienia”', () => {
+    const entry = buildPaletteNavEntries().find((e) => e.href === '/payments/overdue');
+    expect(entry).toMatchObject({ group: 'Przejdź do', label: 'Faktury po terminie' });
+    expect(entry?.keywords).toEqual(expect.arrayContaining(['Sprzedaż', 'Przypomnienia']));
   });
 });
 

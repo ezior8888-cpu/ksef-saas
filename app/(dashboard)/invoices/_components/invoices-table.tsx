@@ -30,11 +30,6 @@ interface Props {
   selectedIds: ReadonlySet<string>;
   onToggleRow: (id: string, checked: boolean) => void;
   onToggleAll: (checked: boolean) => void;
-  /**
-   * Ile wierszy ma tabela (wybrane „Pokaż N”). Brakujące do pełnej strony są
-   * puste — wysokość tabeli jak w Finorze, niezależnie od liczby faktur.
-   */
-  minRows?: number;
 }
 
 function money(amount: string | number | null | undefined, currency: string | null | undefined): string {
@@ -68,7 +63,7 @@ const COLUMNS: Array<{ id: string; header: ReactNode; size?: number }> = [
  * filtrowanie, sortowanie i stronicowanie robi baza (adres listy), więc
  * `@tanstack/react-table` nie miałby tu nic do liczenia.
  */
-export function InvoicesTable({ invoices, facts, today, selectedIds, onToggleRow, onToggleAll, minRows = 0 }: Props) {
+export function InvoicesTable({ invoices, facts, today, selectedIds, onToggleRow, onToggleAll }: Props) {
   const selectedOnPage = invoices.filter((inv) => selectedIds.has(inv.id)).length;
   const allSelected = invoices.length > 0 && selectedOnPage === invoices.length;
 
@@ -164,11 +159,6 @@ export function InvoicesTable({ invoices, facts, today, selectedIds, onToggleRow
             </TableRow>
           );
         })}
-        {Array.from({ length: Math.max(0, minRows - invoices.length) }, (_, i) => (
-          <TableRow key={`pusty-${i}`} aria-hidden className="hover:bg-transparent">
-            <TableCell colSpan={COLUMNS.length} className="h-14" />
-          </TableRow>
-        ))}
       </TableBody>
     </Table>
   );

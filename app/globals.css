@@ -984,10 +984,28 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
 }
 
 /* Stopka panelu (`components/dashboard/footer.tsx`) — przewija się z treścią
- * jako drugie dziecko `.ff-shell-scroll`. Na `/dashboard` znika (niżej,
- * `html.ff-route-dashboard .ff-shell-footer`). */
+ * jako drugie dziecko `.ff-shell-scroll`. Ta jest kolumną flex, a kontener
+ * treści rośnie, więc na krótkiej stronie stopka stoi przy dolnej krawędzi. */
 .ff-shell-footer {
   border-top: 1px solid var(--border);
+}
+
+/* Pełny arkusz list Faktur (Wystawione / Cykliczne / Po terminie, poprawka
+ * Bartosza 21.10.2026): karta z tabelą sięga do stopki pustym arkuszem, zamiast
+ * kończyć się po ostatnim wierszu. Korzeń takiej strony ma `ff-page-fill`;
+ * opakowania między kontenerem treści a nim (szablon trasy, skóra `/invoices`)
+ * stają się kolumną flex TYLKO na tych stronach (`:has`). Wszędzie indziej
+ * zostają blokami — w kolumnie flex korzeń `mx-auto max-w-*` skurczyłby się
+ * do szerokości treści. */
+.ff-shell-content:has(.ff-page-fill),
+.ff-shell-content :is(.ff-route-template, .ff-invoices-route):has(.ff-page-fill) {
+  display: flex;
+  flex-direction: column;
+}
+
+.ff-shell-content :is(.ff-route-template, .ff-invoices-route):has(.ff-page-fill),
+.ff-shell-content .ff-page-fill {
+  flex-grow: 1;
 }
 
 

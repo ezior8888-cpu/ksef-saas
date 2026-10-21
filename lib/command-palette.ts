@@ -1,4 +1,10 @@
-import { RiAddLine, RiFileAddLine, type RemixiconComponentType } from '@remixicon/react';
+import {
+  RiAddLine,
+  RiAlarmWarningLine,
+  RiFileAddLine,
+  RiRepeatLine,
+  type RemixiconComponentType,
+} from '@remixicon/react';
 
 import { dashboardNavSections, dashboardSettingsNavItem } from '@/lib/dashboard-nav-config';
 
@@ -20,10 +26,29 @@ export interface PaletteEntry {
 export const PALETTE_NAV_GROUP = 'Przejdź do';
 export const PALETTE_ACTIONS_GROUP = 'Akcje';
 
+/**
+ * Zakładki ekranu Faktur, które do 21.10.2026 były pozycjami menu — paleta dalej
+ * prowadzi do nich wprost (stare nazwy jako słowa kluczowe).
+ */
+const PALETTE_EXTRA_NAV: readonly { label: string; href: string; icon: RemixiconComponentType; keywords: string[] }[] = [
+  {
+    label: 'Faktury cykliczne',
+    href: '/invoices/recurring',
+    icon: RiRepeatLine,
+    keywords: ['Faktury cykliczne', 'Faktury', 'Sprzedaż', 'abonament', 'co miesiąc', 'powtarzalne'],
+  },
+  {
+    label: 'Faktury po terminie',
+    href: '/payments/overdue',
+    icon: RiAlarmWarningLine,
+    keywords: ['Faktury po terminie', 'Faktury', 'Sprzedaż', 'Przypomnienia', 'zaległe', 'windykacja', 'monit'],
+  },
+];
+
 export const MIN_SEARCH_LENGTH = 2;
 export const MAX_SEARCH_LENGTH = 80;
 
-/** Pozycje menu + ustawienia + dwie akcje. Czysta funkcja — bez dostępu do DOM. */
+/** Pozycje menu + zakładki Faktur + ustawienia + dwie akcje. Czysta funkcja — bez dostępu do DOM. */
 export function buildPaletteNavEntries(): PaletteEntry[] {
   const nav: PaletteEntry[] = dashboardNavSections.flatMap((section) =>
     section.items.map((item) => ({
@@ -35,6 +60,9 @@ export function buildPaletteNavEntries(): PaletteEntry[] {
       keywords: [item.label, section.title],
     })),
   );
+  for (const item of PALETTE_EXTRA_NAV) {
+    nav.push({ group: PALETTE_NAV_GROUP, value: `${PALETTE_NAV_GROUP}:${item.label}`, ...item });
+  }
   nav.push({
     group: PALETTE_NAV_GROUP,
     label: dashboardSettingsNavItem.label,

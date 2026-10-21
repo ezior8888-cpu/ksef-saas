@@ -1,6 +1,5 @@
 import {
   RiAddLine,
-  RiAlarmWarningLine,
   RiBook2Line,
   RiContactsBook3Line,
   RiDashboardLine,
@@ -13,7 +12,6 @@ import {
   RiMoreLine,
   RiPieChart2Line,
   RiReceiptLine,
-  RiRepeatLine,
   RiSettings3Line,
   RiUpload2Line,
   RiWallet3Line,
@@ -38,7 +36,9 @@ export interface DashboardNavSection {
 /**
  * Sekcje menu wg planu Finora §4 — tylko trasy, które istnieją. Trasy
  * z kolejnych etapów (bank) dochodzą razem ze stronami; analizy doszły
- * w E7, faktury cykliczne w E9.
+ * w E7. Faktury cykliczne (E9) i przypomnienia są od 21.10.2026 zakładkami
+ * ekranu „Faktury” (`INVOICES_TABS`), nie osobnymi pozycjami — ⌘K znajduje
+ * je przez `PALETTE_EXTRA_NAV` w `lib/command-palette.ts`.
  */
 export const dashboardNavSections: DashboardNavSection[] = [
   {
@@ -55,17 +55,6 @@ export const dashboardNavSections: DashboardNavSection[] = [
     items: [
       { href: "/invoices", label: "Faktury", icon: RiFileList3Line },
       { href: "/invoices/new", label: "Wystaw fakturę", icon: RiFileAddLine },
-      // Plan Finora E9 (P6, N1): trasa dochodzi razem ze stroną; ⌘K czyta to samo menu.
-      {
-        href: "/invoices/recurring",
-        label: "Faktury cykliczne",
-        icon: RiRepeatLine,
-      },
-      {
-        href: "/payments/overdue",
-        label: "Przypomnienia",
-        icon: RiAlarmWarningLine,
-      },
       { href: "/contractors", label: "Kontrahenci", icon: RiContactsBook3Line },
     ],
   },
@@ -177,27 +166,34 @@ export function isActiveNavPath(pathname: string, href: string): boolean {
   if (href === "/dashboard" || href === "/przeplywy" || href === "/bank") {
     return pathname === href;
   }
-  // „Faktury" to lista i podgląd faktury; kreator (/invoices/new*) i faktury
-  // cykliczne (/invoices/recurring*) mają własne pozycje menu.
+  // „Faktury" to lista, podgląd faktury i zakładki ekranu Faktur: cykliczne
+  // (/invoices/recurring*) i po terminie (/payments/overdue*). Kreator
+  // (/invoices/new*) ma własną pozycję „Wystaw fakturę”.
   if (href === "/invoices") {
-    if (
-      pathname === "/invoices/new" ||
-      pathname.startsWith("/invoices/new/") ||
-      pathname === "/invoices/recurring" ||
-      pathname.startsWith("/invoices/recurring/")
-    ) {
+    if (pathname === "/invoices/new" || pathname.startsWith("/invoices/new/")) {
       return false;
     }
-    return pathname === "/invoices" || pathname.startsWith("/invoices/");
+    return (
+      pathname === "/invoices" ||
+      pathname.startsWith("/invoices/") ||
+      pathname === "/payments/overdue" ||
+      pathname.startsWith("/payments/overdue/")
+    );
   }
   // /invoices/new, /reports/kpir, /settings, /expenses i reszta: sam adres
   // albo podstrona.
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-const EXTRA_PREFETCH_HREFS = ["/settings", "/invoices/new"] as const;
+const EXTRA_PREFETCH_HREFS = [
+  "/settings",
+  "/invoices/new",
+  // Zakładki ekranu Faktur — przełączenie ma być tak szybkie jak pozycja menu.
+  "/invoices/recurring",
+  "/payments/overdue",
+] as const;
 
-/** Trasy do `router.prefetch` — pozycje menu + CTA + ustawienia. */
+/** Trasy do `router.prefetch` — pozycje menu + CTA + ustawienia + zakładki Faktur. */
 export function getDashboardPrefetchHrefs(): string[] {
   const set = new Set<string>(
     dashboardNavItems

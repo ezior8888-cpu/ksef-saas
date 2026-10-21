@@ -12,13 +12,8 @@ import {
 } from '@/lib/dashboard-nav-config';
 
 describe('isActiveNavPath (plan Finora §4)', () => {
-  it('/invoices nie jest aktywne dla /invoices/new ani /invoices/recurring', () => {
-    for (const p of [
-      '/invoices/new',
-      '/invoices/new/regular',
-      '/invoices/recurring',
-      '/invoices/recurring/x',
-    ]) {
+  it('/invoices nie jest aktywne dla kreatora /invoices/new', () => {
+    for (const p of ['/invoices/new', '/invoices/new/regular']) {
       expect(isActiveNavPath(p, '/invoices'), p).toBe(false);
     }
   });
@@ -62,16 +57,28 @@ describe('isActiveNavPath (plan Finora §4)', () => {
   });
 });
 
-describe('Faktury cykliczne w menu (plan Finora E9)', () => {
-  it('są aktywne dla /invoices/recurring, a „Faktury” i „Wystaw fakturę” nie', () => {
-    expect(isActiveNavPath('/invoices/recurring', '/invoices/recurring')).toBe(true);
-    expect(isActiveNavPath('/invoices/recurring', '/invoices')).toBe(false);
-    expect(isActiveNavPath('/invoices/recurring', '/invoices/new')).toBe(false);
-    expect(isActiveNavPath('/invoices/recurringx', '/invoices/recurring')).toBe(false);
+describe('zakładki ekranu Faktur (poprawka 21.10.2026)', () => {
+  // Cykliczne i po terminie to zakładki „Faktur”, nie pozycje menu — w menu
+  // świeci wtedy „Faktury”, a „Wystaw fakturę” nie.
+  it('„Faktury” są aktywne dla /invoices/recurring* i /payments/overdue*', () => {
+    for (const p of ['/invoices/recurring', '/invoices/recurring/x', '/payments/overdue', '/payments/overdue/x']) {
+      expect(isActiveNavPath(p, '/invoices'), p).toBe(true);
+      expect(isActiveNavPath(p, '/invoices/new'), p).toBe(false);
+    }
+    expect(isActiveNavPath('/payments/overduex', '/invoices')).toBe(false);
+    expect(isActiveNavPath('/payments', '/invoices')).toBe(false);
   });
 
-  it('mają prefetch (lekka strona), w przeciwieństwie do /analizy/*', () => {
-    expect(getDashboardPrefetchHrefs()).toContain('/invoices/recurring');
+  it('w menu nie ma osobnych pozycji dla zakładek', () => {
+    const hrefs = dashboardNavItems.map((i) => i.href);
+    expect(hrefs).not.toContain('/invoices/recurring');
+    expect(hrefs).not.toContain('/payments/overdue');
+  });
+
+  it('zakładki mają prefetch (przełączenie jak pozycja menu), w przeciwieństwie do /analizy/*', () => {
+    expect(getDashboardPrefetchHrefs()).toEqual(
+      expect.arrayContaining(['/invoices/recurring', '/payments/overdue']),
+    );
   });
 });
 
@@ -95,10 +102,8 @@ describe('struktura menu (plan Finora §4)', () => {
         items: [
           ['Faktury', '/invoices'],
           ['Wystaw fakturę', '/invoices/new'],
-          // Plan Finora E9: „Faktury cykliczne” dochodzą razem ze stroną P6 (zasada wpinania §4)
-          // — świadoma zmiana oczekiwanej struktury menu (sekcja Sprzedaż: 4 → 5 pozycji).
-          ['Faktury cykliczne', '/invoices/recurring'],
-          ['Przypomnienia', '/payments/overdue'],
+          // Poprawka 21.10.2026: „Faktury cykliczne” i „Przypomnienia” są zakładkami
+          // ekranu „Faktury” — świadoma zmiana struktury menu (Sprzedaż: 5 → 3 pozycje).
           ['Kontrahenci', '/contractors'],
         ],
       },
@@ -177,11 +182,7 @@ describe('struktura menu (plan Finora §4)', () => {
       'Analizy',
       'Księgowość',
     ]);
-    expect(more[0].items.map((i) => i.href)).toEqual([
-      '/invoices/recurring',
-      '/payments/overdue',
-      '/contractors',
-    ]);
+    expect(more[0].items.map((i) => i.href)).toEqual(['/contractors']);
   });
 
   it('getDashboardPrefetchHrefs pomija pozycje z prefetch: false', () => {
