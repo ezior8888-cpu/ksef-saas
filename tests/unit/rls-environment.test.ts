@@ -45,6 +45,8 @@ describe('separate RLS test configuration', () => {
       'tests/rls-kolejkowanie-wysylki.test.ts',
       // 00132: wyzwalacze po zacieśnieniu — klient nigdy nie pisze ksef_status.
       'tests/rls-cykl-wyzwalacze.test.ts',
+      // Sekcja 4a skryptu kontroli (zaległości Offline24) na schemacie po wszystkich migracjach.
+      'tests/rls-kontrola-offline24.test.ts',
       // 00133 (K4): jedna otwarta korekta na fakturę pierwotną.
       'tests/rls-korekta-jedna-otwarta.test.ts',
       // 00137 (A4b): special_data — kształt, zapis jednorazowy, przejścia 00131.
@@ -53,6 +55,10 @@ describe('separate RLS test configuration', () => {
       'tests/rls-decyzja-duplikatu.test.ts',
       // 00150 (A5): dziennik prób wysyłki — tylko serwis, bez DELETE, nie jest dowodem kontaktu.
       'tests/rls-dziennik-prob-wysylki.test.ts',
+      // Sekcja 12 skryptu kontroli (dziennik prób z 00150) liczy jak /admin/centrum/bledy.
+      'tests/rls-kontrola-dziennik-prob.test.ts',
+      // A5: procedura operatora dla faktury, która utknęła w wysyłce (I2/I1) — skrypt SQL przez psql.
+      'tests/rls-zwolnij-utknieta-wysylke.test.ts',
       // 00152: faktura za abonament w obu nazwach produktu (FaktFlow, FaktWay).
       'tests/rls-faktura-abonamentu-faktway.test.ts',
       // Plan Finora E3: dzieci faktur (korekta, ROZ) przez prawdziwy PostgREST.
