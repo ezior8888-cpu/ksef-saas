@@ -197,8 +197,11 @@ export default withSentryConfig(withSerwist(withMDX(nextConfig)), {
   // For all available options, see:
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
 
-  // Upload a larger set of source maps for prettier stack traces (increases build time)
-  widenClientFileUpload: true,
+  // Bez rozszerzonego zestawu map źródłowych: z @sentry/nextjs 10.75.2 (łatka
+  // GHSA-mchm-gjx6-7h55 dla `tunnelRoute`) build rośnie ponad 3584 MB sterty;
+  // pułap podniesiony do 4096 MB (Dockerfile), a to oszczędza zapas na app-1.
+  // Mapy stron i chunków dalej idą.
+  widenClientFileUpload: false,
 
   bundleSizeOptimizations: {
     excludeReplayShadowDom: true,
@@ -218,7 +221,8 @@ export default withSentryConfig(withSerwist(withMDX(nextConfig)), {
     // See the following for more information:
     // https://docs.sentry.io/product/crons/
     // https://vercel.com/docs/cron-jobs
-    automaticVercelMonitors: true,
+    // Vercela nie ma od 14.09.2026 (Hetzner) — instrumentacja cronów Vercela tylko obciąża build.
+    automaticVercelMonitors: false,
 
     // Tree-shaking options for reducing bundle size
     treeshake: {

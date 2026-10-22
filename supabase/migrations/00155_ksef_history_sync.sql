@@ -159,7 +159,9 @@ CREATE TABLE public.ksef_history_items (
     FOREIGN KEY (tenant_id, invoice_id)
     REFERENCES public.invoices (tenant_id, id)
     ON DELETE SET NULL (invoice_id),
-  CONSTRAINT ksef_history_items_status_reason CHECK (
+  -- COALESCE: CHECK przepuszcza NULL, a `reason_code IN (…)` przy NULL daje
+  -- NULL — bez tego `skipped`/`deferred`/`blocked` bez powodu by przeszło.
+  CONSTRAINT ksef_history_items_status_reason CHECK (COALESCE(
     (status = 'pending' AND (reason_code IS NULL OR reason_code IN ('repair_content', 'ksef_not_ready')))
     OR (status = 'imported' AND (reason_code IS NULL OR reason_code IN ('jpk_note', 'repaired')))
     OR (status = 'skipped' AND reason_code IN ('own_invoice', 'already_present', 'retired_draft'))
@@ -169,7 +171,7 @@ CREATE TABLE public.ksef_history_items (
           'currency_not_supported', 'parse_failed', 'number_conflict', 'number_taken_local',
           'file_import_mismatch', 'local_conflict', 'own_send_unresolved', 'save_failed',
           'repair_failed', 'download_failed', 'archive_conflict', 'metadata_mismatch'))
-  )
+  , false))
 );
 
 COMMENT ON TABLE public.ksef_history_items IS
