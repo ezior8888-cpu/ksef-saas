@@ -163,17 +163,22 @@ function expectNoSuccessEffects() {
 }
 
 describe('admin GDPR deletion membership scope', () => {
-  it('deactivates only the target user active owner organization', async () => {
+  // Przegląd prawny 15.10.2026: panel oznaczał firmy usuwanego właściciela
+  // (`deleted_at`, `hard_delete_at` +30 dni, `is_active = false`) i obiecywał
+  // „hard delete po 30 dniach”. Tych flag nie sprawdza logowanie, RLS ani
+  // żaden job (`retention-delete` usuwa tylko faktury po 10 latach) — firma
+  // działała dalej, a obietnica była pusta. Teraz panel, jak ścieżka
+  // samoobsługowa (`executeGdprRequest`), usuwa konto i nie rusza firm.
+  it('usuwa konto, nie rusza firm właściciela i mówi to wprost', async () => {
     const db = database();
 
-    expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: true });
+    const result = await deleteUserGdprAction(USER, 'DELETE');
 
-    expect(db.tenants.filter((row) => !row.is_active).map((row) => row.id)).toEqual([activeOrg]);
-    for (const id of [formerOrg, memberOrg, foreignOrg]) {
-      expect(db.tenants.find((row) => row.id === id)).toMatchObject({
-        is_active: true, deleted_at: null, hard_delete_at: null,
-      });
+    expect(result).toMatchObject({ success: true });
+    for (const tenant of db.tenants) {
+      expect(tenant).toMatchObject({ is_active: true, deleted_at: null, hard_delete_at: null });
     }
+    expect(db.writeAttempts).not.toContain('tenants');
     expect(db.memberships.filter((row) => row.user_id === USER).every((row) => row.status === 'revoked')).toBe(true);
     expect(db.memberships.find((row) => row.user_id === OTHER_USER)).toMatchObject({
       status: 'active', revoked_at: null,
@@ -182,8 +187,11 @@ describe('admin GDPR deletion membership scope', () => {
     expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({
       action: 'admin.user.deleted',
       entityId: USER,
-      metadata: expect.objectContaining({ ownedOrgsSoftDeleted: 1 }),
+      metadata: expect.objectContaining({ ownedOrgsLeftActive: 1 }),
     }));
+    const message = 'message' in result ? String(result.message) : '';
+    expect(message).toContain('działają dalej');
+    expect(message).not.toMatch(/30 dni|hard delete|retencj/i);
   });
 
   it('can delete a former owner account without deactivating its former organization', async () => {
@@ -222,17 +230,15 @@ describe('admin GDPR deletion membership scope', () => {
     expectNoSuccessEffects();
   });
 
-  it('stops before revocation and auth deletion if the organization update fails', async () => {
+  it('nie zapisuje do tenants — awaria zapisu firm nie może zatrzymać usunięcia konta', async () => {
     const db = database();
     db.updateFailure = 'tenants';
 
-    expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: false });
+    expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: true });
 
-    expect(db.writeAttempts).toEqual(['tenants']);
-    expect(mocks.deleteUser).not.toHaveBeenCalled();
-    expect(db.tenants.every((row) => row.is_active)).toBe(true);
-    expect(db.supportConversations).toHaveLength(2);
-    expectNoSuccessEffects();
+    expect(db.writeAttempts).toEqual(['memberships', 'support_conversations']);
+    expect(mocks.deleteUser).toHaveBeenCalledExactlyOnceWith(USER);
+    expect(db.tenants.every((row) => row.is_active && row.deleted_at === null)).toBe(true);
   });
 
   // Polityka prywatności: czat pomocy „do 24 miesięcy od ostatniej wiadomości”;
@@ -256,7 +262,7 @@ describe('admin GDPR deletion membership scope', () => {
 
     expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: false });
 
-    expect(db.writeAttempts).toEqual(['tenants', 'memberships', 'support_conversations']);
+    expect(db.writeAttempts).toEqual(['memberships', 'support_conversations']);
     expect(mocks.deleteUser).not.toHaveBeenCalled();
     expectNoSuccessEffects();
   });
@@ -267,10 +273,9 @@ describe('admin GDPR deletion membership scope', () => {
 
     expect(await deleteUserGdprAction(USER, 'DELETE')).toMatchObject({ success: false });
 
-    expect(db.writeAttempts).toEqual(['tenants', 'memberships']);
+    expect(db.writeAttempts).toEqual(['memberships']);
     expect(mocks.deleteUser).not.toHaveBeenCalled();
-    // This existing multi-step operation is not a transaction: no rollback is claimed.
-    expect(db.tenants.find((row) => row.id === activeOrg)?.is_active).toBe(false);
+    expect(db.tenants.find((row) => row.id === activeOrg)?.is_active).toBe(true);
     expectNoSuccessEffects();
   });
 
