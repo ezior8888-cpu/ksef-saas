@@ -3,6 +3,7 @@
 // Plan Finora P15 (E10b): okno importu z pliku na `Dialog` Finory (było
 // własne okno na rozmytym szkle). Logika bez zmian:
 // `startFileImportAction`, limit 10 MB, przejście na stronę postępu.
+// Decyzja Bartosza 22.10.2026: tylko CSV z czterech programów — bez JPK_FA.
 // Okno jest montowane przez rodzica tylko na czas wyboru, więc stoi otwarte;
 // zamknięcie (X, Esc, klik w tło, „Anuluj”) woła `onClose`, a w trakcie
 // wysyłki jest zablokowane jak wcześniej przyciski.
@@ -20,10 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  startFileImportAction,
-  type FileImportSource,
-} from '@/app/onboarding/magic-import/actions';
+import { startFileImportAction, type FileImportSource } from '@/app/actions/import-danych';
 
 interface Props {
   source: FileImportSource;
@@ -32,7 +30,6 @@ interface Props {
 }
 
 const SOURCE_LABELS: Record<FileImportSource, string> = {
-  jpk_fa: 'JPK_FA (uniwersalny)',
   fakturownia_csv: 'Fakturownia CSV',
   infakt_csv: 'inFakt CSV',
   wfirma_csv: 'wFirma CSV',
@@ -40,7 +37,6 @@ const SOURCE_LABELS: Record<FileImportSource, string> = {
 };
 
 const FILE_ACCEPT: Record<FileImportSource, string> = {
-  jpk_fa: '.xml',
   fakturownia_csv: '.csv',
   infakt_csv: '.csv',
   wfirma_csv: '.csv',
@@ -129,12 +125,6 @@ export function FileImportDialog({ source, tenantId, onClose }: Props) {
           <p className="bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
             <strong>Jak wyeksportować z Fakturowni:</strong> Faktury → Eksport → Format CSV →
             Wybierz okres → Pobierz.
-          </p>
-        )}
-        {source === 'jpk_fa' && (
-          <p className="bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
-            JPK_FA generuje każdy program księgowy w Polsce — wymóg Ministerstwa Finansów.
-            Sprawdź sekcję „Eksport“ lub „Pliki kontrolne”.
           </p>
         )}
 

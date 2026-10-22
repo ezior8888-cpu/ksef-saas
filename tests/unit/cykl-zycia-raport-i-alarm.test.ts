@@ -11,6 +11,8 @@ const m = vi.hoisted(() => ({
   // D-A4-1b-3 PR B: wiersze strażnika niosą `detail` (I5D — środowisko sprawdzenia oryginału).
   violations: [] as Array<{ invariant: string; detail?: unknown }>,
   counts: {} as Record<string, number>,
+  // 00155: przyjęte faktury pobrane z historii KSeF (bez naszej wysyłki, bez UPO).
+  acceptedFromHistory: 0,
   audit: [] as Array<{ action: string; user_id: string | null }>,
   slack: vi.fn(),
   alertCritical: vi.fn(),
@@ -28,6 +30,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       const q = {
         select: () => q,
         eq: (k: string, v: unknown) => { filters.push([k, v]); return q; },
+        filter: (k: string, op: string, v: unknown) => { filters.push([`filter:${k}:${op}`, v]); return q; },
         in: (k: string, vs: unknown[]) => { if (k === 'action') actions = vs; return q; },
         gte: () => q,
         limit: () => q,
@@ -37,7 +40,9 @@ vi.mock('@/lib/supabase/admin', () => ({
             return ok({ data: allowed ? m.audit.filter((r) => allowed.includes(r.action)) : m.audit, error: null });
           }
           const status = filters.find(([k]) => k === 'ksef_status')?.[1] as string | undefined;
-          return ok({ data: null, error: null, count: m.counts[status ?? ''] ?? 0 });
+          const upoExpectedOnly = filters.some(([k, v]) => k === 'filter:ksef_upo_expected:eq' && v === 'true');
+          const history = status === 'accepted' && !upoExpectedOnly ? m.acceptedFromHistory : 0;
+          return ok({ data: null, error: null, count: (m.counts[status ?? ''] ?? 0) + history });
         },
       };
       return q;
@@ -61,12 +66,20 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.violations = [];
   m.counts = {};
+  m.acceptedFromHistory = 0;
   m.audit = [];
   m.cacheGet.mockResolvedValue(null);
   m.cacheSet.mockResolvedValue(true);
 });
 
 describe('raport dzienny', () => {
+  it('00155: „Przyjęte w 24 h” liczy tylko faktury z UPO (bez historii z KSeF) — ten sam predykat co I3', async () => {
+    m.counts = { accepted: 9 };
+    m.acceptedFromHistory = 4;
+    const result = await runKsefLifecycleReport(ctx);
+    expect(result.accepted24h).toBe(9);
+  });
+
   it('formatLifecycleReport: stany, przyjęte, naruszenia, akcje, ponowienia automatu', () => {
     const text = formatLifecycleReport({
       statuses: { draft: 3, failed: 2, queued: 0, sending: 0, offline_queued: 0, rejected: 1 },

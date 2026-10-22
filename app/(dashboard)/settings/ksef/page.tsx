@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { RiGoogleLine, RiLockLine, RiShieldCheckLine, RiSparklingLine } from '@remixicon/react';
+import { RiGoogleLine, RiHistoryLine, RiLockLine, RiShieldCheckLine } from '@remixicon/react';
 
 import { CertificateUpload } from '@/components/settings/certificate-upload';
 import { CompleteNipForm } from '@/components/settings/complete-nip-form';
@@ -28,8 +28,12 @@ const BADGE_WARN = 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:tex
 /**
  * Zakładka „KSeF” = Connected Accounts z Finory (`views/settings/
  * connected-accounts`): połączenie z KSeF jako wiersz instytucji
- * (`connected-institution-row.tsx`), certyfikat, Magiczny Import i logowanie
- * przez Google. Banków u nas nie ma.
+ * (`connected-institution-row.tsx`), certyfikat, historia faktur z KSeF
+ * i logowanie przez Google. Banków u nas nie ma.
+ *
+ * Decyzja Bartosza 22.10.2026: Magiczny import znika — po wgraniu
+ * certyfikatu FaktWay sam pobiera historię z KSeF. Tu tylko o tym mówimy
+ * i prowadzimy do postępu w Imporcie danych (tam też wstrzymanie).
  */
 export default async function KsefSettingsPage() {
   const { supabase, tenantId, role } = await getPageContext();
@@ -147,26 +151,23 @@ export default async function KsefSettingsPage() {
 
       <Field orientation="responsive">
         <FieldContent>
-          <FieldLabel>Magiczny Import historii</FieldLabel>
+          <FieldLabel>Historia faktur z KSeF</FieldLabel>
           <FieldDescription>
-            Pobierz faktury z KSeF w wybranym zakresie i uzupełnij kartotekę kontrahentów oraz
-            produktów bez ręcznego przepisywania.
+            Po wgraniu certyfikatu FaktWay sam pobiera z KSeF całą historię sprzedaży i zakupów, a potem
+            na bieżąco faktury wystawione poza FaktWay. Pobieranie możesz wstrzymać w Imporcie danych.
           </FieldDescription>
         </FieldContent>
         {hasCredentials ? (
-          <Link
-            href={`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`}
-            className={buttonVariants({ variant: 'default' })}
-          >
-            <RiSparklingLine aria-hidden />
-            Rozpocznij Magiczny Import
+          <Link href="/import-danych" className={buttonVariants({ variant: 'outline' })}>
+            <RiHistoryLine aria-hidden />
+            Zobacz postęp
           </Link>
         ) : null}
       </Field>
       {hasCredentials ? null : (
         <Alert role="note" className={AMBER_ALERT}>
           <AlertDescription className={AMBER_TEXT}>
-            Aby uruchomić import, najpierw wgraj certyfikat powyżej — KSeF wymaga
+            Aby FaktWay pobrał historię, najpierw wgraj certyfikat powyżej — KSeF wymaga
             uwierzytelnienia przy pobieraniu historii.
           </AlertDescription>
         </Alert>

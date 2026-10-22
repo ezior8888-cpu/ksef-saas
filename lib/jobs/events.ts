@@ -191,20 +191,17 @@ export const invoiceUpoRequested = jobEvent<{
   }>('invoice/upo.requested');
 
 /**
- * Żądanie Magicznego Importu historii faktur z KSeF (wydane lub odebrane).
- *
- * `nip` to klucz grupy kolejki importu (limit per NIP).
+ * Synchronizacja historii KSeF jednej firmy (decyzja Bartosza 22.10.2026 —
+ * zastępuje Magiczny import). Fan-out z `cron.ksef-history-sync`; `groupId`
+ * = NIP (jeden przebieg na NIP). Środowisko z chwili fan-outu: przebieg
+ * w innym środowisku niż `KSEF_ENV` kończy się bez ponowień.
  */
-export const importKsefHistoryRequested = jobEvent<{
-    importJobId: string;
+export const ksefHistorySyncTenant = jobEvent<{
     tenantId: string;
-    /** NIP tenanta — klucz grupy kolejki importu. */
+    /** NIP tenanta — klucz grupy kolejki (limit per NIP). */
     nip: string;
-    dateFrom: string;
-    dateTo: string;
-    direction: 'issued' | 'received';
     environment: 'test' | 'demo' | 'production';
-  }>('import/ksef-history.requested');
+  }>('ksef/history-sync.tenant');
 
 /** Wgrany plik JPK_FA / CSV gotowy do parsowania (ścieżka w R2 z `file-storage`). */
 export const importFileUploaded = jobEvent<{
