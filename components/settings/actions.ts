@@ -139,7 +139,7 @@ export async function uploadCertificateAction(data: {
         success: false,
         code: 'NIP_ALREADY_CLAIMED',
         error:
-          `Ten NIP jest już zweryfikowany przez inną organizację w FaktFlow. Jeśli uważasz, że to błąd, napisz na ${SUPPORT_EMAIL}`,
+          `Ten NIP jest już zweryfikowany przez inną organizację w FaktWay. Jeśli uważasz, że to błąd, napisz na ${SUPPORT_EMAIL}`,
       };
     }
     if (claimResult !== 'claimed' && claimResult !== 'already_claimed_by_self') {
@@ -152,7 +152,7 @@ export async function uploadCertificateAction(data: {
       success: true,
       wasFirstClaim,
       message: wasFirstClaim
-        ? 'Certyfikat zapisany. Twoja organizacja jest teraz zweryfikowanym właścicielem tego NIP-u w FaktFlow (claim KSeF).'
+        ? 'Certyfikat zapisany. Twoja organizacja jest teraz zweryfikowanym właścicielem tego NIP-u w FaktWay (claim KSeF).'
         : 'Certyfikat zaktualizowany.',
     };
   } catch (error) {

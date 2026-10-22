@@ -201,11 +201,7 @@ function PaymentRow({ payment }: { payment: UserPaymentRow }) {
               </div>
 
               <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="outline" size="sm">
-                    Anuluj
-                  </Button>
-                </DialogClose>
+                <DialogClose render={<Button variant="outline" size="sm" />}>Anuluj</DialogClose>
                 <Button
                   variant="destructive"
                   size="sm"

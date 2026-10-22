@@ -28,6 +28,8 @@ const PUBLIC_PAGES = [
 const AUTHENTICATED_PAGES = [
   '/dashboard',
   '/invoices',
+  // Plan Finora E9 (P6).
+  '/invoices/recurring',
   '/contractors',
   '/settings',
   '/settings/security',

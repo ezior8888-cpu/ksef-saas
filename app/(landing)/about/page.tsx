@@ -1,23 +1,22 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 
 import { DrawnVideo } from '@/components/ui/drawn-video';
 
 import { asset } from '../_assets';
-import { Rise, SlideX, Tilt } from '../_components/anim';
+import { Rise, SlideX } from '../_components/anim';
 import { SiteFooter } from '../_components/closing';
 import { IconSprite } from '../_components/icon-sprite';
 import { MaskReveal, MaskRevealWords } from '../_components/mask-reveal';
 import { SiteNav } from '../_components/site-nav';
+import { SUPPORT_EMAIL } from '@/lib/site';
+
 import { Container } from '../_components/ui';
-import { Metrics } from './_components/metrics';
-import { TeamGrid } from './_components/team-grid';
 
 export const metadata: Metadata = {
-  title: 'O nas | FaktFlow',
+  title: 'O nas | FaktWay',
   description:
-    'Kto stoi za FaktFlow, w co wierzymy i dla kogo robimy program do faktur w KSeF.',
+    'Kto stoi za FaktWay, w co wierzymy i dla kogo robimy program do faktur w KSeF.',
 };
 
 /**
@@ -74,28 +73,14 @@ export default function AboutPage() {
           </div>
         </Container>
 
-        {/* pas kadrów na pełną szerokość, przerwa 12 px */}
-        <ul className="flex gap-3 overflow-hidden px-3">
-          {asset.about.gallery.map((src, i) => (
-            <li key={src} className="min-w-0 flex-1">
-              <Rise delay={i * 0.08}>
-                <div className="overflow-hidden rounded-[16px]">
-                  <Image
-                    src={src}
-                    alt="Zespół przy pracy"
-                    width={400}
-                    height={400}
-                    className="h-auto w-full transition-transform duration-500 hover:scale-[1.04]"
-                  />
-                </div>
-              </Rise>
-            </li>
-          ))}
-        </ul>
+        {/* Pas „Zespół przy pracy” usunięty 15.10.2026: zdjęcia obcych osób
+            z szablonu podpisane jako nasz zespół (wprowadzanie w błąd,
+            a wizerunek modeli użyty w cudzym kontekście). */}
 
-        <Container>
-          <Metrics />
-        </Container>
+        {/* Metryki („1,2 mln faktur przeszło przez” naszą usługę, „8 tys. firm
+            miesięcznie”, „99,9% dostępności”) usunięte 15.10.2026: liczby
+            pochodziły z szablonu, a serwis jest przed startem. Wracają tylko
+            z danymi, które da się wykazać (art. 5 u.p.n.p.r., art. 16 u.z.n.k.). */}
       </header>
 
       {/* ── wartości: 467 obok 559 ─────────────────────────────────── */}
@@ -113,19 +98,20 @@ export default function AboutPage() {
             </MaskReveal>
             <Rise delay={0.25}>
               <div className="flex items-center gap-4">
-                <Image
-                  src={asset.about.founder}
-                  alt="Bartosz Gierszewski"
-                  width={56}
-                  height={56}
-                  className="size-14 rounded-full object-cover"
-                />
+                {/* Inicjały zamiast portretu: zdjęcie było portretem obcej
+                    osoby z szablonu podpisanym nazwiskiem założyciela. */}
+                <span
+                  aria-hidden
+                  className="z-lead flex size-14 items-center justify-center rounded-full bg-[var(--z-blue-50)] font-medium text-[var(--z-blue)]"
+                >
+                  BG
+                </span>
                 <div className="flex flex-col gap-0.5">
                   <span className="z-lead font-medium">
                     Bartosz Gierszewski
                   </span>
                   <span className="z-body text-[var(--z-muted)]">
-                    Założyciel FaktFlow
+                    Założyciel FaktWay
                   </span>
                 </div>
               </div>
@@ -151,7 +137,7 @@ export default function AboutPage() {
         <Container className="flex flex-col gap-16">
           <div className="flex max-w-[550px] flex-col gap-5">
             <h2 className="z-h2 w-full">
-              <MaskRevealWords text="Ludzie za FaktFlow" />
+              <MaskRevealWords text="Ludzie za FaktWay" />
             </h2>
             <MaskReveal delay={0.15}>
               <p className="z-lead text-[var(--z-muted)]">
@@ -160,7 +146,9 @@ export default function AboutPage() {
             </MaskReveal>
           </div>
 
-          <TeamGrid />
+          {/* Siatka zespołu usunięta 15.10.2026: trzy z czterech osób
+              (z portretami z szablonu) nie istniały. Wraca z prawdziwymi
+              osobami, ich zdjęciami i zgodą na publikację wizerunku. */}
 
           {/* biała karta 946×246: film 250×150 obok tekstu, przerwa 64 */}
           <Rise>
@@ -175,18 +163,19 @@ export default function AboutPage() {
                 <div className="flex flex-col gap-3">
                   <h3 className="z-h4">Dołącz do nas</h3>
                   <p className="z-body text-[var(--z-muted)]">
-                    Szukamy ludzi, którzy lubią upraszczać skomplikowane rzeczy.
-                    Napisz, nawet jeśli nie widzisz pasującego ogłoszenia.
+                    Lubisz upraszczać skomplikowane rzeczy? Napisz do nas —
+                    nie prowadzimy teraz rekrutacji, ale chętnie poznamy
+                    ludzi, którzy chcą współtworzyć FaktWay.
                   </p>
                 </div>
-                <Link
-                  href="https://www.linkedin.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                {/* Dawniej „Zobacz oferty na LinkedIn” → linkedin.com (strona
+                    główna, żadnych ofert). */}
+                <a
+                  href={`mailto:${SUPPORT_EMAIL}`}
                   className="z-body inline-flex w-fit items-center rounded-[12px] bg-[var(--z-black)] px-5 py-3.5 font-medium text-white transition-transform hover:scale-[1.02]"
                 >
-                  Zobacz oferty na LinkedIn
-                </Link>
+                  Napisz: {SUPPORT_EMAIL}
+                </a>
               </div>
             </div>
           </Rise>
@@ -209,9 +198,11 @@ export default function AboutPage() {
               <MaskRevealWords text="Wystaw pierwszą fakturę jeszcze dziś" />
             </h2>
             <MaskReveal delay={0.15}>
+              {/* Dawniej „bez podawania karty” — kartę podaje się przy
+                  uruchomieniu subskrypcji (regulamin § 6 ust. 3). */}
               <p className="z-lead text-[var(--z-muted)]">
-                Trzydzieści dni za darmo, bez podawania karty. Jeśli nie
-                podejdzie, po prostu odchodzisz.
+                Konto jest bezpłatne, a subskrypcja zaczyna się od 30 dni bez
+                opłat. Zrezygnujesz przed ich końcem — nie zapłacisz nic.
               </p>
             </MaskReveal>
             <Rise delay={0.25}>
@@ -232,20 +223,9 @@ export default function AboutPage() {
             </Rise>
           </div>
 
-          {/* ramka 1016 w szarości #e6e6e6, w środku pulpit 969×579 */}
-          <Tilt className="w-full">
-            <div className="mx-auto w-full max-w-[1016px] rounded-[32px] bg-[var(--z-300)] p-5">
-              <div className="relative aspect-[969/579] w-full overflow-hidden rounded-[20px] bg-white">
-                <Image
-                  src={asset.hero.dashboard}
-                  alt="Pulpit FaktFlow"
-                  fill
-                  sizes="(max-width: 1024px) 100vw, 969px"
-                  className="object-cover object-top"
-                />
-              </div>
-            </div>
-          </Tilt>
+          {/* Zrzut „pulpitu” usunięty 15.10.2026 — był to panel
+              inwestycyjny z szablonu podpisany nazwą produktu. Wraca tylko
+              prawdziwy zrzut. */}
         </Container>
       </section>
 

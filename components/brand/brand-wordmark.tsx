@@ -2,12 +2,12 @@ import Link from 'next/link';
 
 import { cn } from '@/lib/utils';
 
-/** Wordmark FaktFlow — identyczna typografia jak na landingu. */
+/** Wordmark FaktWay — identyczna typografia jak na landingu. */
 const WORDMARK_CLASS = 'marketing-wordmark text-[1.35rem]';
 
 /**
- * Wariant panelu (prototyp): Inter 700, prosta antykwa (bez kursywy),
- * dwutonowo — „Fakt" w kolorze tekstu, „Flow" w akcencie.
+ * Wariant panelu: Outfit 700 (font panelu), prosta antykwa (bez kursywy),
+ * dwutonowo — „Fakt" w kolorze tekstu, „Way" w akcencie.
  */
 const APP_WORDMARK_CLASS =
   'text-[22px] font-bold leading-none tracking-[-0.02em] text-[var(--ff-on-surface)]';
@@ -27,7 +27,7 @@ export function BrandWordmark({
   const mark =
     variant === 'app' ? (
       <span className={cn(APP_WORDMARK_CLASS, className)}>
-        Fakt<span className="text-[var(--ff-accent)]">Flow</span>
+        Fakt<span className="text-[var(--ff-accent)]">Way</span>
       </span>
     ) : (
       <span
@@ -37,7 +37,7 @@ export function BrandWordmark({
           className,
         )}
       >
-        FaktFlow
+        FaktWay
       </span>
     );
 

@@ -58,7 +58,7 @@ export function WelcomeModal() {
               <Sparkles className="h-7 w-7 text-foreground" aria-hidden />
             </div>
             <DialogTitle className="font-display text-3xl tracking-tighter-display">
-              Witaj w FaktFlow
+              Witaj w FaktWay
             </DialogTitle>
             <DialogDescription className="mx-auto max-w-md text-base text-muted-foreground">
               Twoja firma jest gotowa. Wybierz jak chcesz zacząć — zawsze możesz

@@ -21,6 +21,8 @@ beforeEach(() => {
   vi.resetAllMocks(); vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-23T12:00:00Z'));
   dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://app.example.test' });
   vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document);
+  // Base UI Button (floating-ui isHTMLElement) wymaga konstruktorów DOM w globalach.
+  vi.stubGlobal('HTMLElement', dom.window.HTMLElement); vi.stubGlobal('Element', dom.window.Element); vi.stubGlobal('Node', dom.window.Node);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
 });

@@ -1,3 +1,4 @@
+import { CorrectionPageFrame } from '@/components/invoices/finora/correction-page-frame';
 import { createClient } from '@/lib/supabase/server';
 import { getActiveOrgIdFromCookies } from '@/lib/supabase/active-org';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
@@ -37,11 +38,11 @@ export default async function NewCorrectionPage({
   const available = excludeParentsWithOpenCorrection(parentInvoices ?? [], corrections ?? []);
 
   return (
-    <div className="max-w-4xl">
+    <CorrectionPageFrame>
       <CorrectionInvoiceForm
         parentInvoices={available}
         preselectedParentId={params.parentId}
       />
-    </div>
+    </CorrectionPageFrame>
   );
 }

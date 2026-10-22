@@ -30,6 +30,8 @@ const COLUMNS = [
     links: [
       { label: 'Polityka prywatności', href: '/legal/polityka-prywatnosci' },
       { label: 'Regulamin', href: '/legal/regulamin' },
+      { label: 'Umowa powierzenia', href: '/legal/umowa-powierzenia' },
+      { label: 'Cookies', href: '/legal/cookies' },
     ],
   },
 ];
@@ -86,7 +88,7 @@ export function SiteFooter() {
       <Container className="flex flex-col gap-12">
         <div className="flex flex-col gap-10 md:flex-row md:justify-between">
           <div className="flex flex-col gap-5">
-            <Image src={asset.logo} alt="FaktFlow" width={32} height={32} />
+            <Image src={asset.logo} alt="FaktWay" width={32} height={32} />
             <span className="z-lead font-medium">Bądźmy w kontakcie</span>
             <div className="flex gap-3">
               {SOCIAL.map((id) => (
@@ -119,7 +121,7 @@ export function SiteFooter() {
         </div>
 
         <p className="z-small text-[var(--z-muted)]">
-          FaktFlow. Wszystkie prawa zastrzeżone.
+          FaktWay. Wszystkie prawa zastrzeżone.
         </p>
       </Container>
     </footer>

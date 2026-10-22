@@ -59,6 +59,16 @@ describe('separate RLS test configuration', () => {
       'tests/rls-kontrola-dziennik-prob.test.ts',
       // A5: procedura operatora dla faktury, która utknęła w wysyłce (I2/I1) — skrypt SQL przez psql.
       'tests/rls-zwolnij-utknieta-wysylke.test.ts',
+      // 00152: faktura za abonament w obu nazwach produktu (FaktFlow, FaktWay).
+      'tests/rls-faktura-abonamentu-faktway.test.ts',
+      // Plan Finora E3: dzieci faktur (korekta, ROZ) przez prawdziwy PostgREST.
+      'tests/rls-dzieci-faktur.test.ts',
+      // Plan Finora E3 / C1: filtr płatności listy faktur (kilka or()) przez PostgREST.
+      'tests/rls-lista-faktur-platnosc.test.ts',
+      // 00153 (plan Finora E4, limit VAT): GRANT SELECT nowej kolumny tenants, CHECK, izolacja.
+      'tests/rls-data-rozpoczecia.test.ts',
+      // 00154 (plan Finora E9, N1): faktury cykliczne — izolacja firm, jeden okres, CHECK-i, SET NULL.
+      'tests/rls-faktury-cykliczne.test.ts',
     ]);
     expect(rlsConfig.test?.exclude).toEqual([]);
     expect(rlsConfig.test?.setupFiles).toEqual(['./tests/setup-rls.ts']);

@@ -36,7 +36,7 @@
 #   5. UPO wg statusu i błędu (W12)
 #   6. skrzynka: przychodzące bez kosztu, bez XML, z otwartym znacznikiem (K2)
 #   7. pg-boss: joby wg (kolejka, stan), harmonogramy, polityka kolejek
-#   8. dokumenty, których JPK nie wykaże (W9): stawki spoza FaktFlow,
+#   8. dokumenty, których JPK nie wykaże (W9): stawki spoza FaktWay,
 #      zaimportowane KOR/ZAL/ROZ, a od C5b treść z pliku KSeF (adnotacje
 #      i daty sprzedaży nieczytelne albo sprzed C5b, procedury, FP/TP/GTU),
 #      od C5c kwoty pozycji (ceny brutto, VAT od sumy stawki)
@@ -232,7 +232,7 @@ sql "polityka kolejek (QUEUE_POLICY: retry_limit, expire_seconds)" \
   "SELECT name, retry_limit, retry_delay, expire_seconds FROM pgboss.queue ORDER BY 1"
 
 section "8. db-1: dokumenty, których JPK nie wykaże (W9, import historii KSeF)"
-sql "pozycje sprzedaży przyjętej ze stawką spoza FaktFlow (0 WDT, 0 EX, 22, 7, 4, 3, nieznana; stare surowe 0 KR / np I / np II)" \
+sql "pozycje sprzedaży przyjętej ze stawką spoza FaktWay (0 WDT, 0 EX, 22, 7, 4, 3, nieznana; stare surowe 0 KR / np I / np II)" \
   "SELECT i.tenant_id, i.internal_number, i.ksef_number, to_char(i.issue_date, 'YYYY-MM') AS okres, l.vat_rate, count(*) FROM invoice_line_items l JOIN invoices i ON i.id = l.invoice_id WHERE i.direction='outgoing' AND i.ksef_status='accepted' AND l.vat_rate NOT IN ('23','8','5','0','zw','oo','np','np_ii') GROUP BY 1,2,3,4,5 ORDER BY 4 DESC, 2 LIMIT 50"
 sql "zaimportowane korekty, zaliczki i ROZ zapisane jako zwykłe (invoice_kind regular)" \
   "SELECT tenant_id, internal_number, ksef_number, invoice_type, issue_date FROM invoices WHERE direction='outgoing' AND ksef_status='accepted' AND invoice_kind='regular' AND invoice_type IN ('KOR','ZAL','ROZ') ORDER BY issue_date DESC LIMIT 50"
@@ -243,7 +243,7 @@ sql "C5c: sprzedaż z importu, której pozycje nie sumują się do netto albo VA
   "SELECT i.tenant_id, i.internal_number, i.ksef_number, to_char(i.issue_date, 'YYYY-MM') AS okres, i.net_total, coalesce(sum(l.net_amount), 0) AS netto_pozycji, i.vat_total, coalesce(sum(l.vat_amount), 0) AS vat_pozycji FROM invoices i LEFT JOIN invoice_line_items l ON l.invoice_id = i.id WHERE i.origin='ksef_import' AND i.direction='outgoing' AND i.ksef_status='accepted' GROUP BY i.id HAVING abs(coalesce(sum(l.vat_amount), 0) - i.vat_total) >= 0.005 OR abs(coalesce(sum(l.net_amount), 0) - i.net_total) > 0.01 * greatest(count(l.id), 1) + 0.01 ORDER BY 4 DESC LIMIT 50"
 
 section "9. dokumenty specjalne — dane do ponownej wysyłki (A4b, 00137)"
-printf -- '--- KSEF_ENV workera (test = KOR wysyłane także na produkcji FaktFlow)\n'
+printf -- '--- KSEF_ENV workera (test = KOR wysyłane także na produkcji FaktWay)\n'
 "${SSH[@]}" "root@$APP" \
   "W=\$(docker ps --format '{{.Names}}' | grep '^$WORKER_PREFIX' | head -1); \
    if [ -z \"\$W\" ]; then echo '  (brak kontenera workera)'; exit 0; fi; \
@@ -320,7 +320,7 @@ sql "(d) powiadomienia „czeka na Twoją decyzję” z 30 dni: kto (auto = pier
   "SELECT coalesce(metadata->>'via','(brak)') AS kto, count(*), count(DISTINCT entity_id) AS faktur, max(created_at) AS ostatnie FROM audit_logs WHERE action='invoice.ksef_duplicate_decision_notified' AND created_at > now() - interval '30 days' GROUP BY 1 ORDER BY 1"
 sql "(e) decyzje z 7 dni: wybór | powód | kto (client / operator) | liczba" \
   "SELECT coalesce(details_json->>'choice','?') AS wybor, coalesce(details_json->>'reason','?') AS powod, coalesce(details_json->>'via','?') AS kto, count(*) FROM audit_logs WHERE action='invoice.ksef_duplicate_decided' AND created_at > now() - interval '7 days' GROUP BY 1,2,3 ORDER BY 1,2,3"
-sql "(f) decyzje known-number z 30 dni — sprawdź dokument Y w KSeF i w FaktFlow (runbook; naprawa Y tylko za zgodą Bartosza): firma | faktura | numer | numer KSeF oryginału | Y id | Y numer | Y stan | Y ma numer KSeF oryginału | wybór | kiedy" \
+sql "(f) decyzje known-number z 30 dni — sprawdź dokument Y w KSeF i w FaktWay (runbook; naprawa Y tylko za zgodą Bartosza): firma | faktura | numer | numer KSeF oryginału | Y id | Y numer | Y stan | Y ma numer KSeF oryginału | wybór | kiedy" \
   "SELECT a.tenant_id, a.entity_id AS faktura, a.details_json->'retired'->>'internal_number' AS numer, a.details_json->'original'->>'ksef_number' AS numer_ksef_oryginalu, a.details_json->'original'->'known_invoice'->>'id' AS y_id, a.details_json->'original'->'known_invoice'->>'internalNumber' AS y_numer, coalesce(y.ksef_status::text,'(brak Y)') AS y_stan, (y.ksef_number IS NOT DISTINCT FROM a.details_json->'original'->>'ksef_number') AS y_ma_numer_k, a.details_json->>'choice' AS wybor, a.created_at FROM audit_logs a LEFT JOIN invoices y ON y.id::text = a.details_json->'original'->'known_invoice'->>'id' AND y.tenant_id = a.tenant_id WHERE a.action='invoice.ksef_duplicate_decided' AND a.details_json->>'reason'='known-number' AND a.created_at > now() - interval '30 days' ORDER BY a.created_at DESC LIMIT 50"
 sql "(g) szkice z wpisem number_taken (wycofane): rodzaj | skąd (decyzja klienta / automat KSEF_NUMBER_TAKEN) | co blokuje 00148 | liczba" \
   "SELECT i.invoice_kind, CASE WHEN EXISTS (SELECT 1 FROM ksef_submissions s WHERE s.invoice_id = i.id AND s.tenant_id = i.tenant_id AND s.status='number_taken' AND coalesce(s.original_check ? 'decision', false)) THEN 'decyzja klienta' ELSE 'automat KSEF_NUMBER_TAKEN' END AS skad, CASE WHEN i.invoice_kind IN ('regular','advance') THEN 'trzyma numer: bez wysylki, usuwania i zmiany numeru' ELSE 'bez wysylki i zmiany numeru; klient moze usunac (07.10 (9))' END AS po_00148, count(*) FROM invoices i WHERE i.direction='outgoing' AND i.ksef_status='draft' AND EXISTS (SELECT 1 FROM ksef_submissions s WHERE s.invoice_id = i.id AND s.tenant_id = i.tenant_id AND s.status='number_taken') GROUP BY 1,2,3 ORDER BY 1,2"

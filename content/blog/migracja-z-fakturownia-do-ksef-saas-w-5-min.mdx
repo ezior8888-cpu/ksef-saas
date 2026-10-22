@@ -25,16 +25,16 @@ W panelu onboardingu wybierasz **Magiczny Import**. System najpierw pobiera hist
 
 W drugim kroku wgrywasz **CSV / eksport JPK** z Fakturownia. Kreator mapuje pola (kontrahent, numery faktur, kwoty VAT). Jeśli któryś wiersz ma konflikt (np. podwójny numer wewnętrzny), zobaczysz go na liście do ręcznej decyzji — zamiast cichego pominięcia połowy pliku.
 
-> **Screenshot w produkcji:** w interfejsie pojawi się podgląd pierwszych 10 wierszy oraz licznik „zaimportowano / pominięto / do weryfikacji”. W wersji beta testerzy robili zrzut ekranu tego ekranu do dokumentacji wewnętrznej biura — Ty możesz zrobić to samo dla audytu.
+> **Wskazówka:** po imporcie zrób zrzut ekranu z podsumowaniem (zaimportowano / pominięto / do weryfikacji) i zachowaj go w dokumentacji — przyda się przy audycie.
 
 ## Minuta 4–5: weryfikacja próbki
 
-Zaznacz **10 losowych faktur sprzedaży i 10 kosztów**: porównaj kwoty brutto / VAT z PDF-ami z maila. Jeśli się zgadza — możesz przełączyć się na wystawianie nowych dokumentów już tylko z KSeF SaaS. Jeśli nie — najczęściej winny jest **zły separator w CSV** albo ręczne korekty w starym systemie — wróć do eksportu i powtórz import (idempotentnie, bez duplikatów dzięki kluczom z KSeF).
+Zaznacz **10 losowych faktur sprzedaży i 10 kosztów**: porównaj kwoty brutto / VAT z PDF-ami z maila. Jeśli się zgadza — możesz przełączyć się na wystawianie nowych dokumentów już tylko z FaktWay. Jeśli nie — najczęściej winny jest **zły separator w CSV** albo ręczne korekty w starym systemie — wróć do eksportu i powtórz import (idempotentnie, bez duplikatów dzięki kluczom z KSeF).
 
 ## Po imporcie: co jeszcze warto zrobić tego samego dnia
 
 1. **Wyślij jedną fakturę testową** do KSeF na kwotę symboliczną lub do swojej drugiej działalności — sprawdź pełną ścieżkę UPO.
-2. **Poinformuj księgową** o zmianie narzędzia i sposobie eksportu JPK_FA / KPiR (w KSeF SaaS: jeden klik do pakietu).
+2. **Poinformuj księgową** o zmianie narzędzia i sposobie eksportu JPK_FA / KPiR (w FaktWay: jeden klik do pakietu).
 3. **Wyłącz duplikaty** w starym programie — żeby przez tydzień nie wystawiać dokumentów „w dwóch miejscach”.
 
 ## Najczęstsze pytania
@@ -50,4 +50,4 @@ Ustal z księgową ciągłość numeracji lub datę „cięcia” — systemy r�
 
 ## Podsumowanie
 
-Migracja w 5 minut to **efekt dobrego przygotowania plików**, nie obietnica bez pracy przy starych danych. Jeśli eksport jest czysty, KSeF SaaS robi resztę: import z KSeF + import z Fakturownia + walidacja przed pierwszą produkcyjną wysyłką. Dalsze kroki — już tylko praca na żywym KSeF.
+Migracja w 5 minut to **efekt dobrego przygotowania plików**, nie obietnica bez pracy przy starych danych. Jeśli eksport jest czysty, FaktWay robi resztę: import z KSeF + import z Fakturownia + walidacja przed pierwszą produkcyjną wysyłką. Dalsze kroki — już tylko praca na żywym KSeF.

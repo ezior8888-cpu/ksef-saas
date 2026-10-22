@@ -163,7 +163,7 @@ const TRANSFER: Omit<PaymentInfo, 'amountDue'> = {
 
 interface LineSpec { name: string; unit: string; qty: number; price: number; rate: VatRate }
 
-/** Faktura FaktFlow (`finalizeInvoice` jak formularz); adnotacje doklejane po sumach. */
+/** Faktura FaktWay (`finalizeInvoice` jak formularz); adnotacje doklejane po sumach. */
 function faktflowInvoice(
   number: string,
   lines: LineSpec[],
@@ -183,7 +183,7 @@ function faktflowInvoice(
   return o.annotations ? { ...finalized, annotations: o.annotations } : finalized;
 }
 
-/** Plik taki, jaki FaktFlow wysyła do KSeF (stały `generatedAt`; NIP fikcyjny bez sumy kontrolnej → bez `validate`). */
+/** Plik taki, jaki FaktWay wysyła do KSeF (stały `generatedAt`; NIP fikcyjny bez sumy kontrolnej → bez `validate`). */
 const faktflowXml = (invoice: Invoice) =>
   generateFA3Xml(invoice, { validate: false, generatedAt: new Date('2026-09-10T08:00:00Z') });
 
@@ -284,7 +284,7 @@ afterEach(() => {
 });
 
 describe('C0: fikstury', () => {
-  it('pliki FaktFlow i statyczne (poza stawka-nieznana) przechodzą XSD FA(3); stawka-nieznana odpada tylko na P_12', async () => {
+  it('pliki FaktWay i statyczne (poza stawka-nieznana) przechodzą XSD FA(3); stawka-nieznana odpada tylko na P_12', async () => {
     for (const name of ALL_FIXTURES) {
       const result = await validateFA3(decodeKsefXml(fixtureBytes(name)));
       if (name === 'stawka-nieznana') {

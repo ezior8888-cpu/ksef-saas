@@ -952,7 +952,7 @@ describe('D-A4-1b-3 PR B: decyzja klienta i przypomnienie — akcje operatora', 
     });
 
     it('odmowa RPC (P0001, np. wpłata niewidoczna w paid_amount) → komunikat RPC bez zmian, bez audytu', async () => {
-      const refusal = 'Na dokumencie FV/9 są zapisane wpłaty — decyzji nie zapiszemy, dopóki wpłaty są przy tym dokumencie. W FaktFlow nie zmienisz ich sam: napisz do nas: pomoc@faktflow.pl, podając numer dokumentu — ustalimy, przy której fakturze je zapisać. Nie wystawiaj go ponownie.';
+      const refusal = 'Na dokumencie FV/9 są zapisane wpłaty — decyzji nie zapiszemy, dopóki wpłaty są przy tym dokumencie. W FaktWay nie zmienisz ich sam: napisz do nas: pomoc@faktway.pl, podając numer dokumentu — ustalimy, przy której fakturze je zapisać. Nie wystawiaj go ponownie.';
       decideReply = { data: null, error: { code: 'P0001', message: refusal } };
 
       const result = await decide(ID, decideInput());

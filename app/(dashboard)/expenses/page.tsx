@@ -1,13 +1,29 @@
 import Link from 'next/link';
 
 import { CaptureButton } from '@/components/expenses/capture-button';
-import { ExpensesList } from '@/components/expenses/expenses-list';
-import { monthLabel, monthRange, parseExpenseMonth, shiftMonth } from '@/lib/expenses/month';
+import { CostsTabs } from '@/components/expenses/costs-tabs';
+import { ExpenseStatsCards } from '@/components/expenses/finora/expense-stat-cells';
+import { ExpensesTable } from '@/components/expenses/finora/expenses-table';
+import MonthSelector from '@/components/expenses/finora/month-selector';
+import { Alert, AlertTitle } from '@/components/ui/alert';
+import { buttonVariants } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { monthRange, parseExpenseMonth } from '@/lib/expenses/month';
 import { getPageContext } from '@/lib/supabase/page-context';
-import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Wydatki (plan Finora P8 ← Finora `/transactions`: `TransactionsView` =
+ * kafle + karta z tabelą). Wybór miesiąca jak w Finora Monthly Analytics.
+ * Lista i jej zapytanie bez zmian (F-087: miesiąc od–do albo wszystkie „Do
+ * opisania”); kafle liczą własne zapytania (§2.4 pkt 12) w osobnych granicach
+ * błędu.
+ *
+ * Poprawka Bartosza 21.10.2026: zakładka „Wydatki” ekranu Koszty (druga to
+ * „Skrzynka KSeF”), jak zakładki Faktur — bez widocznego nagłówka (tytuł dla
+ * czytników ekranu), karta z zakładkami sięga do stopki (`ff-page-fill`).
+ */
 export default async function ExpensesPage({
   searchParams,
 }: {
@@ -38,75 +54,66 @@ export default async function ExpensesPage({
 
   const { data: expenses, error } = await expensesQuery;
 
+  // Bez dolnego odstępu pod pływającym „+ Dodaj wydatek”: karta ma sięgać stopki
+  // jak w Skrzynce KSeF, a na końcu przewijania stopka z `py-6` powłoki i tak
+  // trzyma paginację z dala od przycisku.
   return (
-    <div className="space-y-8 pb-24 text-[var(--ff-on-surface)] lg:pb-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-            Wydatki
-          </h1>
-          <p className="text-sm text-[var(--ff-text-muted)]">
-            Faktury kosztowe i paragony — automatycznie kategoryzowane do KPiR
-          </p>
-          <div className="ff-glass-pane inline-flex rounded-full p-1">
-            <Link
-              href="/expenses"
-              className={cn(
-                'rounded-full px-4 py-2 text-sm font-bold transition-colors',
-                !unreviewedOnly
-                  ? 'bg-[color-mix(in_srgb,var(--ff-on-surface)_12%,transparent)] text-[var(--ff-on-surface)]'
-                  : 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_65%,transparent)] hover:text-[var(--ff-on-surface)]',
-              )}
-            >
-              Miesiąc
-            </Link>
-            <Link
-              href="/expenses?filter=unreviewed"
-              className={cn(
-                'rounded-full px-4 py-2 text-sm font-bold transition-colors',
-                unreviewedOnly
-                  ? 'bg-[color-mix(in_srgb,var(--ff-on-surface)_12%,transparent)] text-[var(--ff-on-surface)]'
-                  : 'text-[color-mix(in_srgb,var(--ff-on-surface-variant)_65%,transparent)] hover:text-[var(--ff-on-surface)]',
-              )}
-            >
-              Do akceptacji
-            </Link>
-          </div>
-        </div>
-        <div className="hidden lg:block">
-          <CaptureButton />
-        </div>
+    <div className="ff-page-fill flex flex-col gap-6">
+      <h1 className="sr-only">Wydatki</h1>
+
+      {/* Przełącznik i miesiąc sterują i kaflami, i tabelą — dlatego stoją nad kaflami, nie w karcie. */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <nav aria-label="Widok listy wydatków" className="flex">
+          <Link
+            href="/expenses"
+            aria-current={!unreviewedOnly ? 'page' : undefined}
+            className={buttonVariants({ variant: !unreviewedOnly ? 'default' : 'outline' })}
+          >
+            Miesiąc
+          </Link>
+          <Link
+            href="/expenses?filter=unreviewed"
+            aria-current={unreviewedOnly ? 'page' : undefined}
+            className={buttonVariants({ variant: unreviewedOnly ? 'default' : 'outline' })}
+          >
+            Do opisania
+          </Link>
+        </nav>
+        {!unreviewedOnly ? (
+          <MonthSelector month={month} currentMonth={currentMonth} basePath="/expenses" />
+        ) : null}
       </div>
 
-      {!unreviewedOnly && (
-        <nav className="flex items-center justify-between gap-3 text-sm" aria-label="Miesiąc wydatków">
-          <Link className="font-semibold text-[var(--ff-primary)]" href={`/expenses?miesiac=${shiftMonth(month, -1)}`}>
-            ← {monthLabel(shiftMonth(month, -1))}
-          </Link>
-          <span className="font-bold capitalize">{monthLabel(month)}</span>
-          {month < currentMonth ? (
-            <Link className="font-semibold text-[var(--ff-primary)]" href={`/expenses?miesiac=${shiftMonth(month, 1)}`}>
-              {monthLabel(shiftMonth(month, 1))} →
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
-      )}
+      <ExpenseStatsCards supabase={supabase} tenantId={tenantId} month={month} />
 
       {error ? (
-        <div className="ff-glass-pane rounded-[var(--ff-radius-lg)] border border-red-400/25 bg-[color-mix(in_srgb,#f87171_10%,transparent)] p-4 text-sm text-red-200">
-          Nie udało się pobrać wydatków: {error.message}
-        </div>
+        // Błąd w karcie z zakładkami — z ekranu da się przejść do Skrzynki KSeF.
+        <Card className="flex-1 pt-0">
+          <CostsTabs active="wydatki" />
+          <div className="flex flex-col gap-4 px-4 pt-2">
+            <Alert variant="destructive">
+              <AlertTitle>Nie udało się pobrać wydatków: {error.message}</AlertTitle>
+            </Alert>
+            {/* Od `lg` przycisk stoi w pasku tabeli; bez tabeli dodawanie zostaje tu. */}
+            <div className="flex justify-end max-lg:hidden">
+              <CaptureButton />
+            </div>
+          </div>
+        </Card>
       ) : (
-        <ExpensesList
-          initialExpenses={expenses ?? []}
-          listVariant={unreviewedOnly ? 'unreviewed' : 'month'}
-        />
+        <Card className="flex-1 pt-0">
+          <CostsTabs active="wydatki" />
+          <div className="flex w-full flex-1 flex-col pt-2">
+            <ExpensesTable
+              expenses={expenses ?? []}
+              listVariant={unreviewedOnly ? 'unreviewed' : 'month'}
+            />
+          </div>
+        </Card>
       )}
 
       <div className="fixed bottom-[calc(1.5rem+var(--ff-bottom-nav-h)+var(--ff-safe-b))] right-6 z-30 lg:hidden">
-        <CaptureButton />
+        <CaptureButton triggerClassName="h-11 px-4 shadow-lg" />
       </div>
     </div>
   );

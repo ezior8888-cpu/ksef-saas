@@ -74,7 +74,7 @@ export const HELP_CATEGORIES: HelpCategory[] = [
   {
     id: 'rozliczenia',
     label: 'Subskrypcja',
-    description: 'Plany, płatności, trial, faktury za FaktFlow.',
+    description: 'Plany, płatności, trial, faktury za FaktWay.',
     icon: 'credit_card',
   },
   {

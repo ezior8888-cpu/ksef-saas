@@ -1,148 +1,333 @@
-import { MonthlyFiguresCard } from '@/components/dashboard/monthly-figures-card';
-import { SalesChartCard } from '@/components/dashboard/sales-chart-card';
-import { VatSummaryCard } from '@/components/dashboard/vat-summary-card';
-import { CashFlowDashboard } from '@/components/expenses/cash-flow-dashboard';
-import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
-import { assertKsefExpensesReadyForPln } from '@/lib/expenses/ksef-currency-review';
-import { fetchSettledAdvancesNet } from '@/lib/invoices/settled-advances';
-import { filterExpensesForKsefEnvironment } from '@/lib/expenses/ksef-environment';
+// Kopia 1:1 z finora-src/src/app/(pages)/dashboard/cash-flow/page.tsx (Przepływy, decyzja Bartosza 21.10.2026): zmienione tylko teksty, kwoty, daty i importy.
+// Dane PRZYKŁADOWE jak w Finorze. Karty na prawdziwych danych (components/przeplywy/przeplywy-grid.tsx,
+// components/przeplywy/finora/*) zostają w kodzie do ponownego podpięcia („wrócimy do tego”, jak Pulpit).
+// Importy zewnętrzne
 import {
-  formatPlMoney,
-  getMonthlyFigures,
-  getSalesSeries,
-} from '@/lib/dashboard/monthly-figures';
-import { todayInWarsaw } from '@/lib/format/warsaw-date';
-import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
-import { readCompletePages } from '@/lib/accounting/read-complete-pages';
-import { getPageContext } from '@/lib/supabase/page-context';
+  RiBillLine,
+  RiBriefcaseLine,
+  RiFilmLine,
+  RiFlashlightLine,
+  RiHomeGearLine,
+  RiMoneyDollarCircleLine,
+  RiReceiptLine,
+  RiShoppingBag3Line,
+  RiWifiLine
+} from '@remixicon/react'
 
-/**
- * WŁAŚCICIEL: Bartosz (tor silnika) — rama panelu.
- *
- * Od 30.08.2026 stoją tu też podsumowanie VAT i wykres sprzedaży, przeniesione
- * z dashboardu, który oddał całą powierzchnię agentowi FLO.
- *
- * Kwoty w podsumowaniu VAT i na wykresie sprzedaży pochodzą wyłącznie
- * z faktur przyjętych w aktywnym środowisku KSeF. Szkice lokalne mają
- * oddzielny licznik, a kolejki bez potwierdzonej proweniencji nie powiększają
- * wartości podatkowych.
- */
-export const dynamic = 'force-dynamic';
+// Importy komponentów
+import { Card } from '@/components/ui/card'
+import CashFlowCard from '@/components/przeplywy/finora-1do1/chart-cash-flow'
+import TransactionDatatable, { type Item } from '@/components/przeplywy/finora-1do1/datatable-transaction'
+import StatisticsAreaStatCard from '@/components/przeplywy/finora-1do1/statistics-area-stat-card'
+import StatisticsSavingsGoalCard from '@/components/przeplywy/finora-1do1/statistics-savings-goal-card'
+import RecentActivityCard from '@/components/przeplywy/finora-1do1/widget-recent-activity'
+import TopCashFlowSourcesCard from '@/components/przeplywy/finora-1do1/widget-top-cash-flow-sources'
+import UpcomingBillsCard from '@/components/przeplywy/finora-1do1/widget-upcoming-bills'
 
-export default async function PrzeplywyPage() {
-  const { supabase, tenantId } = await getPageContext();
-  const environment = requireConfiguredKsefEnvironment();
+// Dane kart przychodów i wydatków
+const incomeChartData = [
+  { date: '2026-07-24', value: 3100 },
+  { date: '2026-07-25', value: 3400 },
+  { date: '2026-07-26', value: 3050 },
+  { date: '2026-07-27', value: 3800 },
+  { date: '2026-07-28', value: 4200 },
+  { date: '2026-07-29', value: 3950 },
+  { date: '2026-07-30', value: 4600 },
+  { date: '2026-07-31', value: 4400 }
+]
 
-  const now = new Date();
-  // Miesiąc i rok w czasie polskim, bez `toISOString()` z lokalnej północy
-  // (w strefie polskiej cofało początek o dzień: 1 maja → 30 kwietnia),
-  // a serwer chodzi w UTC.
-  const [year, month] = todayInWarsaw(now).split('-').map(Number);
-  const chartStart = new Date(Date.UTC(year, month - 1 - 5, 1));
-  const sixMonthsAgo = chartStart.toISOString().slice(0, 10);
-  // C-21: szacunek podatku liczy się od 1 stycznia, a wykres pokazuje sześć
-  // miesięcy — dane od wcześniejszej z tych dat. Bez tego od lipca kafelek
-  // mówił „od 1 maja · bez wcześniejszych miesięcy roku”.
-  const yearStart = `${year}-01-01`;
-  const dataFrom = yearStart < sixMonthsAgo ? yearStart : sixMonthsAgo;
+const expenseChartData = [
+  { date: '2026-07-24', value: 3600 },
+  { date: '2026-07-25', value: 3300 },
+  { date: '2026-07-26', value: 3900 },
+  { date: '2026-07-27', value: 3200 },
+  { date: '2026-07-28', value: 2950 },
+  { date: '2026-07-29', value: 3400 },
+  { date: '2026-07-30', value: 2700 },
+  { date: '2026-07-31', value: 2600 }
+]
 
-  const [invoices, expenses] = await Promise.all([
-    readCompletePages('cash-flow invoices', (from, to) =>
-      supabase
-        .from('invoices')
-        .select('id, issue_date, net_total, gross_total, invoice_kind, advance_invoice_ids, currency', { count: 'exact' })
-        .eq('tenant_id', tenantId)
-        .eq('direction', 'outgoing')
-        .eq('ksef_status', 'accepted')
-        .eq('ksef_environment', environment)
-        .gte('issue_date', dataFrom)
-        .order('id', { ascending: true })
-        .range(from, to),
-    ),
-    readCompletePages('cash-flow expenses', (from, to) =>
-      supabase
-        .from('expenses')
-        .select('id, source, ksef_invoice_id, issue_date, net_amount, gross_amount, vat_amount, vat_deductible_amount, document_type, kpir_column, is_reviewed, ocr_extracted_data', { count: 'exact' })
-        .eq('tenant_id', tenantId)
-        .eq('is_deductible', true)
-        .gte('issue_date', dataFrom)
-        .order('id', { ascending: true })
-        .range(from, to),
-    ),
-  ]);
-  const visibleExpenses = await filterExpensesForKsefEnvironment(
-    supabase, tenantId, environment, expenses,
-  );
-  invoices.sort((a, b) =>
-    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
-  visibleExpenses.sort((a, b) =>
-    a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id));
-  // C-11: sumy w złotych — faktura sprzedaży albo koszt KSeF w walucie obcej
-  // bez przeglądu i kursu zatrzymuje stronę (`error.tsx`).
-  assertOutgoingInvoicesInPln(invoices);
-  await assertKsefExpensesReadyForPln(visibleExpenses, async (ids) => {
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('id, currency')
-      .eq('tenant_id', tenantId)
-      .in('id', ids);
-    if (error) throw new Error('Nie można sprawdzić walut faktur KSeF');
-    return new Map((data ?? []).map((row) => [row.id as string, row.currency as string | null]));
-  });
+// Największe źródła przepływów (przychody i wydatki razem, share = % sumy danej strony)
+const cashFlowSourcesData = [
+  {
+    icon: <RiReceiptLine />,
+    sourceName: 'Faktury od klientów',
+    sourceType: 'Sprzedaż',
+    amount: '18 204 zł',
+    share: 100,
+    direction: 'in' as const,
+    iconClassName: 'bg-primary/10 text-primary dark:bg-primary/20'
+  },
+  {
+    icon: <RiBillLine />,
+    sourceName: 'Wynagrodzenia',
+    sourceType: 'Koszt stały',
+    amount: '6 400 zł',
+    share: 100,
+    direction: 'out' as const,
+    iconClassName: 'bg-chart-2/10 text-chart-2'
+  },
+  {
+    icon: <RiBriefcaseLine />,
+    sourceName: 'Projekty zlecone',
+    sourceType: 'Usługi',
+    amount: '7 340 zł',
+    share: 68,
+    direction: 'in' as const,
+    iconClassName: 'bg-chart-3/10 text-chart-3'
+  },
+  {
+    icon: <RiHomeGearLine />,
+    sourceName: 'Czynsz za biuro',
+    sourceType: 'Koszt stały',
+    amount: '1 850 zł',
+    share: 46,
+    direction: 'out' as const,
+    iconClassName: 'bg-chart-4/10 text-chart-4'
+  },
+  {
+    icon: <RiShoppingBag3Line />,
+    sourceName: 'Zakupy u dostawców',
+    sourceType: 'Koszt zmienny',
+    amount: '3 120 zł',
+    share: 33,
+    direction: 'out' as const,
+    iconClassName: 'bg-chart-5/10 text-chart-5'
+  }
+]
 
-  // Przychód jak w KPiR: ROZ bez zaliczek, które już są w przychodzie
-  // (`kpirRevenueNet`). Błąd odczytu leci do `error.tsx` — zerowa suma
-  // zaliczek zawyżyłaby dochód i szacowany podatek.
-  const settled = await fetchSettledAdvancesNet(supabase, tenantId, invoices);
-  const invoiceRows = invoices.map((inv) => ({
-    ...inv,
-    settled_advances_net: settled.get(inv.id) ?? null,
-  }));
+// Ostatnia aktywność
+const recentActivityData = [
+  {
+    icon: <RiReceiptLine />,
+    label: 'Faktura FV/10/2026/099',
+    subLabel: 'Rachunek firmowy',
+    amount: '3 200,00 zł',
+    direction: 'in' as const,
+    iconClassName: 'bg-primary/10 text-primary dark:bg-primary/20'
+  },
+  {
+    icon: <RiHomeGearLine />,
+    label: 'Czynsz za biuro',
+    subLabel: 'Rachunek firmowy',
+    amount: '1 850,00 zł',
+    direction: 'out' as const,
+    iconClassName: 'bg-chart-4/10 text-chart-4'
+  },
+  {
+    icon: <RiMoneyDollarCircleLine />,
+    label: 'Wpłata za zlecenie',
+    subLabel: 'Rachunek oszczędnościowy',
+    amount: '1 450,00 zł',
+    direction: 'in' as const,
+    iconClassName: 'bg-chart-2/10 text-chart-2'
+  },
+  {
+    icon: <RiWifiLine />,
+    label: 'Internet i media',
+    subLabel: 'Rachunek firmowy',
+    amount: '210,00 zł',
+    direction: 'out' as const,
+    iconClassName: 'bg-chart-3/10 text-chart-3'
+  },
+  {
+    icon: <RiShoppingBag3Line />,
+    label: 'Zakupy u dostawców',
+    subLabel: 'Rachunek firmowy',
+    amount: '320,00 zł',
+    direction: 'out' as const,
+    iconClassName: 'bg-chart-5/10 text-chart-5'
+  }
+]
 
-  const { count: pendingReviewCount } = await supabase
-    .from('expenses')
-    .select('*', { count: 'exact', head: true })
-    .eq('tenant_id', tenantId)
-    .eq('is_reviewed', false);
+// Nadchodzące rachunki
+const upcomingBillsData = [
+  {
+    icon: <RiHomeGearLine />,
+    title: 'Czynsz za biuro',
+    dueDate: 'Termin za 3 dni',
+    amount: '1 850,00 zł',
+    iconClassName: 'bg-primary/10 text-primary dark:bg-primary/20'
+  },
+  {
+    icon: <RiWifiLine />,
+    title: 'Internet i media',
+    dueDate: 'Termin za 6 dni',
+    amount: '210,00 zł',
+    iconClassName: 'bg-chart-2/10 text-chart-2'
+  },
+  {
+    icon: <RiFlashlightLine />,
+    title: 'Rachunek za prąd',
+    dueDate: 'Termin za 4 dni',
+    amount: '164,00 zł',
+    iconClassName: 'bg-chart-4/10 text-chart-4'
+  },
+  {
+    icon: <RiFilmLine />,
+    title: 'Subskrypcje',
+    dueDate: 'Termin za 9 dni',
+    amount: '68,00 zł',
+    iconClassName: 'bg-chart-3/10 text-chart-3'
+  },
+  {
+    icon: <RiBillLine />,
+    title: 'Wynagrodzenia',
+    dueDate: 'Termin za 12 dni',
+    amount: '6 400,00 zł',
+    iconClassName: 'bg-chart-5/10 text-chart-5'
+  }
+]
 
-  const [figures, series] = await Promise.all([
-    getMonthlyFigures(supabase, tenantId, now),
-    getSalesSeries(supabase, tenantId, now),
-  ]);
+// Transakcje do tabeli
+const transactionsData: Item[] = [
+  {
+    id: '1',
+    avatar: '/images/avatars/avatar-1.webp',
+    avatarFallback: 'JA',
+    counterparty: 'Jakub Adamski',
+    email: 'jakub.adamski@przyklad.pl',
+    category: 'income',
+    direction: 'in',
+    amount: 3200,
+    status: 'completed'
+  },
+  {
+    id: '2',
+    avatar: '/images/avatars/avatar-9.webp',
+    avatarFallback: 'RO',
+    counterparty: 'Rachunek oszczędnościowy',
+    email: 'przelewy@przyklad.example',
+    category: 'transfer',
+    direction: 'out',
+    amount: 1500,
+    status: 'pending'
+  },
+  {
+    id: '3',
+    avatar: '/images/avatars/avatar-14.webp',
+    avatarFallback: 'CB',
+    counterparty: 'Czynsz za biuro',
+    email: 'rozliczenia@nieruchomosci.example',
+    category: 'bills',
+    direction: 'out',
+    amount: 1850,
+    status: 'completed'
+  },
+  {
+    id: '4',
+    avatar: '/images/avatars/avatar-2.webp',
+    avatarFallback: 'MG',
+    counterparty: 'Maria Gonciarz',
+    email: 'maria.gonciarz@agencja.example',
+    category: 'income',
+    direction: 'in',
+    amount: 1450,
+    status: 'completed'
+  },
+  {
+    id: '5',
+    avatar: '/images/avatars/avatar-6.webp',
+    avatarFallback: 'AL',
+    counterparty: 'Allegro',
+    email: 'zamowienia@allegro.example',
+    category: 'shopping',
+    direction: 'out',
+    amount: 320,
+    status: 'completed'
+  },
+  {
+    id: '6',
+    avatar: '/images/avatars/avatar-7.webp',
+    avatarFallback: 'NF',
+    counterparty: 'Netflix',
+    email: 'platnosci@netflix.example',
+    category: 'subscription',
+    direction: 'out',
+    amount: 19.99,
+    status: 'completed'
+  },
+  {
+    id: '7',
+    avatar: '/images/avatars/avatar-3.webp',
+    avatarFallback: 'RC',
+    counterparty: 'Robert Czerwiński',
+    email: 'robert.czerwinski@startup.example',
+    category: 'income',
+    direction: 'in',
+    amount: 2780,
+    status: 'pending'
+  },
+  {
+    id: '8',
+    avatar: '/images/avatars/avatar-4.webp',
+    avatarFallback: 'EW',
+    counterparty: 'Energia i Woda Sp. z o.o.',
+    email: 'rozliczenia@media.example',
+    category: 'bills',
+    direction: 'out',
+    amount: 210,
+    status: 'failed'
+  }
+]
 
+const CashFlowDashboard = () => {
   return (
-    <div className="flex flex-col gap-7">
-      {/* Liczby miesiąca stoją na komputerze w prawej szynie dashboardu.
-          Na telefonie szyny nie ma, a dolna nawigacja prowadzi tutaj pod
-          nazwą „Miesiąc” — więc tu jest ich drugi (i na telefonie jedyny)
-          adres. Od `lg` byłyby dublem szyny, stąd `lg:hidden`. */}
-      <div className="lg:hidden">
-        <MonthlyFiguresCard figures={figures} />
-      </div>
+    <>
+      {/* Odstępstwo od Finory (WCAG 1.3.1): niewidoczny nagłówek strony dla czytników. */}
+      <h1 className='sr-only'>Przepływy pieniężne</h1>
+    <div className='grid grid-cols-6 gap-6'>
+      <CashFlowCard className='col-span-full xl:col-span-4' />
 
-      <CashFlowDashboard
-        invoices={invoiceRows}
-        expenses={visibleExpenses}
-        pendingReviewCount={pendingReviewCount ?? 0}
-        dataFrom={dataFrom}
+      <StatisticsSavingsGoalCard className='col-span-full xl:col-span-2' />
+
+      <StatisticsAreaStatCard
+        chartKey='income'
+        title='Przychody w tym miesiącu'
+        amount='34 600 zł'
+        changePercentage='+12,2%'
+        color='var(--chart-4)'
+        badgeClassName='bg-chart-4/10 text-chart-4'
+        chartData={incomeChartData}
+        className='col-span-full sm:col-span-3'
       />
 
-      <VatSummaryCard
-        monthName={figures.monthName}
-        netLabel={formatPlMoney(figures.totalNet)}
-        vatLabel={formatPlMoney(figures.totalVat)}
-        grossLabel={formatPlMoney(figures.totalGross)}
-        vatDueLabel={figures.vatDueLabel}
-        daysToVatDue={figures.daysToVatDue}
+      <StatisticsAreaStatCard
+        chartKey='expense'
+        title='Wydatki w tym miesiącu'
+        amount='26 180 zł'
+        changePercentage='-8,4%'
+        color='var(--chart-4)'
+        badgeClassName='bg-chart-4/10 text-chart-4'
+        chartData={expenseChartData}
+        className='col-span-full sm:col-span-3'
       />
 
-      <SalesChartCard
-        months={series.months}
-        currentSeries={series.currentSeries}
-        prevSeries={series.prevSeries}
-        currentMonthKey={series.currentMonthKey}
-        year={now.getFullYear()}
+      <TopCashFlowSourcesCard
+        title='Największe źródła przepływów'
+        sources={cashFlowSourcesData}
+        className='col-span-full lg:col-span-2'
       />
+
+      <UpcomingBillsCard
+        title='Nadchodzące rachunki'
+        subTitle='Następne 30 dni'
+        bills={upcomingBillsData}
+        className='col-span-full lg:col-span-2'
+      />
+
+      <RecentActivityCard
+        title='Ostatnia aktywność'
+        activity={recentActivityData}
+        className='col-span-full lg:col-span-2'
+      />
+
+      <Card className='col-span-full py-0 shadow-none'>
+        <TransactionDatatable data={transactionsData} />
+      </Card>
     </div>
-  );
+    </>
+  )
 }
+
+export default CashFlowDashboard

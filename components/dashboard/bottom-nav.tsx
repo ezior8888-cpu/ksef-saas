@@ -1,25 +1,32 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
   useMemo,
   useState,
   type PointerEvent as ReactPointerEvent,
-} from 'react';
+} from "react";
 
-import { signOut } from '@/app/(auth)/login/actions';
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
-import { OTWORZ_POMOC } from '@/lib/support/open-support-event';
+import {
+  RiLogoutBoxRLine,
+  RiQuestionLine,
+  type RemixiconComponentType,
+} from "@remixicon/react";
+
+import { signOut } from "@/app/(auth)/login/actions";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { OTWORZ_POMOC } from "@/lib/support/open-support-event";
 import {
   dashboardMobileTabs,
+  dashboardSettingsNavItem,
   getDashboardMoreSections,
   isActiveNavPath,
   type DashboardMobileTab,
-} from '@/lib/dashboard-nav-config';
-import { cn } from '@/lib/utils';
+} from "@/lib/dashboard-nav-config";
+import { cn } from "@/lib/utils";
 
 /**
  * Dolna nawigacja telefonu — pasek z sierpniowej makiety.
@@ -118,6 +125,7 @@ export function BottomNav() {
                     href={item.href}
                     label={item.label}
                     icon={item.icon}
+                    prefetch={item.prefetch !== false}
                     active={isActiveNavPath(pathname, item.href)}
                   />
                 ))}
@@ -127,10 +135,10 @@ export function BottomNav() {
 
           <div className="mt-1 min-w-0 border-t border-[var(--ff-border)] pt-2">
             <MoreRow
-              href="/settings"
-              label="Ustawienia"
-              icon="settings"
-              active={isActiveNavPath(pathname, '/settings')}
+              href={dashboardSettingsNavItem.href}
+              label={dashboardSettingsNavItem.label}
+              icon={dashboardSettingsNavItem.icon}
+              active={isActiveNavPath(pathname, dashboardSettingsNavItem.href)}
             />
 
             {/* Pomoc jest tu, bo na telefonie pływający bąbelek jest ukryty —
@@ -143,32 +151,25 @@ export function BottomNav() {
               }}
               className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-[var(--ff-text)] transition-colors hover:bg-[var(--ff-row-hover)]"
             >
-              <span
-                aria-hidden
-                className="material-symbols-outlined flex size-5 shrink-0 text-[20px]"
-              >
-                help
-              </span>
+              <RiQuestionLine aria-hidden className="size-5 shrink-0" />
               Pomoc
             </button>
           </div>
 
-          {/* Wylogowanie zeszło tu z górnego paska — na 375 px nie mieściło
-              się obok wordmarku i przełącznika organizacji, a jest czynnością
-              rzadką. Przełącznika motywu tu NIE MA celowo: księżyc stoi
-              w pasku nagłówka (tak jak w makiecie), a ten sam przełącznik
-              w dwóch miejscach to zagadka, nie wygoda. */}
-          <form action={signOut} className="border-t border-[var(--ff-border)] pt-2">
+          {/* Ustawienia i Wyloguj są też w menu profilu paska górnego (od
+              21.10.2026 pasek 1:1 z Finory, widoczny na każdej szerokości).
+              Tu zostają celowo: arkusz „Więcej” to nawigacja telefonu, a sama
+              Finora też dubluje zębatkę i „Settings” w menu profilu.
+              Przełącznika motywu tu NIE MA: księżyc stoi w pasku górnym. */}
+          <form
+            action={signOut}
+            className="border-t border-[var(--ff-border)] pt-2"
+          >
             <button
               type="submit"
               className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-[var(--ff-text-muted)] transition-colors hover:bg-[var(--ff-row-hover)] hover:text-[var(--ff-text)]"
             >
-              <span
-                aria-hidden
-                className="material-symbols-outlined flex size-5 shrink-0 text-[20px]"
-              >
-                logout
-              </span>
+              <RiLogoutBoxRLine aria-hidden className="size-5 shrink-0" />
               Wyloguj
             </button>
           </form>
@@ -180,15 +181,21 @@ export function BottomNav() {
 
 function shouldHandlePrimaryInAppNav(e: ReactPointerEvent): boolean {
   return (
-    e.pointerType !== 'mouse' ||
+    e.pointerType !== "mouse" ||
     (e.button === 0 && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey)
   );
 }
 
 /**
  * Jeden slot paska. Wyróżniony („Nowa") rysuje się jako niebieskie koło
- * wyniesione ponad krawędź — tak jak w makiecie i tak, jak działa to
- * w aplikacjach, z których klient korzysta na co dzień.
+ * z plusem, bez widocznego podpisu.
+ *
+ * Poprawka Bartosza 21.10.2026: koło nie jest już wyniesione ponad krawędź
+ * paska (dawne `-mt-5`) i nie ma pod sobą napisu „Nowa” (dawne `-mt-3`).
+ * Napis nachodził na dół koła, więc zamiast go przesuwać, koło stoi teraz
+ * dokładnie tam, gdzie był napis, a sam napis zostaje tylko dla czytników
+ * ekranu (`sr-only`) — link nadal ma nazwę dostępną „Nowa”. Odstępy
+ * paska od bezpiecznego obszaru (`--ff-safe-b`) zostają bez zmian.
  */
 function BottomNavSlot({
   tab,
@@ -206,48 +213,45 @@ function BottomNavSlot({
   // 44 px to minimalny cel dotykowy z wytycznych Apple i Google; slot ma
   // pełną wysokość paska, więc trafienie jest łatwiejsze niż w samą ikonę.
   const slotClass =
-    'flex flex-1 select-none flex-col items-center justify-center gap-1 pt-2 text-[11px] font-medium leading-none transition-colors';
+    "flex flex-1 select-none flex-col items-center justify-center gap-1 pt-2 text-[11px] font-medium leading-none transition-colors";
 
   if (tab.emphasis && tab.href !== null) {
     return (
       <Link
         href={tab.href}
         prefetch
-        aria-current={active ? 'page' : undefined}
+        aria-current={active ? "page" : undefined}
         onPointerDown={(e) => {
           if (!shouldHandlePrimaryInAppNav(e)) return;
           onBeginNav(tab.href!);
         }}
-        className={cn(slotClass, 'text-[var(--ff-accent)]')}
+        // `pb-[var(--ff-safe-b)]` jak w pozostałych slotach: bez niego na iPhonie
+        // z paskiem domowym koło, już nie uniesione, zjeżdżałoby w strefę paska.
+        className={cn(slotClass, "pb-[var(--ff-safe-b)]", "text-[var(--ff-accent)]")}
       >
         <span
           aria-hidden
-          className="-mt-5 flex size-11 items-center justify-center rounded-full bg-[var(--ff-primary)] text-[var(--ff-on-primary)] shadow-[0_4px_12px_rgba(37,99,235,0.35)] transition-transform active:scale-95"
+          className="flex size-11 items-center justify-center rounded-full bg-[var(--ff-primary)] text-[var(--ff-on-primary)] shadow-md shadow-primary/30 transition-transform active:scale-95"
         >
-          <span className="material-symbols-outlined text-[24px] leading-none">
-            {tab.icon}
-          </span>
+          <tab.icon aria-hidden className="size-6" />
         </span>
-        <span className="-mt-3">{tab.label}</span>
+        {/* Nazwa dostępna dla czytników ekranu i testów; wzrokowo zasłania ją
+            koło (poprawka Bartosza 21.10.2026). */}
+        <span className="sr-only">{tab.label}</span>
       </Link>
     );
   }
 
   const content = (
     <>
-      <span
-        aria-hidden
-        className="material-symbols-outlined text-[22px] leading-none"
-      >
-        {tab.icon}
-      </span>
+      <tab.icon aria-hidden className="size-5" />
       <span>{tab.label}</span>
     </>
   );
 
   const toneClass = active
-    ? 'text-[var(--ff-accent)]'
-    : 'text-[var(--ff-text-muted)]';
+    ? "text-[var(--ff-accent)]"
+    : "text-[var(--ff-text-muted)]";
 
   if (tab.href === null) {
     return (
@@ -255,7 +259,7 @@ function BottomNavSlot({
         type="button"
         onClick={onOpenMore}
         aria-expanded={active}
-        className={cn(slotClass, toneClass, 'pb-[var(--ff-safe-b)]')}
+        className={cn(slotClass, toneClass, "pb-[var(--ff-safe-b)]")}
       >
         {content}
       </button>
@@ -266,13 +270,13 @@ function BottomNavSlot({
     <Link
       href={tab.href}
       prefetch
-      aria-current={active ? 'page' : undefined}
+      aria-current={active ? "page" : undefined}
       onPointerDown={(e) => {
         if (!shouldHandlePrimaryInAppNav(e)) return;
         onBeginNav(tab.href!);
       }}
       onPointerEnter={() => onPrefetch(tab.href!)}
-      className={cn(slotClass, toneClass, 'pb-[var(--ff-safe-b)]')}
+      className={cn(slotClass, toneClass, "pb-[var(--ff-safe-b)]")}
     >
       {content}
     </Link>
@@ -282,34 +286,32 @@ function BottomNavSlot({
 function MoreRow({
   href,
   label,
-  icon,
+  icon: Icon,
   active,
+  prefetch = true,
 }: {
   href: string;
   label: string;
-  icon: string;
+  icon: RemixiconComponentType;
+  /** `false` dla ciężkich stron (`/analizy/*`, plan Finora §4). */
+  prefetch?: boolean;
   active: boolean;
 }) {
   return (
     <Link
       href={href}
-      prefetch
+      prefetch={prefetch}
       className={cn(
-        'flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
+        "flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
         active
-          ? 'ff-sidebar-active text-[var(--ff-accent)]'
-          : 'text-[var(--ff-text)] hover:bg-[var(--ff-row-hover)]',
+          ? "ff-sidebar-active text-[var(--ff-accent)]"
+          : "text-[var(--ff-text)] hover:bg-[var(--ff-row-hover)]",
       )}
     >
-      <span
+      <Icon
         aria-hidden
-        className={cn(
-          'material-symbols-outlined flex size-5 shrink-0 text-[20px]',
-          active && 'text-[var(--ff-accent)]',
-        )}
-      >
-        {icon}
-      </span>
+        className={cn("size-5 shrink-0", active && "text-[var(--ff-accent)]")}
+      />
       {label}
     </Link>
   );

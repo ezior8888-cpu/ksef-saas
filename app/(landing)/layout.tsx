@@ -13,7 +13,7 @@ import '@/styles/zova.css';
  */
 export const metadata: Metadata = {
   title:
-    'FaktFlow — faktury KSeF 2026 dla mikrofirm | Zdjęcie paragonu = wpis do KPiR',
+    'FaktWay — faktury KSeF 2026 dla mikrofirm | Zdjęcie paragonu = wpis do KPiR',
   description:
     `Wystawiaj faktury i wysyłaj do KSeF jednym kliknięciem. Zdjęcie paragonu trafia automatycznie do KPiR. ${TRIAL_DAYS} dni za darmo, potem ${PRICE_PER_MONTH}.`,
 };

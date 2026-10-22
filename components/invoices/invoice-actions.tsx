@@ -1,16 +1,19 @@
 'use client';
 
 import { useTransition } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
-import { Download, FileText, Loader2 } from 'lucide-react';
+import { RiDownloadLine, RiEditLine, RiFileCodeLine, RiLoader4Line, RiPrinterLine, RiRepeatLine } from '@remixicon/react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { EmailInvoiceButton } from './email-invoice-button';
 import { DraftInvoiceActions } from './draft-invoice-actions';
 import { FailedInvoiceActions } from './failed-invoice-actions';
 import { downloadInvoiceXmlAction } from './actions-detail';
 import { saveBlob } from '@/lib/download';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
+import { setAsRecurringHref } from '@/lib/invoices/recurring/visibility';
 
 interface Props {
   invoice: {
@@ -38,14 +41,47 @@ interface Props {
      * rozliczeniową (`deletable`, decyzja 9). `null` — zwykły szkic albo inny stan.
      */
     ksef_retired?: { deletable: boolean } | null;
+    /**
+     * E3 / P4: faktura może mieć korektę (liczy strona tym samym predykatem
+     * co lista faktur) — w karcie „Dokument” pojawia się link „Korekta”.
+     */
+    can_correct?: boolean;
+    /**
+     * N1: faktura może być wzorem faktury cyklicznej — w karcie „Dokument”
+     * pojawia się „Ustaw jako cykliczną” (arkusz na `/invoices/recurring?wzor=`).
+     */
+    can_set_recurring?: boolean;
   };
   /** Rola w firmie dopuszcza ponowną wysyłkę i powrót do szkicu (owner/admin). */
   canManageSend?: boolean;
+  /**
+   * E3 / P4: podgląd faktury stawia akcje w dwóch kartach, z TYMI SAMYMI
+   * props — `primary` (karta „Status”: wysyłka szkicu, ponowienie po błędzie)
+   * i `secondary` (karta „Dokument”: e-mail, PDF, Drukuj, XML, Korekta).
+   * Każdy przycisk jest w DOM raz. `all` (domyślnie) to dotychczasowy pasek.
+   */
+  section?: 'primary' | 'secondary' | 'all';
+  /** Adres nabywcy z dokumentu — podpowiedź pola „Do” w oknie „Wyślij e-mailem” (Finora: `invoice.email`). */
+  buyerEmail?: string | null;
 }
 
-export function InvoiceActions({ invoice, canManageSend = false }: Props) {
+/** Komunikat dla klienta po nieudanym pobraniu PDF — wspólny dla „Pobierz PDF” i „Drukuj”. */
+async function pdfFailureMessage(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  return body.error === 'pdf_generation_failed'
+    ? 'Nie udało się wygenerować PDF. Spróbuj ponownie.'
+    : res.status === 409
+      ? body.error ?? 'PDF faktury offline jest obecnie niedostępny.'
+      : 'Nie udało się pobrać PDF faktury.';
+}
+
+/** Blob URL zostaje na czas oglądania PDF w nowej karcie (przeładowanie karty go potrzebuje). */
+const PRINT_BLOB_URL_TTL_MS = 10 * 60_000;
+
+export function InvoiceActions({ invoice, canManageSend = false, section = 'all', buyerEmail = null }: Props) {
   const [isDownloading, startDownloading] = useTransition();
   const [isDownloadingPdf, startDownloadingPdf] = useTransition();
+  const [isOpeningPdf, startOpeningPdf] = useTransition();
 
   const canDownload = !!invoice.xml_storage_path;
 
@@ -68,16 +104,7 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
       try {
         const res = await fetch(`/api/invoices/${invoice.id}/pdf`);
         if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          toast.error(
-            body.error === 'pdf_generation_failed'
-              ? 'Nie udało się wygenerować PDF. Spróbuj ponownie.'
-              : res.status === 409
-                ? body.error ?? 'PDF faktury offline jest obecnie niedostępny.'
-              : 'Nie udało się pobrać PDF faktury.',
-          );
+          toast.error(await pdfFailureMessage(res));
           return;
         }
         const cd = res.headers.get('Content-Disposition') ?? '';
@@ -90,38 +117,45 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
     });
   };
 
-  return (
-    <div className="flex flex-wrap gap-2 justify-end pt-2">
-      <Button
-        variant="glass"
-        size="lg"
-        onClick={handleDownloadPdf}
-        disabled={isDownloadingPdf}
-      >
-        {isDownloadingPdf ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-        ) : (
-          <FileText className="h-4 w-4 mr-2" />
-        )}
-        Pobierz PDF
-      </Button>
-      {/* Decyzja 10: dokument wycofany nie jest fakturą dla nabywcy (odmawia też serwer). */}
-      {!invoice.ksef_retired && <EmailInvoiceButton invoiceId={invoice.id} />}
-      {canDownload && (
-        <Button
-          variant="glass"
-          size="lg"
-          onClick={handleDownload}
-          disabled={isDownloading}
-        >
-          {isDownloading ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4 mr-2" />
-          )}
-          Pobierz XML
-        </Button>
-      )}
+  /**
+   * „Drukuj” (P4): dokumentem jest PDF z `/api/invoices/[id]/pdf`, a
+   * `window.print()` wydrukowałby szkielet panelu. Kartę otwieramy od razu
+   * w obsłudze kliknięcia (po `await` przeglądarki blokują okna), a PDF
+   * wczytujemy do niej przez blob URL — te same trasa, zgody i komunikaty
+   * błędów co przy „Pobierz PDF”.
+   */
+  const handlePrintPdf = () => {
+    const tab = window.open('about:blank', '_blank');
+    if (!tab) {
+      toast.error('Przeglądarka zablokowała nową kartę. Zezwól na okna z tej strony i spróbuj ponownie.');
+      return;
+    }
+    tab.opener = null;
+    startOpeningPdf(async () => {
+      try {
+        const res = await fetch(`/api/invoices/${invoice.id}/pdf`);
+        if (!res.ok) {
+          tab.close();
+          toast.error(await pdfFailureMessage(res));
+          return;
+        }
+        const url = URL.createObjectURL(await res.blob());
+        tab.location.href = url;
+        window.setTimeout(() => URL.revokeObjectURL(url), PRINT_BLOB_URL_TTL_MS);
+      } catch {
+        tab.close();
+        toast.error('Błąd połączenia przy pobieraniu PDF.');
+      }
+    });
+  };
+
+  const hasPrimary =
+    invoice.ksef_status === 'draft' ||
+    invoice.ksef_status === 'rejected' ||
+    invoice.ksef_status === 'failed';
+
+  const primary = (
+    <>
       {invoice.ksef_status === 'draft' && (
         <DraftInvoiceActions
           invoiceId={invoice.id}
@@ -141,6 +175,83 @@ export function InvoiceActions({ invoice, canManageSend = false }: Props) {
           duplicatePanel={invoice.ksef_duplicate_panel ?? false}
         />
       )}
+    </>
+  );
+
+  // Podział na karty: główna akcja (wysyłka, ponowienie) obok statusu, reszta w karcie „Dokument”.
+  if (section === 'primary') {
+    // Kolumna 18rem jak karta akcji Finory: przyciski jeden pod drugim, na całą szerokość.
+    return hasPrimary ? <div className="space-y-4 [&>button]:w-full">{primary}</div> : null;
+  }
+
+  // Karta akcji Finory (`invoices-view/invoice-actions.tsx`): Send Invoice (główny) /
+  // Download / Print → Wyślij e-mailem / Pobierz PDF / Drukuj, `w-full`, ikony Remix;
+  // pod nimi nasze akcje dokumentu (XML, Korekta) w tym samym wariancie `outline`.
+  const full = section === 'secondary' ? 'w-full' : undefined;
+  const secondary = (
+    <>
+      {/* Decyzja 10: dokument wycofany nie jest fakturą dla nabywcy (odmawia też serwer). */}
+      {!invoice.ksef_retired && (
+        <EmailInvoiceButton invoiceId={invoice.id} defaultEmail={buyerEmail} className={full} />
+      )}
+      <Button
+        variant="outline"
+        className={full}
+        onClick={handleDownloadPdf}
+        disabled={isDownloadingPdf}
+      >
+        {isDownloadingPdf ? <RiLoader4Line className="animate-spin" /> : <RiDownloadLine />}
+        Pobierz PDF
+      </Button>
+      <Button
+        variant="outline"
+        className={full}
+        onClick={handlePrintPdf}
+        disabled={isOpeningPdf}
+      >
+        {isOpeningPdf ? <RiLoader4Line className="animate-spin" /> : <RiPrinterLine />}
+        Drukuj
+      </Button>
+      {canDownload && (
+        <Button
+          variant="outline"
+          className={full}
+          onClick={handleDownload}
+          disabled={isDownloading}
+        >
+          {isDownloading ? <RiLoader4Line className="animate-spin" /> : <RiFileCodeLine />}
+          Pobierz XML
+        </Button>
+      )}
+      {invoice.can_correct && (
+        <Link
+          href={`/invoices/new/correction?parentId=${encodeURIComponent(invoice.id)}`}
+          className={cn(buttonVariants({ variant: 'outline' }), full)}
+        >
+          <RiEditLine />
+          Korekta
+        </Link>
+      )}
+      {invoice.can_set_recurring && (
+        <Link
+          href={setAsRecurringHref(invoice.id)}
+          className={cn(buttonVariants({ variant: 'outline' }), full)}
+        >
+          <RiRepeatLine />
+          Ustaw jako cykliczną
+        </Link>
+      )}
+    </>
+  );
+
+  if (section === 'secondary') {
+    return <div className="space-y-4">{secondary}</div>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2 justify-end pt-2">
+      {secondary}
+      {primary}
     </div>
   );
 }

@@ -43,7 +43,7 @@ export default function GdprDeletionScheduled({
 
           <Text style={textStyle}>
             Otrzymaliśmy Twoje żądanie usunięcia konta <strong>{userEmail}</strong>{' '}
-            z FaktFlow zgodnie z art. 17 RODO (prawo do bycia zapomnianym).
+            z FaktWay zgodnie z art. 17 RODO (prawo do bycia zapomnianym).
           </Text>
 
           <Section style={boxStyle}>
@@ -95,7 +95,7 @@ export default function GdprDeletionScheduled({
             Masz pytania? Napisz: <strong>{supportEmail}</strong>
           </Text>
           <Text style={footerStyle}>
-            FaktFlow — faktury KSeF dla mikrofirm. Wiadomość transakcyjna.
+            FaktWay — faktury KSeF dla mikrofirm. Wiadomość transakcyjna.
           </Text>
         </Container>
       </Body>

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Ban, FilePlus2 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { DUPLICATE_DECISION_TEXTS, type RetiredDraftView } from '@/lib/ksef/duplicate-decision';
 
@@ -19,17 +19,17 @@ import { DUPLICATE_DECISION_TEXTS, type RetiredDraftView } from '@/lib/ksef/dupl
 export function RetiredDraftBanner({ view }: { view: RetiredDraftView }) {
   const known = view.knownInvoice;
   return (
-    <Card className="p-4 mb-6 border-amber-200 bg-amber-50">
+    <Card className="p-4 mb-6 ring-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:ring-amber-900">
       <div className="flex items-start gap-3">
-        <Ban className="h-5 w-5 shrink-0 text-amber-700 mt-0.5" aria-hidden />
+        <Ban className="h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300 mt-0.5" aria-hidden />
         <div className="min-w-0 space-y-2">
-          <h3 className="font-semibold text-sm text-amber-900">{view.title}</h3>
-          <p className="text-sm text-amber-900">{view.body}</p>
+          <h3 className="font-semibold text-sm text-amber-900 dark:text-amber-100">{view.title}</h3>
+          <p className="text-sm text-amber-900 dark:text-amber-100">{view.body}</p>
           {known && (
             <p className="text-sm">
               <Link
                 href={`/invoices/${encodeURIComponent(known.id)}`}
-                className="font-medium text-amber-900 underline underline-offset-2 hover:no-underline"
+                className="font-medium text-amber-900 dark:text-amber-100 underline underline-offset-2 hover:no-underline"
               >
                 {DUPLICATE_DECISION_TEXTS.KNOWN_LINK(known.internalNumber ?? 'bez numeru')}
               </Link>
@@ -37,12 +37,10 @@ export function RetiredDraftBanner({ view }: { view: RetiredDraftView }) {
           )}
           {view.cta && (
             <div className="pt-1">
-              <Button asChild>
-                <Link href={view.cta.href}>
-                  <FilePlus2 className="h-4 w-4 mr-2" aria-hidden />
-                  {view.cta.label}
-                </Link>
-              </Button>
+              <Link href={view.cta.href} className={buttonVariants()}>
+                <FilePlus2 className="h-4 w-4 mr-2" aria-hidden />
+                {view.cta.label}
+              </Link>
             </div>
           )}
         </div>

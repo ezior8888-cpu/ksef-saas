@@ -7,6 +7,7 @@ import { logAudit } from '@/lib/audit/log';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { trackServer } from '@/lib/analytics/server';
 import { getClientIp } from '@/lib/auth/get-client-ip';
+import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers';
 import { checkLoginRateLimit } from '@/lib/rate-limit/auth';
 import { verifyTurnstile } from '@/lib/security/turnstile';
 import { createClient } from '@/lib/supabase/server';
@@ -93,8 +94,14 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
 /**
  * Server Action: inicjacja logowania przez Google.
  * Przekierowuje do Google → Google do /auth/callback.
+ * Przy wyłączonym dostawcy w GoTrue wraca z komunikatem zamiast wysyłać
+ * klienta na błąd JSON z GoTrue (`lib/auth/oauth-providers.ts`).
  */
 export async function loginWithGoogle(): Promise<void> {
+  if (!(await isGoogleLoginEnabled())) {
+    redirect('/login?error=oauth_disabled');
+  }
+
   const headersList = await headers();
   const origin = headersList.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL;
 

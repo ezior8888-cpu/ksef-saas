@@ -86,7 +86,13 @@ const nextConfig: NextConfig = {
   },
 
   experimental: {
-    optimizePackageImports: ['radix-ui', 'lucide-react'],
+    // Build na app-1 (20.10.2026): po ekranach Finory `next build --webpack`
+    // przekroczył pułap sterty 3072 MB (exit 134). Mniejsze zużycie pamięci
+    // webpacka kosztem kilku sekund builda; razem z pułapem 3584 MB
+    // w Dockerfile (tests/unit/build-pamiec-sterty.test.ts).
+    webpackMemoryOptimizations: true,
+    // Plan Finora: prymitywy Base UI, ikony Remix, wykresy recharts (E1), paleta ⌘K cmdk (E2).
+    optimizePackageImports: ['lucide-react', '@base-ui/react', '@remixicon/react', 'recharts', 'cmdk'],
   },
 
   images: {
@@ -124,11 +130,22 @@ const nextConfig: NextConfig = {
   },
 
   // Redesign: `/vs/fakturownia` → `/vs/inni` (SEO 308).
+  // Zmiana marki: artykuły pomocy z nazwą w slugu (stare linki z maili i zakładek).
   async redirects() {
     return [
       {
         source: '/vs/fakturownia',
         destination: '/vs/inni',
+        permanent: true,
+      },
+      {
+        source: '/pomoc/pierwsze-kroki-w-faktflow',
+        destination: '/pomoc/pierwsze-kroki-w-faktway',
+        permanent: true,
+      },
+      {
+        source: '/pomoc/platnosci-i-faktury-za-faktflow',
+        destination: '/pomoc/platnosci-i-faktury-za-faktway',
         permanent: true,
       },
     ];
