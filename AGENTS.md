@@ -150,6 +150,7 @@ Kontener Postgresa: `$PGC`.
 | wdrożyć kod | `ops-1` (Coolify steruje `app-1`) | „Wdrożenie produkcji" |
 | zobaczyć logi aplikacji / workera | `app-1` | `docker logs` |
 | wejść w panel Coolify z przeglądarki | tunel SSH | pułapki na końcu |
+| zobaczyć błędy wysyłki do KSeF (dashboard) | przeglądarka: `/admin/centrum/bledy` — konto z `ADMIN_EMAILS` + 2FA, bez osobnego hasła; agent: `kontrola-faktur-ksef.sh` | `docs/runbooks/centrum-bledy-wysylki.md` |
 
 **CZTERY RZECZY, KTÓRE ZASKAKUJĄ KAŻDĄ NOWĄ SESJĘ.** Każda kosztowała nas
 realny czas, więc nie są to przestrogi teoretyczne:
