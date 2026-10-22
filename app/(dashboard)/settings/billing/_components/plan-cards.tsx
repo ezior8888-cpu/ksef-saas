@@ -18,7 +18,8 @@ const FEATURES = [
   'OCR z auto-kategoryzacją KPiR',
   'KSeF 2.0 + UPO + walidacja',
   'Wkurzacz Dłużników',
-  'Magiczny import z konkurencji',
+  // Decyzja Bartosza 22.10.2026: bez Magicznego importu — historia z KSeF pobiera się sama.
+  'Historia z KSeF i import z innych programów',
   'Co-Pilot Księgowego',
   // Dawniej „PWA mobilna z OCR” — panel na telefonie jest wyłączony (/mobile).
   'Odczyt paragonów (AI) z limitem dziennym i miesięcznym',

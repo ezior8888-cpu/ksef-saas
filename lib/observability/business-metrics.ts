@@ -66,15 +66,20 @@ export async function getDailyMetrics(hours = 24): Promise<DailyMetrics> {
       .from('tenants')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', fromIso),
+    // Faktury wystawione W FaktWay: bez sprzedaży pobranej z historii KSeF
+    // (`origin = ksef_import`, decyzja Bartosza 22.10.2026). `origin` jest
+    // NOT NULL (00065), więc `neq` niczego nie gubi.
     supabase
       .from('invoices')
       .select('id', { count: 'exact', head: true })
       .eq('direction', 'outgoing')
+      .neq('origin', 'ksef_import')
       .gte('created_at', fromIso),
     supabase
       .from('invoices')
       .select('id', { count: 'exact', head: true })
       .eq('direction', 'outgoing')
+      .neq('origin', 'ksef_import')
       .eq('ksef_status', 'accepted')
       .gte('created_at', fromIso),
     supabase

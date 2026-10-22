@@ -332,6 +332,7 @@ export async function sendEmail(opts: {
 export async function sendCertExpiryAlert(
   email: string,
   payload: CertExpiryPayload,
+  options: SendOptions = {},
 ): Promise<EmailStubResult> {
   if (!isResendConfigured()) {
     logger.debug(
@@ -353,6 +354,7 @@ export async function sendCertExpiryAlert(
     to: email,
     subject: `⚠ Certyfikat KSeF wygasa za ${payload.daysRemaining} dni`,
     html,
+    idempotencyKey: options.idempotencyKey,
   });
 }
 

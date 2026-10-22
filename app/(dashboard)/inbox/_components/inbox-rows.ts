@@ -8,10 +8,15 @@ import type { PageContext } from '@/lib/supabase/page-context';
  * Status „Nowa / Opisana” to `is_reviewed` wydatku powiązanego z fakturą
  * (`expenses.ksef_invoice_id`, jedna faktura = jeden koszt, 00121). Faktura
  * bez wydatku (kategoryzacja jeszcze trwa) ma status `null` i „—”.
+ *
+ * Decyzja Bartosza 22.10.2026: zakupy z historii KSeF (`origin =
+ * 'ksef_import'`, synchronizacja historii) to archiwum — nie tworzymy z nich
+ * kosztów. Taki wiersz bez wydatku dostaje plakietkę „Historia z KSeF”
+ * zamiast „—”, żeby nie wyglądał na koszt, który „jeszcze powstaje”.
  */
 
 export const INBOX_COLUMNS =
-  'id, internal_number, ksef_number, issue_date, seller_nip, seller_data, fa3_data, gross_total, currency, ksef_accepted_at';
+  'id, internal_number, ksef_number, issue_date, seller_nip, seller_data, fa3_data, gross_total, currency, ksef_accepted_at, origin';
 
 export type InboxInvoiceRow = {
   id: string;
@@ -24,6 +29,7 @@ export type InboxInvoiceRow = {
   gross_total: string | number | null;
   currency: string | null;
   ksef_accepted_at: string | null;
+  origin: string | null;
 };
 
 export type InboxStatus = 'new' | 'reviewed';
@@ -46,6 +52,8 @@ export type InboxRow = {
   /** Wydatek powiązany z fakturą (`/expenses/[id]`), gdy już powstał. */
   expenseId: string | null;
   status: InboxStatus | null;
+  /** Faktura z historii KSeF (archiwum, bez kosztu) — decyzja Bartosza 22.10.2026. */
+  fromKsefHistory: boolean;
 };
 
 export function sellerDisplay(row: Pick<InboxInvoiceRow, 'seller_data' | 'fa3_data' | 'seller_nip'>): { name: string; nip: string } {
@@ -81,6 +89,7 @@ export function buildInboxRows(
       currency: invoice.currency?.trim() || 'PLN',
       expenseId: expense?.id ?? null,
       status: expenses === null || !expense ? null : expense.is_reviewed ? 'reviewed' : 'new',
+      fromKsefHistory: invoice.origin === 'ksef_import',
     };
   });
 }

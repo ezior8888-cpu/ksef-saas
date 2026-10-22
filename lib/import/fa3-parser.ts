@@ -84,6 +84,15 @@ export interface ParsedInvoice {
   footerNote?: string;
   /** C0b: surowe `Fa/RodzajFaktury` (przycięte, wielkość liter z pliku); `invoiceType` to jego odwzorowanie. */
   invoiceTypeCode?: string;
+  /**
+   * Chwila nadania numeru w KSeF (`acquisitionDate`, zapasowo
+   * `permanentStorageDate` z metadanych) — podaje synchronizacja historii
+   * KSeF (decyzja Bartosza 22.10.2026; IMP-ACC). Parser XML jej nie ustawia
+   * (plik FA(3) jej nie zawiera). Obecne pole = wywołujący zna ten czas:
+   * poprawna data trafia do `ksef_accepted_at`, niepoprawna albo pusta —
+   * chwila importu z ostrzeżeniem. Brak pola = zachowanie bez zmian.
+   */
+  ksefAcceptedAt?: string;
 
   warnings: string[];
 }

@@ -65,7 +65,7 @@ const VIDEO_TUTORIALS = [
   'Skanowanie paragonu (OCR)',
   'Pierwsza faktura do KSeF',
   'Eksport KPiR dla księgowego',
-  'Magic Import z Fakturowni',
+  'Import z Fakturowni',
 ];
 
 export function SupportWidget({
