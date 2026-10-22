@@ -167,7 +167,7 @@ export async function deleteUserGdprAction(
     };
   }
   // AUD-41: klucz obcy bez ON DELETE wywróciłby deleteUser PO odwołaniu
-  // członkostw, wyłączeniu firm i anonimizacji dziennika.
+  // członkostw i anonimizacji dziennika.
   let foreignKeyBlockers: string[];
   try {
     foreignKeyBlockers = await findUserDeletionForeignKeyBlockers(supabase, userId);
@@ -181,9 +181,14 @@ export async function deleteUserGdprAction(
     };
   }
 
-  // Krok 1: ustaw soft-delete + hard_delete_at na tenantach, gdzie user jest
-  // ownerem (10-lat retention vs RODO). Pełne czyszczenie zrobi Inngest job
-  // `retention-delete` po upływie retention period.
+  // Krok 1: firmy, których user jest właścicielem — tylko do komunikatu
+  // i audytu. Firm NIE ruszamy, jak ścieżka samoobsługowa
+  // (`executeGdprRequest`). Przed tą zmianą panel stawiał tu `deleted_at`,
+  // `hard_delete_at` (+30 dni) i `is_active = false` z obietnicą „hard delete
+  // po 30 dniach” przez job `retention-delete` — a ten usuwa tylko faktury po
+  // `invoices.scheduled_deletion_at` (10 lat), firm nie czyta. Tych flag nie
+  // sprawdza też logowanie ani RLS, więc firma działała dalej.
+  // Usunięcie firmy: docs/support/escalation-matrix.md („Usunięcie firmy”).
   const { data: ownerMemberships, error: membershipsReadError } = await supabase
     .from('memberships')
     .select('organization_id, role')
@@ -198,21 +203,6 @@ export async function deleteUserGdprAction(
   }
 
   const ownerOrgIds = ownerMemberships.map((m) => m.organization_id);
-  if (ownerOrgIds.length > 0) {
-    const now = new Date();
-    const hardDeleteAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 dni
-    const { error: tenantsUpdateError } = await supabase
-      .from('tenants')
-      .update({
-        deleted_at: now.toISOString(),
-        hard_delete_at: hardDeleteAt.toISOString(),
-        is_active: false,
-      })
-      .in('id', ownerOrgIds);
-    if (tenantsUpdateError) {
-      return { success: false, error: 'Nie udało się oznaczyć organizacji do usunięcia; konto nie zostało usunięte' };
-    }
-  }
 
   // Krok 2: usuń wszystkie membership usera (revoked).
   const { error: membershipsUpdateError } = await supabase
@@ -259,7 +249,7 @@ export async function deleteUserGdprAction(
     entityId: userId,
     metadata: {
       adminEmail: admin.email,
-      ownedOrgsSoftDeleted: ownerOrgIds.length,
+      ownedOrgsLeftActive: ownerOrgIds.length,
       gdprDeletion: true,
     },
   });
@@ -267,7 +257,10 @@ export async function deleteUserGdprAction(
   revalidatePath('/admin/users');
   return {
     success: true,
-    message: 'User usunięty, org-y w retencji 30 dni do hard delete',
+    message:
+      ownerOrgIds.length > 0
+        ? `Konto usunięte. Firmy, których był właścicielem (${ownerOrgIds.length}), działają dalej — usunięcie firmy to osobna procedura (docs/support/escalation-matrix.md).`
+        : 'Konto usunięte.',
   };
 }
 
