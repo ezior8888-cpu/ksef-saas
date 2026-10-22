@@ -95,7 +95,7 @@ od razu `locked`, a 30 dni na usunięcie liczy się od polecenia.
 
 | Miejsce | Co robi | Problem po włączeniu sprawdzania flag |
 |---|---|---|
-| `requestAccountDeletionAction` (`components/settings/account-actions.ts:58-65` na `main`) | stawia `deleted_at`, `hard_delete_at = +30 dni`, `is_active = false` klientem użytkownika | #271 to wyłącza; po M1 strażnik kolumn (§ 9 M1) zabroni klientowi pisać te pola |
+| `requestAccountDeletionAction` (dawniej `components/settings/account-actions.ts:58-65`) | stawiała `deleted_at`, `hard_delete_at = +30 dni`, `is_active = false` klientem użytkownika | #271 to wyłączył, a 22.10.2026 akcję i formularz usunięto (ekran to instrukcja z linkiem do pomocy, `components/settings/company-deletion.tsx`); po M1 strażnik kolumn (§ 9 M1) i tak zabroni klientowi pisać te pola |
 | `deleteUserGdprAction` (`app/admin/users/actions.ts:149-180`) | przy usuwaniu **konta** stawia flagi na **każdej firmie**, gdzie usuwany jest właścicielem | po włączeniu flag usunięcie jednego konta zamknęłoby firmę wszystkim członkom, wbrew regulaminowi § 14 ust. 2 („usunięcie Konta nie rozwiązuje Umowy”). **Ten blok musi zniknąć przed M2.** Zrobione 22.10.2026 (gałąź `claude/admin-bez-flag-firm`): panel usuwa konto, firm nie rusza, a w komunikacie i audycie (`ownedOrgsLeftActive`) podaje, ile firm działa dalej. |
 
 ### 2.3 Firmy oflagowane starą akcją
