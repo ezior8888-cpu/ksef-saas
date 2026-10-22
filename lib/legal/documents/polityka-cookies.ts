@@ -13,8 +13,9 @@ const E = LEGAL_ENTITY;
  * informacji w urządzeniu użytkownika i dostęp do nich wymagają zgody, chyba że
  * są niezbędne do świadczenia usługi, której użytkownik żąda.
  *
- * Lista odpowiada kodowi z 15.10.2026 (spis: memo dla prawnika). Nowe
- * ciasteczko albo klucz w localStorage → wiersz tutaj w tym samym PR.
+ * Lista odpowiada kodowi z 22.10.2026 (spis: memo dla prawnika). Nowe
+ * ciasteczko albo klucz w localStorage → wiersz tutaj w tym samym PR —
+ * pilnuje tego tests/unit/polityka-cookies-kod.test.ts.
  */
 export const POLITYKA_COOKIES: LegalDocument = {
   slug: 'cookies',
@@ -43,6 +44,8 @@ export const POLITYKA_COOKIES: LegalDocument = {
           [ACTIVE_ORG_COOKIE, 'cookie (własne, niedostępne dla skryptów)', 'zapamiętanie, w której firmie (Organizacji) pracujesz', 'do 30 dni'],
           [CONSENT_KEY, 'localStorage', 'zapamiętanie Twojej decyzji w sprawie analityki', 'do zmiany decyzji lub wyczyszczenia danych przeglądarki'],
           [THEME_STORAGE_KEY, 'localStorage', 'motyw jasny lub ciemny, który wybrałeś', 'jw.'],
+          // Menu boczne panelu (shadcn, plan Finora) — components/ui/sidebar.tsx.
+          ['sidebar_state', 'cookie (własne)', 'zapamiętanie, czy menu boczne panelu jest rozwinięte, czy zwinięte', 'do 7 dni'],
           ['install-prompt-dismissed-at, klucze zamkniętych komunikatów', 'localStorage / sessionStorage', 'żeby nie pokazywać ponownie komunikatu, który zamknąłeś', 'jw. (sessionStorage — do zamknięcia karty)'],
           ['pamięć aplikacji (Service Worker)', 'pamięć PWA', 'działanie aplikacji instalowanej z przeglądarki, w tym praca przy słabym połączeniu', 'do odinstalowania aplikacji lub wyczyszczenia danych'],
           ['Cloudflare Turnstile', 'skrypt dostawcy (challenges.cloudflare.com)', 'sprawdzenie, czy formularz logowania, rejestracji lub resetu hasła wypełnia człowiek', 'na czas weryfikacji'],
