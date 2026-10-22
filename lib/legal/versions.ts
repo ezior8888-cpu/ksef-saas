@@ -21,7 +21,8 @@
  */
 export const CONTRACT_VERSION = '2026-10-21';
 export const PRIVACY_POLICY_VERSION = '2026-10-21';
-export const COOKIE_POLICY_VERSION = '2026-10-21';
+// 2026-10-22: cookie `sidebar_state` (menu boczne panelu, plan Finora).
+export const COOKIE_POLICY_VERSION = '2026-10-22';
 
 /**
  * Oświadczenie przy rejestracji / w bramce (obowiązkowe). Znaczniki linków
