@@ -115,6 +115,7 @@ function invoice(id: string, fields: Partial<InboxInvoiceRow> = {}): InboxInvoic
     gross_total: '615.00',
     currency: 'PLN',
     ksef_accepted_at: '2026-10-05T10:00:00Z',
+    origin: 'ksef_inbox',
     ...fields,
   };
 }
@@ -379,6 +380,33 @@ describe('Skrzynka KSeF P9', () => {
       ['inv-3', null, null],
     ]);
     expect(buildInboxRows(invoices, null).every((r) => r.status === null && r.expenseId === null)).toBe(true);
+  });
+
+  // Decyzja Bartosza 22.10.2026: zakup z historii KSeF (`origin = 'ksef_import'`)
+  // to archiwum bez kosztu — plakietka „Historia z KSeF” zamiast „—”.
+  it('zakup z historii KSeF bez wydatku: plakietka „Historia z KSeF” w tabeli i w karcie', () => {
+    const rows = buildInboxRows(
+      [invoice('inv-1', { origin: 'ksef_import' }), invoice('inv-2'), invoice('inv-3', { origin: 'ksef_import' })],
+      [{ id: 'e-3', ksef_invoice_id: 'inv-3', is_reviewed: true }],
+    );
+    expect(rows.map((r) => [r.id, r.fromKsefHistory, r.status])).toEqual([
+      ['inv-1', true, null],
+      ['inv-2', false, null],
+      ['inv-3', true, 'reviewed'],
+    ]);
+    const markup = html(<InboxTable rows={rows} />);
+    // Tylko inv-1 (bez wydatku): raz w tabeli, raz w karcie; inv-3 ma wydatek i status „Opisana”.
+    expect(markup.match(/>Historia z KSeF</g)).toHaveLength(2);
+    expect(markup).toContain('title="Faktura z historii KSeF — nie dodaliśmy jej do kosztów"');
+    expect(markup).toContain('Opisana');
+    // Bieżąca faktura bez wydatku dalej „jeszcze powstaje”.
+    expect(markup).toContain('Wydatek z tej faktury jeszcze powstaje');
+  });
+
+  it('błąd odczytu wydatków: bez plakietki historii (nie wiemy, czy wydatek jest)', () => {
+    const rows = buildInboxRows([invoice('inv-1', { origin: 'ksef_import' })], null);
+    const markup = html(<InboxTable rows={rows} statusUnavailable />);
+    expect(markup).not.toContain('>Historia z KSeF<');
   });
 
   it('sprzedawca z seller_data, potem z FA(3), potem z kolumny NIP', () => {

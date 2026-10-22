@@ -24,6 +24,9 @@ import { INBOX_STATUS_LABELS, type InboxRow, type InboxStatus } from './inbox-ro
  * (sprzedawca, NIP, kwota, data otrzymania z KSeF i numer KSeF), w oprawie
  * Finory. Lista jest sortowana po dacie przyjęcia w KSeF, więc ta data stoi
  * też w tabeli (druga linia komórki daty).
+ *
+ * Decyzja Bartosza 22.10.2026: zakup z historii KSeF (archiwum, bez kosztu)
+ * ma w kolumnie „Status” plakietkę „Historia z KSeF” zamiast „—”.
  */
 
 const STATUS_STYLES: Record<InboxStatus, string> = {
@@ -36,22 +39,40 @@ export function inboxAmount(row: Pick<InboxRow, 'gross' | 'currency'>): string {
   return `${formatPlMoney(row.gross)} ${row.currency === 'PLN' ? 'zł' : row.currency}`;
 }
 
-const statusValue = (row: InboxRow) => row.status ?? 'none';
+/** Plakietka zakupu z historii KSeF — tylko gdy faktura nie ma wydatku. */
+export const KSEF_HISTORY_BADGE = 'Historia z KSeF';
+export const KSEF_HISTORY_BADGE_TITLE = 'Faktura z historii KSeF — nie dodaliśmy jej do kosztów';
+const HISTORY_STYLE = 'bg-muted text-muted-foreground';
+
+const isHistoryArchive = (row: Pick<InboxRow, 'fromKsefHistory' | 'expenseId'>) => row.fromKsefHistory && !row.expenseId;
+
+const statusValue = (row: InboxRow) => row.status ?? (isHistoryArchive(row) ? 'history' : 'none');
 
 /** Data przyjęcia w KSeF z godziną (Europe/Warsaw); brak → „—”, jak dotąd. */
 export function inboxAcceptedAt(row: Pick<InboxRow, 'acceptedAt'>): string {
   return row.acceptedAt ? formatWarsawDateTime(row.acceptedAt) : '—';
 }
 
-function StatusBadge({ status }: { status: InboxStatus | null }) {
-  if (!status) return <span className="text-muted-foreground">—</span>;
+function HistoryBadge() {
+  return (
+    <Badge className={HISTORY_STYLE} title={KSEF_HISTORY_BADGE_TITLE}>
+      {KSEF_HISTORY_BADGE}
+    </Badge>
+  );
+}
+
+function StatusBadge({ status, history = false }: { status: InboxStatus | null; history?: boolean }) {
+  if (!status) return history ? <HistoryBadge /> : <span className="text-muted-foreground">—</span>;
   return <Badge className={STATUS_STYLES[status]}>{INBOX_STATUS_LABELS[status]}</Badge>;
 }
 
 function RowAction({ row }: { row: InboxRow }) {
   if (!row.expenseId) {
     return (
-      <span className="text-muted-foreground text-xs" title="Wydatek z tej faktury jeszcze powstaje">
+      <span
+        className="text-muted-foreground text-xs"
+        title={row.fromKsefHistory ? KSEF_HISTORY_BADGE_TITLE : 'Wydatek z tej faktury jeszcze powstaje'}
+      >
         —
       </span>
     );
@@ -138,7 +159,7 @@ export const inboxColumns: ColumnDef<InboxRow>[] = [
     id: 'status',
     accessorFn: statusValue,
     filterFn: 'equalsString',
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    cell: ({ row }) => <StatusBadge status={row.original.status} history={isHistoryArchive(row.original)} />,
     size: 100,
     meta: {
       filterVariant: 'select',
@@ -159,7 +180,11 @@ export const inboxColumns: ColumnDef<InboxRow>[] = [
 ];
 
 const FILTERS = [
-  { columnId: 'status', allLabel: 'Wszystkie statusy', labels: { ...INBOX_STATUS_LABELS, none: 'Bez wydatku' } },
+  {
+    columnId: 'status',
+    allLabel: 'Wszystkie statusy',
+    labels: { ...INBOX_STATUS_LABELS, none: 'Bez wydatku', history: KSEF_HISTORY_BADGE },
+  },
 ];
 
 /** Bez kolumn zależnych od wydatków — gdy ich odczyt padł (strona pokazuje komunikat). */
@@ -210,7 +235,7 @@ function InboxCard({ row, statusUnavailable }: { row: InboxRow; statusUnavailabl
           <span className="tabular-nums" title="Data otrzymania z KSeF">{inboxAcceptedAt(row)}</span>
           <span className="tabular-nums">wyst. {plDate(row.issueDate)}</span>
           {row.number ? <span className="font-mono">{row.number}</span> : null}
-          {statusUnavailable ? null : <StatusBadge status={row.status} />}
+          {statusUnavailable ? null : <StatusBadge status={row.status} history={isHistoryArchive(row)} />}
         </div>
         <p className="text-muted-foreground mt-1 truncate font-mono text-xs">{row.ksefNumber ?? '—'}</p>
       </div>

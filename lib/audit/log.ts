@@ -100,6 +100,15 @@ export type AuditAction =
   | 'ksef.upo.download'
   | 'ksef.inbox.poll'
   | 'ksef.auth.token'
+  // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026): zapytanie
+  // o metadane (każde, przez ksefFetch), jeden zbiorczy wiersz pobrań na
+  // przebieg (liczba + do 10 numerów KSeF) i wyłącznik właściciela firmy.
+  | 'ksef.history.query'
+  | 'ksef.history.download'
+  | 'ksef.history.paused'
+  | 'ksef.history.resumed'
+  // Zapis operatora skryptem `scripts/ops/ksef-historia.sh` (odblokuj, wznow, wstrzymaj-wszystko) — SQL, nie aplikacja.
+  | 'ksef.history.operator'
   // Faza 24 — admin panel actions.
   | 'admin.user.suspended'
   | 'admin.user.unsuspended'

@@ -84,7 +84,7 @@ export function WelcomeModal() {
             <PathCard
               icon={Upload}
               title="Importuj historię"
-              description="JPK_FA albo CSV z Fakturownia / inFakt / wFirma / iFirma."
+              description="CSV z Fakturowni, inFaktu, wFirmy albo iFirmy. Historię z KSeF pobieramy sami."
               onClick={() => handleNavigate('/onboarding/import-source')}
               accent="blue"
             />

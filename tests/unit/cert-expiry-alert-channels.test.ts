@@ -6,18 +6,20 @@ const mocks = vi.hoisted(() => ({
   email: vi.fn(),
   push: vi.fn(),
   proposal: vi.fn(),
+  audit: vi.fn(),
+  captureException: vi.fn(),
   order: [] as string[],
 }));
 
-vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
+vi.mock('@sentry/nextjs', () => ({ captureException: mocks.captureException }));
 vi.mock('@/lib/supabase/admin-queries', () => ({
-  getTenantAdminEmail: async (id: string) => `admin-${id}@firma.test`,
+  readTenantOwnerContact: async (id: string) => ({ ownerUserId: `user-${id}`, email: `admin-${id}@firma.test` }),
 }));
 vi.mock('@/lib/email/send', () => ({ sendCertExpiryAlert: mocks.email }));
 vi.mock('@/lib/push/sender', () => ({ sendPushToTenant: mocks.push }));
 vi.mock('@/lib/flo/proposals', () => ({ createProposal: mocks.proposal }));
 vi.mock('@/lib/alerts/slack', () => ({ sendSlackAlert: vi.fn() }));
-vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: vi.fn() }));
+vi.mock('@/lib/audit/log-system', () => ({ logAuditSystem: mocks.audit }));
 vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: async () => {
     const query = (table: string) => {
@@ -91,6 +93,22 @@ describe('certyfikat KSeF: kanały ostrzeżenia', () => {
     expect(adresaci).toContain('admin-t1@firma.test');
     expect(adresaci).toContain('admin-t2@firma.test');
     expect(mocks.push).toHaveBeenCalled();
+  });
+
+  it('push pada (błąd odczytu bazy) po wysłanym mailu → ostrzeżenie dostarczone mailem i zapisane, bez wyjątku (ponowienie zdublowałoby mail); Sentry z firmą', async () => {
+    mocks.proposal.mockResolvedValue({ status: 'created' });
+    const readError = Object.assign(new Error('Nie można odczytać subskrypcji push: connection terminated'), { name: 'PushReadError' });
+    mocks.push.mockRejectedValue(readError);
+
+    await expect(runCertExpiryAlert(ctx)).resolves.toBeDefined();
+
+    expect(mocks.email).toHaveBeenCalledTimes(2);
+    const zapisane = mocks.audit.mock.calls.map((c) => c[0] as { tenantId: string; metadata: Record<string, unknown> });
+    expect(zapisane.map((a) => a.tenantId)).toEqual(['t1', 't2']);
+    expect(zapisane[0]!.metadata).toMatchObject({ emailed: true, push_sent: 0 });
+    expect(mocks.captureException).toHaveBeenCalledWith(readError, expect.objectContaining({
+      tags: expect.objectContaining({ job: 'cert-expiry-alert', step: 'push' }), extra: { tenantId: 't1' },
+    }));
   });
 
   it('mail i push idą PRZED kartą (karta nie może ich opóźnić)', async () => {

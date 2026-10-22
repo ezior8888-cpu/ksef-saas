@@ -29,9 +29,8 @@ vi.mock('@/components/auth/turnstile-widget', () => ({ TurnstileWidget: () => nu
 vi.mock('@/app/(auth)/login/actions', () => ({ loginWithEmail: vi.fn(), loginWithGoogle: vi.fn() }));
 vi.mock('@/app/(auth)/register/actions', () => ({ signupWithEmail: vi.fn() }));
 vi.mock('@/app/(auth)/forgot-password/actions', () => ({ requestPasswordReset: vi.fn() }));
-vi.mock('@/app/onboarding/magic-import/actions', () => ({
-  skipMagicImportAction: vi.fn(),
-  startMagicImportAction: vi.fn(),
+vi.mock('@/app/actions/import-danych', () => ({
+  skipImportStepAction: vi.fn(),
   startFileImportAction: vi.fn(),
 }));
 vi.mock('@/app/actions/organizations', () => ({
@@ -73,7 +72,6 @@ import { InviteAcceptForm } from '@/components/invite/invite-accept-form';
 import { OnboardingForm } from '@/components/onboarding/form';
 import { ImportProgressView, type ImportJobRow } from '@/components/onboarding/import-progress-view';
 import { ImportSourceSelector } from '@/components/onboarding/import-source-selector';
-import { MagicImportForm } from '@/components/onboarding/magic-import-form';
 import { tekstBezZnacznikow } from './helpers/tekst-html';
 
 const ROOT = join(__dirname, '..', '..');
@@ -375,28 +373,30 @@ describe('onboarding i zaproszenie (styl kart P15)', () => {
     expect(html).toContain('value="synthetic-token"');
   });
 
-  it('źródło importu: bez certyfikatu odsyła do /settings/ksef, z certyfikatem Magiczny import', () => {
+  // Decyzja Bartosza 22.10.2026 — świadoma zmiana oczekiwań: Magiczny import
+  // znika. Blok KSeF tylko informuje (z certyfikatem → postęp w Imporcie
+  // danych, bez → ustawienia KSeF), z pliku zostają cztery programy, „Pomiń”
+  // bez zmian (e2e 02).
+  it('źródło importu: historia z KSeF sama — bez certyfikatu do /settings/ksef, z certyfikatem postęp w Imporcie danych', () => {
     const bez = renderToStaticMarkup(<ImportSourceSelector tenantId='t1' tenantName='Fixture Sp. z o.o.' hasCertificate={false} />);
     expect(bez).toContain('href="/settings/ksef"');
     expect(bez).toContain('Witaj, Fixture!');
-    expect(bez).not.toContain('Magiczny Import z KSeF');
+    expect(bez).toContain('Po wgraniu certyfikatu KSeF pobierzemy historię faktur sami.');
+    expect(bez).not.toContain('href="/import-danych"');
     const z = renderToStaticMarkup(<ImportSourceSelector tenantId='t1' tenantName='' hasCertificate />);
-    expect(z).toContain('Magiczny Import z KSeF');
+    expect(z).toContain('Historia z KSeF pobierze się sama — postęp zobaczysz w Imporcie danych.');
+    expect(z).toContain('href="/import-danych"');
     expect(z).toContain('Witaj!');
     for (const html of [bez, z]) {
-      expect(html).toContain('Fakturownia');
+      for (const name of ['Fakturownia', 'inFakt', 'wFirma', 'iFirma']) expect(html).toContain(`>${name}<`);
+      expect(html).not.toContain('Inny program');
+      expect(html).not.toContain('JPK_FA');
+      expect(html).not.toContain('Magiczny');
+      expect(html).not.toContain('/onboarding/magic-import');
       expect(html).toContain('Pomiń — wejdę do aplikacji');
       expect(html).not.toMatch(OLD_LOOK);
       expect(html).not.toMatch(/emerald|purple/);
     }
-  });
-
-  it('Magiczny import: cztery zakresy, 6 miesięcy wybrane', () => {
-    const html = renderToStaticMarkup(<MagicImportForm tenantId='t1' />);
-    expect(html.match(/aria-pressed="(true|false)"/g)).toHaveLength(4);
-    expect(html).toMatch(/aria-pressed="true"[^>]*>[\s\S]*?6 miesięcy/);
-    expect(html).toContain('href="/onboarding/import-source"');
-    expect(html).not.toMatch(OLD_LOOK);
   });
 
   const job = (patch: Partial<ImportJobRow>): ImportJobRow => ({
@@ -425,6 +425,34 @@ describe('onboarding i zaproszenie (styl kart P15)', () => {
     expect(failed).toContain('Import się nie udał');
     expect(failed).toMatch(/role="alert"[^>]*>Brak certyfikatu/);
     for (const html of [running, done, failed]) expect(html).not.toMatch(OLD_LOOK);
+    // Decyzja Bartosza 22.10.2026: import z pliku nie wysyła e-maila — nie obiecujemy go.
+    expect(running).not.toMatch(/e-?mail/i);
+    expect(running).toContain('Wynik zobaczysz w Imporcie danych.');
+  });
+
+  it('postęp dawnego ręcznego importu z KSeF „w toku”: przerwany, prowadzi do Importu danych', () => {
+    const legacy = renderToStaticMarkup(<ImportProgressView initialJob={job({ source: 'ksef_history', status: 'extracting' })} />);
+    expect(legacy).toContain('Import przerwany');
+    expect(legacy).toContain('Przerwany — zastąpiony automatyczną historią z KSeF.');
+    expect(legacy).toContain('Przejdź do Importu danych');
+    expect(legacy).not.toContain('role="progressbar"');
+    // Poprawka po przeglądzie (decyzja Bartosza 22.10.2026): nieudany dawny
+    // import z KSeF też jest zastąpiony — bez „ponów import” i bez
+    // „Spróbuj ponownie” prowadzącego do ekranu, na którym tego importu nie ma.
+    const failedLegacy = renderToStaticMarkup(<ImportProgressView initialJob={job({
+      source: 'ksef_history', status: 'failed', invoices_imported: 5,
+      progress_message: 'Lista faktur KSeF jest niepełna. Zawęź zakres dat i ponów import.',
+    })} />);
+    expect(failedLegacy).toContain('Import przerwany');
+    expect(failedLegacy).toContain('Przerwany — zastąpiony automatyczną historią z KSeF.');
+    expect(failedLegacy).toContain('Przejdź do Importu danych');
+    expect(failedLegacy).toContain('Zapisano 5 faktur.');
+    expect(failedLegacy).not.toContain('ponów import');
+    expect(failedLegacy).not.toContain('Spróbuj ponownie');
+    expect(failedLegacy).not.toContain('Import się nie udał');
+    // Zakończony dawny import pokazuje wynik jak dotąd.
+    const done = renderToStaticMarkup(<ImportProgressView initialJob={job({ source: 'ksef_history', status: 'completed', invoices_imported: 3 })} />);
+    expect(done).toContain('Import zakończony!');
   });
 
   it('zaproszenie: przycisk „Dołącz do …”', () => {
@@ -448,12 +476,10 @@ describe('przeniesione ekrany nie wracają do starego wyglądu', () => {
     'app/auth/finish/page.tsx',
     'app/onboarding/page.tsx',
     'app/onboarding/import-source/page.tsx',
-    'app/onboarding/magic-import/page.tsx',
     'app/onboarding/progress/[jobId]/page.tsx',
     'app/invite/[token]/page.tsx',
     'components/onboarding/form.tsx',
     'components/onboarding/import-source-selector.tsx',
-    'components/onboarding/magic-import-form.tsx',
     'components/onboarding/import-progress-view.tsx',
     'components/onboarding/file-import-dialog.tsx',
     'components/invite/invite-accept-form.tsx',

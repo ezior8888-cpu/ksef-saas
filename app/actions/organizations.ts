@@ -1010,20 +1010,6 @@ export async function changeMembershipRoleAction(params: {
   return { success: true };
 }
 
-/**
- * Wywoływane po otwarciu modala „import po rejestracji” — miejsce na przyszłą
- * persystencję (np. jednorazowy flag w profilu). Dziś: weryfikacja sesji, bez
- * zmiany stanu (URL `post_register_import` i tak czyści klient).
- */
-export async function markPostRegisterMagicImportConsumedAction(): Promise<void> {
-  try {
-    await requireVerifiedUser();
-  } catch (e) {
-    if (e instanceof ActionAuthError) return;
-    throw e;
-  }
-}
-
 // ═══════════════════════════════════════════════════════════════
 // Helpery odczytu — używane w server components
 // ═══════════════════════════════════════════════════════════════

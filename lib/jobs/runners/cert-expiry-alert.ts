@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/nextjs';
 
 import type { JobContext } from '@/lib/jobs/registry';
 import {
-  getTenantAdminEmail,
+  readTenantOwnerContact,
 } from '@/lib/supabase/admin-queries';
 import { sendSlackAlert } from '@/lib/alerts/slack';
 import { logAuditSystem } from '@/lib/audit/log-system';
@@ -33,7 +33,11 @@ import { createAdminClient } from '@/lib/supabase/server';
  *     nowy certyfikat zaczyna od nowa) i każdy wysyła raz;
  *   - po kilku pominiętych progach idzie JEDEN mail, z najpilniejszym;
  *   - niedostarczone ostrzeżenie nie jest zapisane (jutro kolejna próba),
- *     a operator dostaje listę niedostarczonych i tych na ostatnim progu.
+ *     a operator dostaje listę niedostarczonych i tych na ostatnim progu;
+ *   - błąd odczytu adresu właściciela (baza, GoTrue) to nie „brak adresu”
+ *     (A5): firma czeka bez maila i pusha, pozostałe idą dalej, a zadanie
+ *     rzuca na końcu — pg-boss je ponawia (dostarczone progi są zapisane,
+ *     mail ma klucz idempotencji).
  */
 
 /** Rekord jednego dostarczonego ostrzeżenia w `audit_logs`. */
@@ -110,7 +114,9 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
     });
     const sentSet = new Set(sent);
 
-    const forOperator: Array<{ tenantId: string; days: number; delivered: boolean }> = [];
+    const forOperator: Array<{ tenantId: string; days: number; delivered: boolean; contactError?: boolean }> = [];
+    /** Firmy, których adresu nie dało się odczytać — po przebiegu zadanie rzuca (ponowienie). */
+    const contactErrors: string[] = [];
 
     // Sekwencyjnie, żeby nie DDOS-ować Resend — kilkadziesiąt firm dziennie.
     for (const tenant of tenants) {
@@ -126,6 +132,25 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
         (Date.parse(tenant.ksef_certificate_expiry) - now.getTime()) / DAY,
       );
 
+      // Ścisły odczyt (A5): błąd bazy albo GoTrue to nie „brak adresu”.
+      // Dawniej mail był wtedy pomijany, a gdy doszedł push, próg zapisany
+      // i mail o nim nie wychodził już nigdy. Teraz firma czeka bez maila
+      // i pusha (operator ją widzi), pozostałe idą dalej, a zadanie rzuca na
+      // końcu i pg-boss je ponawia. Prawdziwy brak właściciela albo adresu
+      // = null, jak dotąd.
+      let email: string | null;
+      try {
+        ({ email } = await readTenantOwnerContact(tenant.id));
+      } catch (e) {
+        contactErrors.push(tenant.id);
+        logger.error('Certyfikat: nie można odczytać adresu właściciela — ostrzeżenie czeka na ponowienie zadania', {
+          tenantId: tenant.id,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        forOperator.push({ tenantId: tenant.id, days: daysRemaining, delivered: false, contactError: true });
+        continue;
+      }
+
       // Najpierw mail i push — to jest ostrzeżenie krytyczne. Karta Flo
       // idzie po nich i jej awaria nie może zatrzymać ani tych kanałów,
       // ani kolejnych firm.
@@ -133,7 +158,6 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
         let emailed = false as boolean;
         let emailReason: string | undefined;
 
-        const email = await getTenantAdminEmail(tenant.id);
         if (!email) {
           emailReason = 'no-admin-email';
         } else {
@@ -141,20 +165,39 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
             tenantName: tenant.name,
             daysRemaining,
             expiryDate: tenant.ksef_certificate_expiry,
+          }, {
+            // Ponowienie zadania przechodzi pętlę od nowa, a zapis progu w
+            // audit_logs jest fail-open — klucz (Resend, 24 h) nie wyśle maila
+            // drugi raz. Liczba dni w kluczu: następny dzień = nowy mail.
+            idempotencyKey: `cert-expiry/${tenant.id}/${Date.parse(tenant.ksef_certificate_expiry)}/${due}/${daysRemaining}`,
           });
           emailed = result.sent;
           emailReason = result.reason;
         }
 
-        const push = await sendPushToTenant(tenant.id, 'cert_expiry', {
-          title:
-            due <= LAST_THRESHOLD
-              ? 'Certyfikat KSeF — pilne'
-              : 'Certyfikat KSeF wkrótce wygaśnie',
-          body: `${tenant.name ?? 'Firma'}: ok. ${daysRemaining} dni do wygaśnięcia.`,
-          url: '/settings/ksef',
-          tag: `cert-expiry-${tenant.id}-${due}`,
-        });
+        // Mail już wyszedł — wyjątek z pusha (np. PushReadError: awaria bazy)
+        // ponowiłby całe zadanie dla dodatkowego kanału (mail chroni klucz
+        // idempotencji, ale nie ma po co go ryzykować). Push nieudany =
+        // niedostarczony: decyduje mail, inaczej jutro i lista dla operatora.
+        let push: { sent: number; failed: number };
+        try {
+          push = await sendPushToTenant(tenant.id, 'cert_expiry', {
+            title:
+              due <= LAST_THRESHOLD
+                ? 'Certyfikat KSeF — pilne'
+                : 'Certyfikat KSeF wkrótce wygaśnie',
+            body: `${tenant.name ?? 'Firma'}: ok. ${daysRemaining} dni do wygaśnięcia.`,
+            url: '/settings/ksef',
+            tag: `cert-expiry-${tenant.id}-${due}`,
+          });
+        } catch (e) {
+          logger.warn('Certyfikat: push nieudany — ostrzeżenie liczone bez niego', {
+            tenantId: tenant.id,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          Sentry.captureException(e, { tags: { job: 'cert-expiry-alert', step: 'push' }, extra: { tenantId: tenant.id } });
+          push = { sent: 0, failed: 0 };
+        }
 
         const delivered = emailed || push.sent > 0;
         // Zapis tylko po dostarczeniu: niedostarczone ostrzeżenie jutro
@@ -232,7 +275,7 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
           context: Object.fromEntries(
             forOperator.slice(0, 20).map((f) => [
               f.tenantId,
-              `${f.days} dni${f.delivered ? '' : ' — niedostarczone'}`,
+              `${f.days} dni${f.delivered ? '' : f.contactError ? ' — niedostarczone: błąd odczytu adresu, zadanie ponowi' : ' — niedostarczone'}`,
             ]),
           ),
         });
@@ -240,6 +283,13 @@ export async function runCertExpiryAlert({ step, logger }: JobContext) {
     }
 
     logger.info(`Ostrzeżenia o certyfikacie: ${totalAlerts}, dla operatora: ${forOperator.length}`);
+    if (contactErrors.length > 0) {
+      // Ponowienie przez pg-boss: dostarczone progi są w audit_logs (pominięte),
+      // a mail ma klucz idempotencji, gdyby zapis progu się nie udał.
+      throw new Error(
+        `Certyfikat: nie można odczytać adresu właściciela (${contactErrors.length} firm: ${contactErrors.slice(0, 20).join(', ')}) — ponowienie zadania`,
+      );
+    }
     return { totalAlerts, forOperator: forOperator.length };
 }
 
