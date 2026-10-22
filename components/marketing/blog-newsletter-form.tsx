@@ -4,6 +4,13 @@ import { useState, useTransition } from 'react';
 
 import { subscribeNewsletterAction } from '@/app/actions/newsletter';
 
+/**
+ * NIEPODPIĘTY (przegląd prawny 22.10.2026): żaden ekran nie używa tego
+ * formularza i tak ma zostać, dopóki newsletter nie ma potwierdzenia zapisu
+ * (double opt-in), zapisu wersji zgody i linku wypisu w każdej wiadomości —
+ * klauzula niżej obiecuje „link w wiadomości”, a wysyłki nie ma.
+ * Pilnuje tego tests/unit/newsletter-wstrzymany.test.ts.
+ */
 export function BlogNewsletterForm() {
   const [email, setEmail] = useState('');
   // Honeypot — pole niewidoczne dla człowieka; wypełnia je tylko bot.

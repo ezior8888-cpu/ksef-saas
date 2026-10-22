@@ -180,7 +180,7 @@ describe('treść odpowiada rzeczywistości', () => {
     const sources: Array<[string, string]> = [
       ...ALL_DOCS.map((d) => [d.slug, text(d)] as [string, string]),
       ...readdirSync('content/help').map((f) => [`content/help/${f}`, readFileSync(`content/help/${f}`, 'utf8')] as [string, string]),
-      ...['components/settings/delete-account.tsx', 'components/settings/account-actions.ts', 'app/(dashboard)/settings/account/page.tsx'].map(
+      ...['components/settings/company-deletion.tsx', 'app/(dashboard)/settings/account/page.tsx', 'app/(dashboard)/settings/account/_components/gdpr-section.tsx'].map(
         (f) => [f, readFileSync(f, 'utf8')] as [string, string],
       ),
     ];

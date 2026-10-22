@@ -85,7 +85,7 @@ od razu `locked`, a 30 dni na usunięcie liczy się od polecenia.
 | joby (`lib/jobs/runners/**`), w tym `requireTenantMember` (`lib/jobs/runners/tenant-boundary.ts:43-51`) | **nie** — żaden |
 | `inbox-polling` (`lib/jobs/runners/inbox-polling.ts:136-145`) | **nie**, choć komentarz w 00004:20-22 mówi, że `is_active` dodano właśnie „do filtra” tego joba |
 | portal księgowej: `lib/accountant/load-accountant-portal.ts:49-58`, `app/accountant/[token]/download/[invoiceId]/route.ts:24-31`, `app/api/portal/exports/generate/route.ts:47-51` | **nie** — tylko `revoked_at` i `expires_at` linku |
-| `cron.retention-delete` (`lib/jobs/runners/retention-delete.ts:26-40`) | **nie** — usuwa tylko **faktury** po `invoices.scheduled_deletion_at` (retencja 10 lat). Komentarz w `app/admin/users/actions.ts:149-151` („pełne czyszczenie zrobi job `retention-delete`”) jest nieprawdziwy. |
+| `cron.retention-delete` (`lib/jobs/runners/retention-delete.ts:26-40`) | **nie** — usuwa tylko **faktury** po `invoices.scheduled_deletion_at` (retencja 10 lat). Komentarz w `app/admin/users/actions.ts` („pełne czyszczenie zrobi job `retention-delete`”) był nieprawdziwy — usunięty razem z blokiem z § 2.2 (gałąź `claude/admin-bez-flag-firm`, 22.10.2026). |
 | `lib/flo/tick.ts:298-310` | tak (`is_active` i `deleted_at`) |
 | `lib/analytics/platform-metrics.ts:71-75`, `lib/admin/flags.ts:59`, `mv_tenant_dashboard_summary` (00044:160) | tak — liczniki i widoki |
 | Stripe | nikt nie anuluje subskrypcji z serwera; jedyna droga to portal klienta (`lib/stripe/portal.ts:38`) |
@@ -95,8 +95,8 @@ od razu `locked`, a 30 dni na usunięcie liczy się od polecenia.
 
 | Miejsce | Co robi | Problem po włączeniu sprawdzania flag |
 |---|---|---|
-| `requestAccountDeletionAction` (`components/settings/account-actions.ts:58-65` na `main`) | stawia `deleted_at`, `hard_delete_at = +30 dni`, `is_active = false` klientem użytkownika | #271 to wyłącza; po M1 strażnik kolumn (§ 9 M1) zabroni klientowi pisać te pola |
-| `deleteUserGdprAction` (`app/admin/users/actions.ts:149-180`) | przy usuwaniu **konta** stawia flagi na **każdej firmie**, gdzie usuwany jest właścicielem | po włączeniu flag usunięcie jednego konta zamknęłoby firmę wszystkim członkom, wbrew regulaminowi § 14 ust. 2 („usunięcie Konta nie rozwiązuje Umowy”). **Ten blok musi zniknąć przed M2** (#272 ma to przygotowane lokalnie, po #267 + #270). |
+| `requestAccountDeletionAction` (dawniej `components/settings/account-actions.ts:58-65`) | stawiała `deleted_at`, `hard_delete_at = +30 dni`, `is_active = false` klientem użytkownika | #271 to wyłączył, a 22.10.2026 akcję i formularz usunięto (ekran to instrukcja z linkiem do pomocy, `components/settings/company-deletion.tsx`); po M1 strażnik kolumn (§ 9 M1) i tak zabroni klientowi pisać te pola |
+| `deleteUserGdprAction` (`app/admin/users/actions.ts:149-180`) | przy usuwaniu **konta** stawia flagi na **każdej firmie**, gdzie usuwany jest właścicielem | po włączeniu flag usunięcie jednego konta zamknęłoby firmę wszystkim członkom, wbrew regulaminowi § 14 ust. 2 („usunięcie Konta nie rozwiązuje Umowy”). **Ten blok musi zniknąć przed M2.** Zrobione 22.10.2026 (gałąź `claude/admin-bez-flag-firm`): panel usuwa konto, firm nie rusza, a w komunikacie i audycie (`ownedOrgsLeftActive`) podaje, ile firm działa dalej. |
 
 ### 2.3 Firmy oflagowane starą akcją
 

@@ -37,21 +37,21 @@ describe('terminy usuwania konta — kod i dokumenty mówią to samo', () => {
     expect(text).not.toContain('danych w 30 dni od żądania');
   });
 
-  // Rewizja 15.10.2026: `components/settings/delete-account.tsx` NIE usuwa
-  // konta — woła `requestAccountDeletionAction`, które oznacza do usunięcia
-  // FIRMĘ (30 dni). Ten test wcześniej wymuszał w nim „14 dni” (termin
-  // usunięcia konta) i utrwalał pomyłkę. Konto usuwa sekcja RODO.
+  // Rewizja 15.10.2026: dawny `components/settings/delete-account.tsx` NIE
+  // usuwał konta — wołał `requestAccountDeletionAction`, które oznaczało do
+  // usunięcia FIRMĘ (30 dni). Ten test wcześniej wymuszał w nim „14 dni”
+  // (termin usunięcia konta) i utrwalał pomyłkę. Konto usuwa sekcja RODO.
   it('usuwanie konta (sekcja RODO): 14 dni na wycofanie decyzji', () => {
     const text = read('app/(dashboard)/settings/account/_components/gdpr-section.tsx');
     expect(text).toContain(`${GDPR_COOLING_OFF_DAYS}-dniowym okresem na wycofanie decyzji`);
   });
 
-  it('przycisk usuwania firmy mówi, że usuwa firmę, i nie podaje terminu usunięcia konta', () => {
-    for (const file of ['components/settings/delete-account.tsx', 'components/settings/delete-account-form.tsx']) {
-      const text = read(file);
-      expect(text, file).toContain('Usuń firmę');
-      expect(text, file).not.toContain(`nieodwracalna po ${GDPR_COOLING_OFF_DAYS} dniach`);
-    }
+  // Od 22.10.2026 usunięcie firmy to instrukcja z linkiem do pomocy
+  // (`company-deletion.tsx`), bez formularza i akcji serwera.
+  it('instrukcja usunięcia firmy mówi, że dotyczy firmy, i nie podaje terminu usunięcia konta', () => {
+    const text = read('components/settings/company-deletion.tsx');
+    expect(text).toContain('Usuń organizację (firmę)');
+    expect(text).not.toContain(`nieodwracalna po ${GDPR_COOLING_OFF_DAYS} dniach`);
   });
 });
 
@@ -97,11 +97,12 @@ describe('kopie zapasowe — dokumenty zgodne z retencją w kodzie', () => {
  * Usunięcie FIRMY nie działa w aplikacji: `tenants.deleted_at`, `hard_delete_at`
  * i `is_active` nie sprawdza logowanie, RLS (`is_member_of`,
  * `get_current_tenant_id`) ani żaden job, a subskrypcji nikt nie anuluje.
- * Od 15.10.2026 samoobsługa jest wstrzymana (osobny PR zmienia
- * `requestAccountDeletionAction` w odmowę z adresem pomocy), a usunięcie
- * firmy idzie przez pomoc techniczną. Ekrany i dokumenty nie mogą więc
- * obiecywać wyłączenia firmy ani usunięcia danych w terminie liczonym od
- * kliknięcia. Test nie przypina implementacji akcji — sprawdza teksty.
+ * Od 15.10.2026 samoobsługa jest wstrzymana, a usunięcie firmy idzie przez
+ * pomoc techniczną (od 22.10 ekran to sama instrukcja z linkiem `mailto:`,
+ * bez formularza i akcji). Ekrany i dokumenty nie mogą więc obiecywać
+ * wyłączenia firmy ani usunięcia danych w terminie liczonym od kliknięcia.
+ * Test sprawdza teksty; wyrenderowany ekran sprawdza
+ * `usuwanie-firmy-wstrzymane.test.tsx`.
  */
 describe('usuwanie firmy — teksty nie obiecują mechanizmu, którego nie ma', () => {
   // Komentarze w kodzie celowo cytują stare sformułowania — wycinamy je.
@@ -114,8 +115,7 @@ describe('usuwanie firmy — teksty nie obiecują mechanizmu, którego nie ma', 
   });
 
   const screens = [
-    'components/settings/delete-account.tsx',
-    'components/settings/delete-account-form.tsx',
+    'components/settings/company-deletion.tsx',
     'app/(dashboard)/settings/page.tsx',
     'app/(dashboard)/settings/account/page.tsx',
   ];
@@ -129,14 +129,11 @@ describe('usuwanie firmy — teksty nie obiecują mechanizmu, którego nie ma', 
     expect(text).not.toContain('Potwierdź usunięcie konta');
   });
 
-  it.each(['components/settings/delete-account.tsx', 'app/(dashboard)/settings/account/page.tsx'])(
-    '%s: kieruje do pomocy technicznej',
-    (file) => {
-      const text = visible(file);
-      expect(text).toContain('SUPPORT_EMAIL');
-      expect(text).toContain('przez pomoc techniczną');
-    },
-  );
+  it('components/settings/company-deletion.tsx: kieruje do pomocy technicznej', () => {
+    const text = visible('components/settings/company-deletion.tsx');
+    expect(text).toContain('SUPPORT_EMAIL');
+    expect(text).toContain('przez pomoc techniczną');
+  });
 
   it('pomoc (czyta ją też asystent AI): usunięcie organizacji przez pomoc, serwery w Norymberdze', () => {
     const rodo = read('content/help/rodo-i-usuwanie-konta.mdx');
