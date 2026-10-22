@@ -28,6 +28,12 @@ const FILES = [
   'app/(dashboard)/reports/kpir/error.tsx',
   'components/exports/new-export-form.tsx',
   'components/exports/export-history.tsx',
+  // Poprawka Bartosza 22.10.2026 (import danych w stylu Finory): Centrum
+  // importu — plakietki „Gotowy” / „Wymaga certyfikatu”, statusy historii
+  // i licznik ostrzeżeń.
+  'components/import-danych/import-center.tsx',
+  'components/import-danych/import-source-grid.tsx',
+  'components/import-danych/import-history.tsx',
 ];
 
 const LIGHT_TOO_PALE = /(?<![\w:-])text-(green|amber)-600\b/g;

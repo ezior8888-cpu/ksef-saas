@@ -39,7 +39,17 @@ export interface ImportEngineParams {
   invoiceKsefStatus?: string | null;
   /** Required provenance when importing invoices already accepted by KSeF. */
   ksefEnvironment?: KsefEnvironment;
+  /**
+   * Zapis katalogów (decyzja Bartosza 22.10.2026, IMP-PROD): `upsert`
+   * (domyślnie — zachowanie bez zmian) dopisuje nowe i aktualizuje istniejące,
+   * `insert-only` tylko dopisuje nowych (bez nadpisania danych kontrahenta
+   * i bez zwiększania `use_count`), `skip` nie pisze nic. Synchronizacja
+   * historii KSeF: sprzedaż `insert-only`, zakupy i naprawy `skip`.
+   */
+  catalogPolicy?: { contractors: CatalogPolicy; products: CatalogPolicy };
 }
+
+export type CatalogPolicy = 'upsert' | 'insert-only' | 'skip';
 
 export interface ImportEngineResult {
   invoicesImported: number;
@@ -51,11 +61,30 @@ export interface ImportEngineResult {
   warnings: string[];
 }
 
+/**
+ * Wynik z osobną listą notatek JPK (`held` — te same, które prowadzą
+ * `warnings`). Osobna funkcja, żeby wynik `processImportedInvoices` (migawka
+ * `import-wiersze-tozsamosc`) został bajt w bajt ten sam.
+ */
+export interface ImportEngineDetailedResult extends ImportEngineResult {
+  held: string[];
+}
+
 type AdminSupabase = ReturnType<typeof createAdminClient>;
 
 export async function processImportedInvoices(
   params: ImportEngineParams,
 ): Promise<ImportEngineResult> {
+  // Bez `held` — kształt wyniku sprzed zmiany (strażnik migawki).
+  const { held: _held, ...result } = await processImportedInvoicesDetailed(params);
+  void _held;
+  return result;
+}
+
+/** Jak `processImportedInvoices`, plus notatki JPK osobno (synchronizacja historii KSeF: `jpk_note`). */
+export async function processImportedInvoicesDetailed(
+  params: ImportEngineParams,
+): Promise<ImportEngineDetailedResult> {
   const invoiceKsefStatus = params.invoiceKsefStatus ?? 'draft';
   if (invoiceKsefStatus === 'accepted' && !params.ksefEnvironment) {
     throw new Error('Accepted KSeF import requires verified environment provenance');
@@ -75,17 +104,25 @@ export async function processImportedInvoices(
   const counterparty =
     invoiceDirection === 'incoming' ? ('seller' as const) : ('buyer' as const);
 
+  const contractorsPolicy = params.catalogPolicy?.contractors ?? 'upsert';
+  const productsPolicy = params.catalogPolicy?.products ?? 'upsert';
+
   const contractorsMap = extractUniqueContractors(params.invoices, counterparty);
 
-  const contractorResult = await upsertContractors(
-    supabase,
-    params.tenantId,
-    contractorsMap,
-    warnings,
-  );
+  const contractorResult = contractorsPolicy === 'skip'
+    ? { created: 0, updated: 0 }
+    : await upsertContractors(
+      supabase,
+      params.tenantId,
+      contractorsMap,
+      warnings,
+      contractorsPolicy,
+    );
 
   const productsMap = extractUniqueProducts(params.invoices);
-  const productsCreated = await upsertProducts(supabase, params.tenantId, productsMap, warnings);
+  const productsCreated = productsPolicy === 'skip'
+    ? 0
+    : await upsertProducts(supabase, params.tenantId, productsMap, warnings, productsPolicy);
 
   // W9: dokumenty zapisane, których JPK nie wykaże (stawka spoza FaktWay,
   // zaimportowana korekta / zaliczka / ROZ) — na początku listy, bo widok
@@ -111,6 +148,7 @@ export async function processImportedInvoices(
     contractorsUpdated: contractorResult.updated,
     productsCreated,
     warnings: [...held, ...warnings],
+    held: [...held],
   };
 }
 
@@ -172,6 +210,7 @@ async function upsertContractors(
   tenantId: string,
   contractorsMap: Map<string, ContractorSummary>,
   warnings: string[],
+  policy: Exclude<CatalogPolicy, 'skip'> = 'upsert',
 ): Promise<{ created: number; updated: number }> {
   let created = 0;
   let updated = 0;
@@ -212,6 +251,10 @@ async function upsertContractors(
     if (insErr) warnings.push(`Kontrahenci: insert — ${insErr.message}`);
     else created = ins?.length ?? 0;
   }
+
+  // `insert-only`: istniejącego kontrahenta nie nadpisujemy (dane z KSeF
+  // mogą być starsze niż poprawione ręcznie w FaktWay).
+  if (policy === 'insert-only') return { created, updated };
 
   for (const [nip, summary] of contractorsMap.entries()) {
     const row = existingMap.get(nip);
@@ -284,6 +327,7 @@ async function upsertProducts(
   tenantId: string,
   productsMap: Map<string, ProductSummary>,
   warnings: string[],
+  policy: Exclude<CatalogPolicy, 'skip'> = 'upsert',
 ): Promise<number> {
   if (productsMap.size === 0) return 0;
 
@@ -320,6 +364,7 @@ async function upsertProducts(
     if (!key) continue;
 
     const hit = existingByKey.get(key);
+    if (hit && policy === 'insert-only') continue; // bez zwiększania `use_count` (IMP-PROD)
     if (hit) {
       const { error } = await supabase
         .from('products')
@@ -564,8 +609,20 @@ async function insertInvoices(
     // C5c: netto / VAT / brutto pozycji zgodne z sumami stawek nagłówka (art. 106e ust. 7–11).
     const { content, amounts } = importedInvoiceContent(inv);
 
-    const acceptedNow =
-      invoiceKsefStatus === 'accepted' ? new Date().toISOString() : null;
+    // IMP-ACC (decyzja Bartosza 22.10.2026): chwila nadania numeru w KSeF,
+    // gdy wywołujący ją zna; bez pola — jak dotąd chwila importu.
+    let acceptedNow: string | null = null;
+    if (invoiceKsefStatus === 'accepted') {
+      const ksefAcceptedMs = inv.ksefAcceptedAt === undefined ? Number.NaN : Date.parse(inv.ksefAcceptedAt);
+      if (Number.isFinite(ksefAcceptedMs)) {
+        acceptedNow = new Date(ksefAcceptedMs).toISOString();
+      } else {
+        acceptedNow = new Date().toISOString();
+        if (inv.ksefAcceptedAt !== undefined) {
+          warnings.push(`${num}: brak daty przyjęcia w KSeF — użyto chwili importu`);
+        }
+      }
+    }
 
     if (inv.xmlArchive && (source !== 'ksef_history' || !ksefNorm ||
         !isTenantStoragePath(inv.xmlArchive.storagePath, tenantId))) {

@@ -100,7 +100,14 @@ ENV NEXT_OUTPUT=standalone \
 # z `experimental.webpackMemoryOptimizations` (next.config.ts) 3526 MB.
 # Optymalizacje + 3584 MB przechodzą lokalnie (także z E9). Swap app-1
 # 20.10: 8 GB, w spoczynku zajęte ~1.6 GB — +512 MB sterty mieści się.
-ENV NODE_OPTIONS="--max-old-space-size=3584"
+#
+# 22.10.2026: 3584 → 4096 MB (decyzja Bartosza). Łatki bezpieczeństwa:
+# Next 16.4.1 (GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r) i @sentry/nextjs
+# 10.75.2 (GHSA-mchm-gjx6-7h55 — używamy `tunnelRoute`). Z nową wersją Sentry
+# build padał przy 3584 MB nawet bez `widenClientFileUpload`; przy 4096 MB
+# przechodzi (lokalnie szczyt RSS ~6.7 GB). Swap app-1 22.10: 8 GB, w spoczynku
+# zajęte ~0.8 GB. Gdy build zginie z exit 137 — dołóż swap (pułapki w AGENTS.md).
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN pnpm build
 
 # ── worker: proces jobów pg-boss (Etap 7 migracji Hetzner) ──

@@ -106,6 +106,10 @@ export async function runKsefLifecycleReport({ step, logger }: JobContext): Prom
       .select('id', { count: 'exact', head: true })
       .eq('direction', 'outgoing')
       .eq('ksef_status', 'accepted')
+      // 00155 (decyzja Bartosza 22.10.2026): tylko faktury, które powinny mieć
+      // UPO — ten sam predykat co I3. Sprzedaż spoza FaktWay pobrana z KSeF
+      // (`ksef_import`) to nie są nasze wysyłki.
+      .filter('ksef_upo_expected', 'eq', 'true')
       .gte('ksef_accepted_at', sinceIso);
     if (error) throw new Error(`Raport: nie można policzyć przyjętych: ${error.message}`);
     return count ?? 0;

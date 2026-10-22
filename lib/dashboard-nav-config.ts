@@ -41,6 +41,10 @@ export interface DashboardNavSection {
  * przez `PALETTE_EXTRA_NAV` w `lib/command-palette.ts` (tam też obie analizy).
  */
 export const dashboardNavSections: DashboardNavSection[] = [
+  // Układ menu z planu Finora (poprawka Bartosza 22.10.2026): trzy sekcje,
+  // Ustawienia w stopce paska. Pozycje z zakładkami lub przełącznikiem:
+  // Analizy (Sprzedaż / Koszty), Faktury (Wystawione / Cykliczne / Po
+  // terminie), Koszty (Wydatki / Skrzynka KSeF), Księgowość (KPiR / Eksport).
   {
     title: "Pulpit",
     items: [
@@ -48,6 +52,13 @@ export const dashboardNavSections: DashboardNavSection[] = [
       // nie ma (prowadziłaby tu przez przekierowanie).
       { href: "/dashboard", label: "Pulpit", icon: RiDashboardLine },
       { href: "/przeplywy", label: "Przepływy", icon: RiExchangeFundsLine },
+      // Plan Finora E7 (P10, P11): ciężkie agregaty — bez prefetchu (§4).
+      {
+        href: "/analizy/sprzedaz",
+        label: "Analizy",
+        icon: RiBarChart2Line,
+        prefetch: false,
+      },
     ],
   },
   {
@@ -59,33 +70,9 @@ export const dashboardNavSections: DashboardNavSection[] = [
     ],
   },
   {
-    title: "Koszty",
-    // Jedna pozycja (poprawka Bartosza 21.10.2026): Wydatki (/expenses)
-    // i Skrzynka KSeF (/inbox) to zakładki ekranu „Koszty”.
-    items: [{ href: "/expenses", label: "Koszty", icon: RiReceiptLine }],
-  },
-  {
-    // Plan Finora E7 (P10, P11): ciężkie agregaty — bez prefetchu (§4).
-    // Jedna pozycja (poprawka Bartosza 21.10.2026: Analizy 1:1 z Finory):
-    // analiza sprzedaży (/analizy/sprzedaz) i kosztów (/analizy/koszty) to
-    // dwie strony przełączane w nagłówku „Sprzedaż | Koszty”.
-    title: "Analizy",
+    title: "Koszty i księgowość",
     items: [
-      {
-        href: "/analizy/sprzedaz",
-        label: "Analizy",
-        icon: RiBarChart2Line,
-        prefetch: false,
-      },
-    ],
-  },
-  {
-    title: "Księgowość",
-    // Jedna pozycja zamiast dwóch (poprawka Bartosza 21.10.2026:
-    // przeprojektowanie Księgowości): KPiR (/reports/kpir) i Eksport
-    // (/reports/exports) to zakładki ekranu „Księgowość”. Import danych
-    // zostaje osobno — to inny ekran, bez tych zakładek.
-    items: [
+      { href: "/expenses", label: "Koszty", icon: RiReceiptLine },
       { href: "/reports/kpir", label: "Księgowość", icon: RiBook2Line },
       { href: "/import-danych", label: "Import danych", icon: RiUpload2Line },
     ],

@@ -133,11 +133,14 @@ describe('struktura menu (plan Finora §4)', () => {
         items: s.items.map((i) => [i.label, i.href]),
       })),
     ).toEqual([
+      // Poprawka Bartosza 22.10.2026: układ menu z planu Finora — trzy sekcje
+      // (Pulpit · Sprzedaż · Koszty i księgowość), Ustawienia w stopce.
       {
         title: 'Pulpit',
         items: [
           ['Pulpit', '/dashboard'],
           ['Przepływy', '/przeplywy'],
+          ['Analizy', '/analizy/sprzedaz'],
         ],
       },
       {
@@ -145,31 +148,13 @@ describe('struktura menu (plan Finora §4)', () => {
         items: [
           ['Faktury', '/invoices'],
           ['Wystaw fakturę', '/invoices/new'],
-          // Poprawka 21.10.2026: „Faktury cykliczne” i „Przypomnienia” są zakładkami
-          // ekranu „Faktury” — świadoma zmiana struktury menu (Sprzedaż: 5 → 3 pozycje).
           ['Kontrahenci', '/contractors'],
         ],
       },
       {
-        title: 'Koszty',
-        // Poprawka 21.10.2026: Wydatki i Skrzynka KSeF są zakładkami ekranu Koszty
-        // — świadoma zmiana struktury menu (Koszty: 2 → 1 pozycja).
-        items: [['Koszty', '/expenses']],
-      },
-      // Plan Finora E7: sekcja „Analizy” dochodzi razem ze stronami P10/P11
-      // (zasada wpinania §4) — świadoma zmiana oczekiwanej struktury menu.
-      // Świadoma zmiana: Analizy 1:1 z Finory (21.10.2026) — jedna pozycja
-      // „Analizy”, a analizę kosztów przełącza się w nagłówku (Analizy: 2 → 1).
-      {
-        title: 'Analizy',
-        items: [['Analizy', '/analizy/sprzedaz']],
-      },
-      {
-        title: 'Księgowość',
-        // Poprawka 21.10.2026 (przeprojektowanie Księgowości): KPiR i Eksport są
-        // zakładkami ekranu „Księgowość” — świadoma zmiana struktury menu
-        // (Księgowość: 3 → 2 pozycje).
+        title: 'Koszty i księgowość',
         items: [
+          ['Koszty', '/expenses'],
           ['Księgowość', '/reports/kpir'],
           ['Import danych', '/import-danych'],
         ],
@@ -218,14 +203,10 @@ describe('struktura menu (plan Finora §4)', () => {
       if (tab.href) expect(hrefs).not.toContain(tab.href);
     }
     expect(more.every((s) => s.items.length > 0)).toBe(true);
-    // „Pulpit" ma obie pozycje na dolnym pasku — sekcja odpada w całości.
-    expect(more.map((s) => s.title)).toEqual([
-      'Sprzedaż',
-      'Koszty',
-      'Analizy',
-      'Księgowość',
-    ]);
-    expect(more[0].items.map((i) => i.href)).toEqual(['/contractors']);
+    // „Pulpit” traci z „Więcej” Pulpit i Przepływy (dolny pasek), zostają Analizy.
+    expect(more.map((s) => s.title)).toEqual(['Pulpit', 'Sprzedaż', 'Koszty i księgowość']);
+    expect(more[0].items.map((i) => i.href)).toEqual(['/analizy/sprzedaz']);
+    expect(more[1].items.map((i) => i.href)).toEqual(['/contractors']);
   });
 
   it('getDashboardPrefetchHrefs pomija pozycje z prefetch: false', () => {
