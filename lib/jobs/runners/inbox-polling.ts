@@ -19,6 +19,11 @@ import { sendPushToTenant } from '@/lib/push/sender';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { InvoiceMetadata, KsefEnvironment } from '@/types/ksef';
+import { INBOX_MAX_WINDOW_MS, nextInboxHwm } from '@/lib/ksef/hwm';
+
+// Przeniesione do czystego `lib/ksef/hwm.ts` (wspólne z synchronizacją historii
+// KSeF, decyzja Bartosza 22.10.2026) — re-eksport zachowuje dotychczasowe importy.
+export { INBOX_MAX_WINDOW_MS, nextInboxHwm };
 
 /**
  * Polling skrzynki KSeF - dwa joby:
@@ -45,11 +50,12 @@ import type { InvoiceMetadata, KsefEnvironment } from '@/types/ksef';
 /** Numer KSeF ma ~35 znaków — 100 w `in.(…)` to ~3,6 KB adresu. */
 export const KSEF_NUMBERS_PER_QUERY = 100;
 
-/** Pierwszy przebieg firmy: tyle wstecz (wcześniejszą historię bierze import z KSeF). */
+/**
+ * Pierwszy przebieg firmy: tyle wstecz. Wcześniejszą historię zakupów pobiera
+ * `ksef-history-sync` (strumień zakupów do HWM skrzynki z chwili założenia,
+ * decyzja Bartosza 22.10.2026) — jako archiwum, bez kosztów i KPiR.
+ */
 export const INBOX_INITIAL_LOOKBACK_MS = 48 * 60 * 60 * 1000;
-
-/** API przyjmuje do 100 dni na zapytanie — zostawiamy zapas. */
-export const INBOX_MAX_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
 /**
  * Okno zapytania skrzynki (AUD-18): od HWM ostatniego pełnego przebiegu,
@@ -171,20 +177,6 @@ export async function runInboxPolling({ step, logger }: JobContext) {
     return { polled: tenants.length };
 }
 
-/**
- * Początek następnego okna po pełnym przebiegu (F-039). Dokumentacja MF
- * (pobieranie przyrostowe): kolejne okno zaczyna się w „momencie zakończenia”
- * poprzedniego, czyli w `dateRange.to`, gdy było podane. `permanentStorageHwmDate`
- * jest globalny i przy nadrabianiu zaległości bywa późniejszy niż `to` —
- * start od niego przeskakiwał faktury z przedziału (to, HWM]. Wynik nigdy nie
- * cofa się przed początek okna i nie wychodzi poza jego koniec.
- */
-export function nextInboxHwm(hwm: string, window: { from: string; to: string }): string {
-  const hwmMs = Date.parse(hwm);
-  if (!(hwmMs > Date.parse(window.from))) return window.from;
-  if (hwmMs > Date.parse(window.to)) return window.to;
-  return hwm;
-}
 
 // ═══════════════════════════════════════════════════════════════
 // PER-TENANT: polling + diff + insert

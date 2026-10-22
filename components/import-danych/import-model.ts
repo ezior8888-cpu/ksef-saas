@@ -1,4 +1,4 @@
-import type { FileImportSource } from '@/app/onboarding/magic-import/actions';
+import type { FileImportSource } from '@/app/actions/import-danych';
 import { countLabel } from '@/lib/i18n/plural';
 import type { Database } from '@/types/database';
 
@@ -11,6 +11,14 @@ import type { Database } from '@/types/database';
  * w `import_jobs` (`invoices_imported`, `contractors_created`,
  * `products_created`). Silnik liczy tylko nowo zapisane faktury (duplikaty
  * pomija), więc suma po jobach to liczba faktur, które import naprawdę dodał.
+ *
+ * Decyzja Bartosza 22.10.2026: Magicznego importu już nie ma — historię
+ * z KSeF FaktWay pobiera sam (karta „Historia z KSeF”). Dawne wiersze
+ * `ksef_history` zostają w historii jako „Import z KSeF (ręczny)”, a taki
+ * wiersz, który utknął „w toku”, pokazujemy jako przerwany: jego kolejki już
+ * nie ma, więc nigdy się nie skończy. Tak samo nieudany: jego zapisany powód
+ * („Zawęź zakres dat i ponów import”) każe ponowić import, którego już nie
+ * ma (poprawka po przeglądzie).
  */
 
 type ImportJobRow = Database['public']['Tables']['import_jobs']['Row'];
@@ -46,36 +54,36 @@ export const IMPORT_HISTORY_LIMIT = 100;
 export const POLL_INTERVAL_MS = 4000;
 export const MAX_POLL_TICKS = 45;
 
-/** Adres Magicznego importu — ten sam format co w ustawieniach KSeF i onboardingu. */
-export function magicImportHref(tenantId: string): string {
-  return `/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`;
-}
-
 /** Szczegóły i postęp joba — istniejąca strona z odświeżaniem na żywo. */
 export function importProgressHref(jobId: string): string {
   return `/onboarding/progress/${encodeURIComponent(jobId)}`;
 }
 
-/** Źródła importu z pliku — te same i w tej samej kolejności co w onboardingu. */
+/**
+ * Źródła importu z pliku — te same i w tej samej kolejności co w onboardingu.
+ * Decyzja Bartosza 22.10.2026: tylko cztery duże programy, bez „Inny program
+ * (JPK_FA)”.
+ */
 export const FILE_SOURCES: readonly {
   id: FileImportSource;
   label: string;
   description: string;
-  format: 'CSV' | 'XML';
+  format: 'CSV';
 }[] = [
   { id: 'fakturownia_csv', label: 'Fakturownia', description: 'Plik CSV z eksportu faktur', format: 'CSV' },
   { id: 'infakt_csv', label: 'inFakt', description: 'Plik CSV z eksportu faktur', format: 'CSV' },
   { id: 'wfirma_csv', label: 'wFirma', description: 'Plik CSV z eksportu faktur', format: 'CSV' },
   { id: 'ifirma_csv', label: 'iFirma', description: 'Plik CSV z eksportu faktur', format: 'CSV' },
-  { id: 'jpk_fa', label: 'Inny program', description: 'Plik JPK_FA z dowolnego programu', format: 'XML' },
 ];
 
 const SOURCE_LABELS: Readonly<Record<string, string>> = {
-  ksef_history: 'Magiczny import z KSeF',
+  // Dawny ręczny import (Magiczny import) — wiersze z historii zostają czytelne.
+  ksef_history: 'Import z KSeF (ręczny)',
   fakturownia_csv: 'Fakturownia',
   infakt_csv: 'inFakt',
   wfirma_csv: 'wFirma',
   ifirma_csv: 'iFirma',
+  // Dawny import pliku JPK_FA — z ekranu zniknął, wiersze w historii zostają.
   jpk_fa: 'Plik JPK_FA',
 };
 
@@ -108,7 +116,28 @@ export function statusGroup(status: string): ImportStatusGroup {
   return 'failed';
 }
 
-export const isRunning = (job: Pick<ImportHistoryJob, 'status'>) => statusGroup(job.status) === 'running';
+/**
+ * Dawny ręczny import z KSeF, który się nie zakończył — „w toku” albo
+ * nieudany. Kolejki `import.ksef-history.requested` już nie ma (decyzja
+ * Bartosza 22.10.2026), więc import „w toku” się nie skończy, a nieudanego
+ * nie da się ponowić. Nie udajemy postępu ani nie podpowiadamy ponowienia:
+ * oba są zastąpione automatyczną historią z KSeF (poprawka po przeglądzie —
+ * zapisany powód błędu kazał „ponowić import”).
+ */
+export function isInterruptedLegacyImport(job: Pick<ImportHistoryJob, 'status' | 'source'>): boolean {
+  if (!isKsefSource(job.source)) return false;
+  const group = statusGroup(job.status);
+  return group === 'running' || group === 'failed';
+}
+
+export const INTERRUPTED_LEGACY_NOTE = 'Przerwany — zastąpiony automatyczną historią z KSeF';
+
+/** Grupa statusu wiersza historii: przerwany dawny import z KSeF to „Anulowano”. */
+export function jobStatusGroup(job: Pick<ImportHistoryJob, 'status' | 'source'>): ImportStatusGroup {
+  return isInterruptedLegacyImport(job) ? 'cancelled' : statusGroup(job.status);
+}
+
+export const isRunning = (job: Pick<ImportHistoryJob, 'status' | 'source'>) => jobStatusGroup(job) === 'running';
 
 export function runningStep(status: string): string {
   return RUNNING_STEPS[status] ?? 'W toku';
@@ -186,6 +215,13 @@ export interface ImportSummary {
   invoices: number;
   contractors: number;
   products: number;
+  /** Faktury z importów plików (bez dawnego ręcznego importu z KSeF). */
+  fileInvoices: number;
+  /** Nowi kontrahenci z importów plików. */
+  fileContractors: number;
+  /** Dawny ręczny import z KSeF: sprzedaż (`issued`) i zakupy (`received`). */
+  legacyKsefIssued: number;
+  legacyKsefReceived: number;
   /** Najnowszy zakończony import (lista idzie od najnowszych). */
   lastCompleted: ImportHistoryJob | null;
   /** Lista ucięta limitem — sumy są z ostatnich `limit` importów. */
@@ -197,13 +233,30 @@ export interface ImportSummary {
  * KSeF nie została zapisana” runner zapisuje w `invoices_imported` te, które
  * już są w bazie. Kontrahenci i produkty — tylko nowo utworzeni (uzupełnieni
  * w kolejnych importach to ci sami kontrahenci, suma by ich dublowała).
+ *
+ * Decyzja Bartosza 22.10.2026: kafle rozdzielają pliki od KSeF — dawny
+ * ręczny import z KSeF dolicza się do kafla „Historia z KSeF”.
  */
 export function summarizeImports(jobs: readonly ImportHistoryJob[], limit = IMPORT_HISTORY_LIMIT): ImportSummary {
+  const sum = (list: readonly ImportHistoryJob[], pick: (job: ImportHistoryJob) => number | null) =>
+    list.reduce((total, job) => total + n(pick(job)), 0);
+  const files = jobs.filter((job) => !isKsefSource(job.source));
+  const legacy = jobs.filter((job) => isKsefSource(job.source));
   return {
-    invoices: jobs.reduce((sum, job) => sum + n(job.invoices_imported), 0),
-    contractors: jobs.reduce((sum, job) => sum + n(job.contractors_created), 0),
-    products: jobs.reduce((sum, job) => sum + n(job.products_created), 0),
-    lastCompleted: jobs.find((job) => statusGroup(job.status) === 'completed') ?? null,
+    invoices: sum(jobs, (job) => job.invoices_imported),
+    contractors: sum(jobs, (job) => job.contractors_created),
+    products: sum(jobs, (job) => job.products_created),
+    fileInvoices: sum(files, (job) => job.invoices_imported),
+    fileContractors: sum(files, (job) => job.contractors_created),
+    legacyKsefIssued: sum(
+      legacy.filter((job) => job.direction !== 'received'),
+      (job) => job.invoices_imported,
+    ),
+    legacyKsefReceived: sum(
+      legacy.filter((job) => job.direction === 'received'),
+      (job) => job.invoices_imported,
+    ),
+    lastCompleted: jobs.find((job) => jobStatusGroup(job) === 'completed') ?? null,
     partial: jobs.length >= limit,
   };
 }

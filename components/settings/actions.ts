@@ -148,11 +148,14 @@ export async function uploadCertificateAction(data: {
 
     revalidatePath('/settings/ksef');
     const wasFirstClaim = claimResult === 'claimed';
+    // Decyzja Bartosza 22.10.2026: historię z KSeF pobiera cron
+    // `cron.ksef-history-sync` (sam znajduje zweryfikowaną firmę) — tu bez
+    // zdarzenia joba, tylko informacja dla klienta.
     return {
       success: true,
       wasFirstClaim,
       message: wasFirstClaim
-        ? 'Certyfikat zapisany. Twoja organizacja jest teraz zweryfikowanym właścicielem tego NIP-u w FaktWay (claim KSeF).'
+        ? 'Certyfikat zapisany. Twoja organizacja jest teraz zweryfikowanym właścicielem tego NIP-u w FaktWay (claim KSeF). W ciągu 30 minut zaczniemy pobierać historię faktur z KSeF — postęp zobaczysz w Imporcie danych.'
         : 'Certyfikat zaktualizowany.',
     };
   } catch (error) {

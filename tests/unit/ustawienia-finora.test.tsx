@@ -195,25 +195,38 @@ describe('zakładka Firma (Finora General)', () => {
   });
 });
 
+/**
+ * Decyzja Bartosza 22.10.2026 — świadoma zmiana oczekiwań: blok „Magiczny
+ * Import historii” z przyciskiem startu zastępuje „Historia faktur z KSeF”
+ * (FaktWay pobiera historię sam) z linkiem „Zobacz postęp” do Importu danych.
+ */
 describe('zakładka KSeF (Finora Connected Accounts)', () => {
-  it('połączenie z certyfikatem, Magiczny Import i logowanie Google', async () => {
+  it('połączenie z certyfikatem, historia faktur z KSeF i logowanie Google', async () => {
     ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: true, ksef_certificate_expiry: '2027-03-01T00:00:00Z' };
     ctx.user = { identities: [{ provider: 'google' }], app_metadata: { providers: ['email', 'google'] } };
     const html = renderToStaticMarkup(await KsefSettingsPage());
     expect(html).toContain('Skonfigurowano połączenie');
     expect(html).toContain('Certyfikat ważny do: 01.03.2027');
-    expect(html).toContain('Rozpocznij Magiczny Import');
+    expect(html).toContain('Historia faktur z KSeF');
+    expect(html).toContain(
+      'Po wgraniu certyfikatu FaktWay sam pobiera z KSeF całą historię sprzedaży i zakupów, a potem na bieżąco faktury wystawione poza FaktWay. Pobieranie możesz wstrzymać w Imporcie danych.',
+    );
+    expect(html).toMatch(/href="\/import-danych"[^>]*>(?:<svg[\s\S]*?<\/svg>)?Zobacz postęp<\/a>/);
+    expect(html).not.toContain('Magiczny');
+    expect(html).not.toContain('/onboarding/magic-import');
     expect(html).toContain('Logowanie przez Google');
     expect(html).toContain('Połączone');
   });
 
-  it('bez certyfikatu: ostrzeżenie zamiast importu, Google niepołączony', async () => {
+  it('bez certyfikatu: ostrzeżenie zamiast linku do postępu, Google niepołączony', async () => {
     ctx.tenant = { name: 'Firma', nip: '1234567890', has_ksef_credentials: false };
     ctx.user = { identities: [{ provider: 'email' }], app_metadata: { providers: ['email'] } };
     const html = renderToStaticMarkup(await KsefSettingsPage());
     expect(html).toContain('Brak certyfikatu');
     expect(html).toContain('najpierw wgraj certyfikat');
-    expect(html).not.toContain('Rozpocznij Magiczny Import');
+    expect(html).toContain('Historia faktur z KSeF');
+    expect(html).not.toContain('Zobacz postęp');
+    expect(html).not.toContain('Magiczny');
     expect(html).toContain('Niepołączone');
   });
 

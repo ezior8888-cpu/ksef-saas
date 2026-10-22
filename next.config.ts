@@ -148,6 +148,14 @@ const nextConfig: NextConfig = {
         destination: '/pomoc/platnosci-i-faktury-za-faktway',
         permanent: true,
       },
+      // Decyzja Bartosza 22.10.2026: Magiczny import znika — historię z KSeF
+      // FaktWay pobiera sam, a postęp i import plików są w Imporcie danych.
+      // Stare linki (zakładki, maile) nie kończą się 404.
+      {
+        source: '/onboarding/magic-import',
+        destination: '/import-danych',
+        permanent: true,
+      },
     ];
   },
 

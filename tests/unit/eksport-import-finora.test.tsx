@@ -1,12 +1,13 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-const ctx = vi.hoisted(() => ({ get: vi.fn() }));
+const ctx = vi.hoisted(() => ({ get: vi.fn(), read: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock('@/app/actions/exports', () => ({ startExportAction: vi.fn(), downloadExportFileAction: vi.fn() }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: ctx.get }));
-// Okno importu z pliku woła akcję serwera — tu tylko render, bez kolejki jobów.
-vi.mock('@/app/onboarding/magic-import/actions', () => ({ startFileImportAction: vi.fn() }));
+// Okno importu z pliku i wstrzymanie historii wołają akcje serwera — tu tylko render.
+vi.mock('@/app/actions/import-danych', () => ({ startFileImportAction: vi.fn(), setKsefHistoryPausedAction: vi.fn() }));
+vi.mock('@/lib/ksef/history-sync/status', () => ({ readKsefHistorySyncStatus: ctx.read }));
 
 import ImportDanychPage from '@/app/(dashboard)/import-danych/page';
 import {
@@ -181,28 +182,73 @@ function tenantClient(row: Record<string, unknown> | null, jobs: Record<string, 
 }
 
 /**
- * Poprawka Bartosza 22.10.2026 (import danych w stylu Finory) — świadome
- * zmiany oczekiwań: jedna karta „Magiczny Import historii” stała się siatką
- * źródeł (KSeF i pięć programów), tytuł karty to „Magiczny import z KSeF”,
- * plakietka bez certyfikatu to „Wymaga certyfikatu”, a bez certyfikatu cała
- * karta prowadzi do `/settings/ksef` („Wgraj certyfikat KSeF”). Sens bez
- * zmian: z certyfikatem start pod tym samym adresem, bez — wyjście do
- * ustawień KSeF i żadnego startu importu, firma z NIP-em widoczna.
+ * Poprawka Bartosza 22.10.2026 (import danych w stylu Finory) i decyzja
+ * Bartosza 22.10.2026 (Magiczny import znika) — świadome zmiany oczekiwań:
+ * zamiast karty „Magiczny import z KSeF” jest karta „Historia z KSeF”
+ * z plakietką „Automatycznie” (bez certyfikatu „Wymaga certyfikatu”
+ * i wyjście do `/settings/ksef` — „Wgraj certyfikat KSeF”). Startu importu
+ * z KSeF nie ma wcale; firma z NIP-em widoczna jak dotąd.
  */
+const KSEF_STREAM = {
+  phase: 'waiting' as const,
+  enabledAt: null,
+  historyFloor: '2022-01-01T00:00:00.000Z',
+  coveredFrom: null,
+  backfillCompletedAt: null,
+  capacityReached: false,
+  stuck: false,
+  lastSuccessAt: null,
+  counts: { pending: 0, imported: 0, repaired: 0, skipped: 0, retiredDraft: 0, deferred: 0, blocked: 0 },
+  measuredPerHour: null,
+  estimatedFinishAt: null,
+};
+const KSEF_WAITING = {
+  environment: 'test' as const,
+  outgoing: { ...KSEF_STREAM, direction: 'outgoing' as const },
+  incoming: { ...KSEF_STREAM, direction: 'incoming' as const },
+  rateLimitedUntil: null,
+  clientPausedAt: null,
+  error: null,
+  blocked: [],
+  blockedTotal: 0,
+  deferred: [],
+  deferredTotal: 0,
+  periodsChangedAfterExport: [],
+};
+
 describe('Import danych — karty źródeł w stylu Accounts', () => {
-  it('z certyfikatem: karta KSeF prowadzi do magicznego importu', async () => {
-    ctx.get.mockResolvedValue({ supabase: tenantClient({ name: 'Firma', nip: '1234567890', has_ksef_credentials: true }), tenantId: 'org-1' });
-    const html = renderToStaticMarkup(await ImportDanychPage());
-    expect(html).toContain('Magiczny import z KSeF');
-    expect(html).toContain('Gotowy');
-    expect(html).toContain('href="/onboarding/magic-import?tenantId=org-1"');
-    expect(html).toContain('Rozpocznij import');
+  it('z certyfikatem: karta „Historia z KSeF” pobiera automatycznie, bez startu Magicznego importu', async () => {
+    ctx.read.mockResolvedValue({ ok: true, status: KSEF_WAITING });
+    ctx.get.mockResolvedValue({
+      // Certyfikat potwierdzony dla skonfigurowanego środowiska (KSEF_ENV=test) — tylko
+      // wtedy cron pobiera historię (poprawka po przeglądzie, decyzja Bartosza 22.10.2026).
+      supabase: tenantClient({
+        name: 'Firma',
+        nip: '1234567890',
+        has_ksef_credentials: true,
+        ksef_verified_at: '2026-10-01T08:00:00Z',
+        ksef_verified_environment: 'test',
+      }),
+      tenantId: 'org-1',
+      role: 'owner',
+    });
+    const html = renderToStaticMarkup(await ImportDanychPage({}));
+    expect(html).toContain('Historia z KSeF');
+    expect(html).toContain('Automatycznie');
+    expect(html).toContain('Zaczniemy w ciągu 30 minut od wgrania certyfikatu.');
+    expect(html).not.toContain('/onboarding/magic-import');
+    expect(html).not.toContain('Magiczny');
     expect(html).toContain('NIP <span class="font-mono">1234567890</span>');
   });
 
   it('bez certyfikatu: plakietka i link do ustawień KSeF, bez startu importu', async () => {
-    ctx.get.mockResolvedValue({ supabase: tenantClient({ name: 'Firma', nip: null, has_ksef_credentials: false }), tenantId: 'org-1' });
-    const html = renderToStaticMarkup(await ImportDanychPage());
+    ctx.read.mockResolvedValue({ ok: true, status: KSEF_WAITING });
+    ctx.get.mockResolvedValue({
+      supabase: tenantClient({ name: 'Firma', nip: null, has_ksef_credentials: false }),
+      tenantId: 'org-1',
+      role: 'owner',
+    });
+    const html = renderToStaticMarkup(await ImportDanychPage({}));
     expect(html).toContain('Wymaga certyfikatu');
     expect(html).toContain('Wgraj certyfikat KSeF');
     expect(html).toContain('href="/settings/ksef"');

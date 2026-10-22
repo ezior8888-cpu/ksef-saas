@@ -18,7 +18,6 @@ import {
   RiForbidLine,
   RiHistoryLine,
   RiLoader4Line,
-  RiSparkling2Line,
   type RemixiconComponentType,
 } from '@remixicon/react';
 import { toast } from 'sonner';
@@ -36,15 +35,17 @@ import {
   completedSummary,
   failureNote,
   importProgressHref,
+  INTERRUPTED_LEGACY_NOTE,
+  isInterruptedLegacyImport,
   isKsefSource,
   isRunning,
+  jobStatusGroup,
   MAX_POLL_TICKS,
   POLL_INTERVAL_MS,
   progressPercent,
   runningStep,
   sourceDetail,
   sourceLabel,
-  statusGroup,
   warningCount,
   type ImportHistoryJob,
   type ImportStatusGroup,
@@ -62,6 +63,11 @@ import {
  * Gdy coś się importuje, lista odświeża się sama (co 4 s, tylko na widocznej
  * karcie, najwyżej 45 razy — potem ręczne „Odśwież”), a koniec importu
  * zgłasza powiadomienie i jeden ukryty komunikat dla czytnika ekranu.
+ *
+ * Decyzja Bartosza 22.10.2026: dawny ręczny import z KSeF, który został
+ * „w toku” albo się nie udał, jest przerwany (jego kolejki już nie ma) —
+ * pokazujemy go jako „Anulowano” z notką i liczbą zapisanych faktur, bez
+ * powodu „ponów import” i bez odpytywania serwera.
  */
 
 const STATUS: Record<
@@ -92,7 +98,7 @@ const STATUS: Record<
 };
 
 function StatusBadge({ job }: { job: ImportHistoryJob }) {
-  const status = STATUS[statusGroup(job.status)];
+  const status = STATUS[jobStatusGroup(job)];
   const Icon = status.icon;
   return (
     <Badge className={status.className}>
@@ -103,7 +109,7 @@ function StatusBadge({ job }: { job: ImportHistoryJob }) {
 }
 
 function SourceSquare({ job }: { job: ImportHistoryJob }) {
-  const Icon = isKsefSource(job.source) ? RiSparkling2Line : job.source === 'jpk_fa' ? RiFileCodeLine : RiFileExcel2Line;
+  const Icon = isKsefSource(job.source) ? RiHistoryLine : job.source === 'jpk_fa' ? RiFileCodeLine : RiFileExcel2Line;
   return (
     <span className="bg-muted flex size-9 shrink-0 items-center justify-center">
       <Icon className="size-5" aria-hidden />
@@ -126,7 +132,7 @@ function SourceCell({ job }: { job: ImportHistoryJob }) {
 
 /** Wynik: liczby po imporcie, pasek w toku, powód przy błędzie. */
 function ResultCell({ job }: { job: ImportHistoryJob }) {
-  const group = statusGroup(job.status);
+  const group = jobStatusGroup(job);
 
   if (group === 'running') {
     const percent = progressPercent(job);
@@ -158,7 +164,17 @@ function ResultCell({ job }: { job: ImportHistoryJob }) {
     );
   }
 
-  if (group === 'cancelled') return <span className="text-muted-foreground">—</span>;
+  if (group === 'cancelled') {
+    if (!isInterruptedLegacyImport(job)) return <span className="text-muted-foreground">—</span>;
+    // Zapisane faktury zostają w FaktWay — mówimy, ile ich jest; powodu „ponów import” nie pokazujemy.
+    const { saved } = failureNote(job);
+    return (
+      <div className="max-w-md space-y-0.5 whitespace-normal">
+        <p className="text-muted-foreground text-xs">{INTERRUPTED_LEGACY_NOTE}</p>
+        {saved ? <p className="text-muted-foreground text-xs">{saved}</p> : null}
+      </div>
+    );
+  }
 
   const { reason, saved } = failureNote(job);
   return (
@@ -232,8 +248,12 @@ function JobCard({ job }: { job: ImportHistoryJob }) {
 
 const PAGE_SIZE = 10;
 
-/** Kroki „jak to działa” w pustej historii (poprawka Bartosza 22.10.2026). */
-export const EMPTY_STEPS = ['Wybierz źródło powyżej', 'Pobieramy faktury w tle', 'Kontrahenci i produkty dodają się sami'] as const;
+/** Kroki „jak to działa” w pustej historii (decyzja Bartosza 22.10.2026: historia z KSeF bez ręcznego startu). */
+export const EMPTY_STEPS = [
+  'Wgraj certyfikat KSeF',
+  'Historię z KSeF pobieramy sami',
+  'Pliki z innego programu wgrasz tu raz',
+] as const;
 
 /** Pusta historia: trzy kroki zamiast samego „Brak importów”. */
 function HistoryEmpty() {
@@ -306,7 +326,7 @@ export function ImportHistory({ jobs }: { jobs: ImportHistoryJob[] }) {
       if (!seenRunning.current.has(job.id)) continue;
       seenRunning.current.delete(job.id);
       const name = sourceLabel(job.source);
-      const group = statusGroup(job.status);
+      const group = jobStatusGroup(job);
       if (group === 'completed') {
         toast.success('Import zakończony', { description: completedSummary(job) });
         announce(`Import zakończony: ${name}. ${completedSummary(job)}`);

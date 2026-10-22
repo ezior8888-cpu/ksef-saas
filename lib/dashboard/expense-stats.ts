@@ -128,6 +128,9 @@ export async function getLastInboxFetchAt(supabase: Supabase, tenantId: string):
     .select('created_at')
     .eq('tenant_id', tenantId)
     .eq('direction', 'incoming')
+    // Historia z KSeF to archiwum pobierane w tle (decyzja Bartosza 22.10.2026) —
+    // „Ostatnie pobranie z KSeF” mówi o Skrzynce. OCR zostaje liczony jak dotąd.
+    .neq('origin', 'ksef_import')
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
