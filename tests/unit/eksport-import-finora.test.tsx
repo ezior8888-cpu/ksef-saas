@@ -5,6 +5,8 @@ const ctx = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock('@/app/actions/exports', () => ({ startExportAction: vi.fn(), downloadExportFileAction: vi.fn() }));
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: ctx.get }));
+// Okno importu z pliku woła akcję serwera — tu tylko render, bez kolejki jobów.
+vi.mock('@/app/onboarding/magic-import/actions', () => ({ startFileImportAction: vi.fn() }));
 
 import ImportDanychPage from '@/app/(dashboard)/import-danych/page';
 import {
@@ -158,30 +160,51 @@ describe('Eksport — karty formatów w stylu Accounts', () => {
   });
 });
 
-function tenantClient(row: Record<string, unknown> | null) {
-  const builder = {
-    select: () => builder,
-    eq: () => builder,
-    single: async () => ({ data: row, error: null }),
+/**
+ * Klient z dwoma odczytami strony: `tenants` (`.single()`) i ostatnie
+ * `import_jobs` (`.order().limit()`). Poprawka Bartosza 22.10.2026 (import
+ * danych w stylu Finory): strona czyta też historię importów.
+ */
+function tenantClient(row: Record<string, unknown> | null, jobs: Record<string, unknown>[] = []) {
+  return {
+    from: (table: string) => {
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        order: () => builder,
+        single: async () => ({ data: row, error: null }),
+        limit: async () => ({ data: table === 'import_jobs' ? jobs : [], error: null }),
+      };
+      return builder;
+    },
   };
-  return { from: () => builder };
 }
 
-describe('Import danych — karta w stylu Accounts', () => {
-  it('z certyfikatem: cała karta prowadzi do magicznego importu', async () => {
+/**
+ * Poprawka Bartosza 22.10.2026 (import danych w stylu Finory) — świadome
+ * zmiany oczekiwań: jedna karta „Magiczny Import historii” stała się siatką
+ * źródeł (KSeF i pięć programów), tytuł karty to „Magiczny import z KSeF”,
+ * plakietka bez certyfikatu to „Wymaga certyfikatu”, a bez certyfikatu cała
+ * karta prowadzi do `/settings/ksef` („Wgraj certyfikat KSeF”). Sens bez
+ * zmian: z certyfikatem start pod tym samym adresem, bez — wyjście do
+ * ustawień KSeF i żadnego startu importu, firma z NIP-em widoczna.
+ */
+describe('Import danych — karty źródeł w stylu Accounts', () => {
+  it('z certyfikatem: karta KSeF prowadzi do magicznego importu', async () => {
     ctx.get.mockResolvedValue({ supabase: tenantClient({ name: 'Firma', nip: '1234567890', has_ksef_credentials: true }), tenantId: 'org-1' });
     const html = renderToStaticMarkup(await ImportDanychPage());
-    expect(html).toContain('Magiczny Import historii');
+    expect(html).toContain('Magiczny import z KSeF');
     expect(html).toContain('Gotowy');
     expect(html).toContain('href="/onboarding/magic-import?tenantId=org-1"');
-    expect(html).toContain('Rozpocznij Magiczny Import');
+    expect(html).toContain('Rozpocznij import');
     expect(html).toContain('NIP <span class="font-mono">1234567890</span>');
   });
 
   it('bez certyfikatu: plakietka i link do ustawień KSeF, bez startu importu', async () => {
     ctx.get.mockResolvedValue({ supabase: tenantClient({ name: 'Firma', nip: null, has_ksef_credentials: false }), tenantId: 'org-1' });
     const html = renderToStaticMarkup(await ImportDanychPage());
-    expect(html).toContain('Wymaga certyfikatu KSeF');
+    expect(html).toContain('Wymaga certyfikatu');
+    expect(html).toContain('Wgraj certyfikat KSeF');
     expect(html).toContain('href="/settings/ksef"');
     expect(html).not.toContain('/onboarding/magic-import');
     expect(html).not.toContain('ff-glass-pane');

@@ -1,72 +1,30 @@
-import Link from 'next/link';
-import { RiArrowRightLine, RiSparkling2Line } from '@remixicon/react';
-
+import { ImportCenter, ImportHeader } from '@/components/import-danych/import-center';
+import { IMPORT_HISTORY_COLUMNS, IMPORT_HISTORY_LIMIT } from '@/components/import-danych/import-model';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { buttonVariants } from '@/components/ui/button';
 import { getPageContext } from '@/lib/supabase/page-context';
-import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
-/** Klasy karty rachunku z Accounts Finory (`account-card`: przycisk `outline` jako karta). */
-const ACCOUNT_CARD = cn(
-  buttonVariants({ variant: 'outline' }),
-  'h-auto w-full flex-col items-stretch gap-4 p-4 text-left whitespace-normal',
-);
-
-function ImportHeading() {
-  return (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Import danych</h1>
-      <p className="text-muted-foreground text-sm">
-        Magiczny import historii z KSeF — ten sam krok co w ustawieniach KSeF.
-      </p>
-    </div>
-  );
-}
-
-function MagicImportCardBody({ ready }: { ready: boolean }) {
-  return (
-    <>
-      <div className="flex items-center justify-between gap-2">
-        <Avatar className="size-9 items-center justify-center">
-          <AvatarFallback className="bg-transparent">
-            <RiSparkling2Line className="text-foreground size-5" />
-          </AvatarFallback>
-        </Avatar>
-        <Badge
-          variant="secondary"
-          className={cn(
-            'font-normal',
-            ready
-              ? 'bg-green-600/10 text-green-700 dark:bg-green-400/10 dark:text-green-400'
-              : 'bg-amber-600/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
-          )}
-        >
-          {ready ? 'Gotowy' : 'Wymaga certyfikatu KSeF'}
-        </Badge>
-      </div>
-      <div>
-        <p className="text-foreground font-medium wrap-break-word">Magiczny Import historii</p>
-        <p className="text-muted-foreground text-sm wrap-break-word">
-          Pobierz faktury z KSeF w wybranym zakresie i uzupełnij kartotekę
-          kontrahentów oraz produktów bez ręcznego przepisywania.
-        </p>
-      </div>
-    </>
-  );
-}
-
-/** Import danych (P13): karta w stylu Accounts Finory; logika bez zmian. */
+/**
+ * Import danych — centrum importu w stylu Accounts Finory (poprawka Bartosza
+ * 22.10.2026: import danych w stylu Finory). Kafle z liczbami z historii,
+ * karty źródeł (Magiczny import z KSeF i pięć źródeł z pliku) i historia
+ * importów w karcie do stopki.
+ *
+ * Tylko odczyty, bez zmian w logice: `tenants` (sama flaga
+ * `has_ksef_credentials`, nigdy zaszyfrowany blob — AUD-103) oraz ostatnie
+ * `import_jobs` przez klienta użytkownika (RLS `import_jobs_tenant_isolation`).
+ * Start importów, postęp i blokada bez certyfikatu idą istniejącymi
+ * ścieżkami: `/onboarding/magic-import?tenantId=…`, `FileImportDialog`,
+ * `/onboarding/progress/[id]`, `/settings/ksef`.
+ */
 export default async function ImportDanychPage() {
   const { supabase, tenantId } = await getPageContext();
 
   if (!tenantId) {
     return (
-      <div className="space-y-6 pb-6">
-        <ImportHeading />
+      <div className="ff-page-fill flex flex-col gap-6">
+        <ImportHeader />
         <Alert>
           <AlertDescription>
             Import uruchomisz po założeniu organizacji i konfiguracji certyfikatu KSeF.
@@ -76,50 +34,25 @@ export default async function ImportDanychPage() {
     );
   }
 
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('name, nip, has_ksef_credentials')
-    .eq('id', tenantId)
-    .single();
+  const [{ data: tenant }, history] = await Promise.all([
+    supabase.from('tenants').select('name, nip, has_ksef_credentials').eq('id', tenantId).single(),
+    supabase
+      .from('import_jobs')
+      .select(IMPORT_HISTORY_COLUMNS)
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .limit(IMPORT_HISTORY_LIMIT),
+  ]);
 
-  const hasCredentials = !!tenant?.has_ksef_credentials;
+  if (history.error) console.error('[import-danych] historia importów:', history.error.message);
 
   return (
-    <div className="space-y-6 pb-6">
-      <ImportHeading />
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {hasCredentials ? (
-          <Link
-            href={`/onboarding/magic-import?tenantId=${encodeURIComponent(tenantId)}`}
-            className={ACCOUNT_CARD}
-          >
-            <MagicImportCardBody ready />
-            <span className="text-primary inline-flex items-center gap-1.5 text-sm font-medium">
-              Rozpocznij Magiczny Import
-              <RiArrowRightLine className="size-4" aria-hidden />
-            </span>
-          </Link>
-        ) : (
-          <div className={cn(ACCOUNT_CARD, 'hover:bg-background cursor-default dark:hover:bg-input/30')}>
-            <MagicImportCardBody ready={false} />
-            <p className="text-muted-foreground text-sm">
-              Aby uruchomić import, najpierw wgraj certyfikat KSeF w{' '}
-              <Link href="/settings/ksef" className="text-primary font-medium underline underline-offset-2">
-                ustawieniach KSeF
-              </Link>
-              .
-            </p>
-          </div>
-        )}
-      </div>
-
-      {tenant?.nip ? (
-        <p className="text-muted-foreground text-sm">
-          Aktywna organizacja: <span className="text-foreground font-medium">{tenant.name}</span>{' '}
-          · NIP <span className="font-mono">{tenant.nip}</span>
-        </p>
-      ) : null}
-    </div>
+    <ImportCenter
+      tenantId={tenantId}
+      tenantName={tenant?.name}
+      nip={tenant?.nip}
+      hasCertificate={!!tenant?.has_ksef_credentials}
+      jobs={history.error ? null : (history.data ?? [])}
+    />
   );
 }
