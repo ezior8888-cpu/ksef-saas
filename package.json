@@ -99,7 +99,7 @@
     "xml-core": "^1.2.5",
     "xmlbuilder2": "^4.0.3",
     "xmllint-wasm": "^5.2.0",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "browserslist": [
     "chrome >= 110",
