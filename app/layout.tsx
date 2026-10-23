@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import {
   Geist,
-  Fraunces,
   IBM_Plex_Mono,
   Outfit,
 } from 'next/font/google';
@@ -25,24 +24,17 @@ const geistSans = Geist({
   subsets: ['latin'],
 });
 
-// Fraunces — display serif do Polish Editorial direction marketingu.
-// `latin-ext` jest KRYTYCZNE — polskie znaki (ą, ć, ę, ł, ń, ó, ś, ź, ż)
-// nie są w podstawowym `latin`. `opsz` = optical sizing dla naturalnych
-// rozmiarów display, `SOFT` = wariacja miękkości krawędzi serifów.
-const fraunces = Fraunces({
-  variable: '--font-fraunces',
-  subsets: ['latin', 'latin-ext'],
-  display: 'swap',
-  axes: ['opsz', 'SOFT'],
-});
+// Fraunces (marketing) jest w `app/(marketing)/_fonts.ts`, nie tutaj:
+// font z root layoutu `next/font` preładowuje na KAŻDEJ trasie, także
+// w panelu, który go nie używa.
 
 // Typografia aplikacji (plan Finora, D2): Outfit na interfejs, IBM Plex Mono
 // na liczby, NIP-y, numery faktur i daty — dzięki stałej szerokości znaku
 // kwoty w kolumnach tabel wyrównują się do przecinka. `latin-ext` jest
 // KRYTYCZNE dla polskich znaków (ą, ć, ę, ł, ń, ó, ś, ź, ż). Outfit jest
-// fontem zmiennym, więc bez listy wag. Landing i marketing (`.zova`) zostają
-// na Geist — `styles/zova.css` ustawia go jawnie. Logowanie od E10b (P15)
-// stoi na układzie Finory, więc też na Outfit.
+// fontem zmiennym, więc bez listy wag. Strona główna, strony marketingowe
+// i logowanie stoją od 23.10.2026 na tym samym foncie co panel (wcześniej
+// landing i marketing miały Geist z arkusza szablonu Zova).
 const outfit = Outfit({
   variable: '--font-outfit',
   subsets: ['latin', 'latin-ext'],
@@ -105,7 +97,7 @@ export default function RootLayout({
       lang="pl"
       suppressHydrationWarning
       data-scroll-behavior="smooth"
-      className={`${geistSans.variable} ${fraunces.variable} ${outfit.variable} ${ibmPlexMono.variable} h-full scroll-smooth antialiased`}
+      className={`${geistSans.variable} ${outfit.variable} ${ibmPlexMono.variable} h-full scroll-smooth antialiased`}
     >
       <head>
         {/* Klasa `dark` NIE jest już zaszyta na <html> (było tak do 29.08.2026).

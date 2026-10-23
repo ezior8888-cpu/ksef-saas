@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { LegalDocumentView } from '@/components/legal/legal-document';
+import { LegalDocumentView } from '@/components/legal/legal-page';
 import { REGULAMIN } from '@/lib/legal/documents';
 
 // Treść jest stała między wdrożeniami — strona może być w pełni statyczna.
