@@ -3,8 +3,11 @@ import type { PageContext } from '@/lib/supabase/page-context';
 /**
  * Baza w pamięci dla testów odczytów analiz (plan Finora E7) — ten sam
  * kształt co atrapa w `tests/unit/pulpit-rankingi.test.ts`: filtry używane
- * przez moduły, `count: 'exact'`, `head`, sortowanie, `range` i limit 1000
- * wierszy serwera (PostgREST ucina odpowiedź). Zwraca TYLKO wybrane kolumny.
+ * przez moduły, `count: 'exact'`, `head`, sortowanie, `range`, `limit`,
+ * `maybeSingle` i limit 1000 wierszy serwera (PostgREST ucina odpowiedź).
+ * Zwraca TYLKO wybrane kolumny. Operator, którego tu nie ma, rzuca (nie ma
+ * metody albo `not(...)` z nieznanym operatorem) — loader z nowym filtrem
+ * nie dostanie po cichu pustego wyniku (PLAN-PRAWDZIWE-DANE §7 E2).
  */
 
 export type Row = Record<string, unknown>;
@@ -29,6 +32,23 @@ export function fakePostgrest(tables: Tables, reads: Read[] = []): PageContext['
       let head = false;
       let counted = false;
       let window: [number, number] | null = null;
+      let limit: number | null = null;
+      const run = () => {
+        const matching = (tables[table] ?? []).filter((r) => predicates.every((p) => p(r)));
+        matching.sort((a, b) => {
+          for (const { column, ascending } of ordering) {
+            const x = String(a[column] ?? '');
+            const y = String(b[column] ?? '');
+            if (x !== y) return (x < y ? -1 : 1) * (ascending ? 1 : -1);
+          }
+          return 0;
+        });
+        const start = window?.[0] ?? 0;
+        const wanted = window ? window[1] - window[0] + 1 : matching.length;
+        const page = matching.slice(start, start + Math.min(wanted, limit ?? wanted, SERVER_CAP));
+        const data = page.map((r) => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : r));
+        return { data, count: matching.length };
+      };
       const builder = {
         select(selection = '*', options?: { count?: string; head?: boolean }) {
           const parts = selection.split(',').map((s) => s.trim()).filter(Boolean);
@@ -56,23 +76,23 @@ export function fakePostgrest(tables: Tables, reads: Read[] = []): PageContext['
           return builder;
         },
         range(from: number, to: number) { window = [from, to]; read.range = [from, to]; return builder; },
+        limit(n: number) { limit = n; return builder; },
+        /** Jak PostgREST: zero wierszy → `null`, więcej niż jeden → błąd PGRST116. */
+        maybeSingle() {
+          const { data } = run();
+          if (data.length > 1) {
+            return Promise.resolve({
+              data: null,
+              error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' },
+            });
+          }
+          return Promise.resolve({ data: data[0] ?? null, error: null });
+        },
         then<T>(resolve: (value: { data: Row[] | null; count: number | null; error: null }) => T) {
-          const matching = (tables[table] ?? []).filter((r) => predicates.every((p) => p(r)));
-          matching.sort((a, b) => {
-            for (const { column, ascending } of ordering) {
-              const x = String(a[column] ?? '');
-              const y = String(b[column] ?? '');
-              if (x !== y) return (x < y ? -1 : 1) * (ascending ? 1 : -1);
-            }
-            return 0;
-          });
-          const start = window?.[0] ?? 0;
-          const wanted = window ? window[1] - window[0] + 1 : matching.length;
-          const page = matching.slice(start, start + Math.min(wanted, SERVER_CAP));
-          const data = page.map((r) => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : r));
+          const { data, count } = run();
           return Promise.resolve({
             data: head ? null : data,
-            count: counted ? matching.length : null,
+            count: counted ? count : null,
             error: null,
           }).then(resolve);
         },
