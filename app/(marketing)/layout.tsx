@@ -6,6 +6,8 @@ import { SiteFooter } from '@/app/(landing)/_components/closing';
 import { IconSprite } from '@/app/(landing)/_components/icon-sprite';
 import { SiteNav } from '@/app/(landing)/_components/site-nav';
 
+import { fraunces } from './_fonts';
+
 export const metadata: Metadata = {
   title: {
     default: 'FaktWay',
@@ -29,7 +31,7 @@ export default function MarketingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="zova marketing-landing relative flex min-h-screen flex-col overflow-x-clip">
+    <div className={`${fraunces.variable} zova marketing-landing relative flex min-h-screen flex-col overflow-x-clip`}>
       <IconSprite />
       <SiteNav />
 
