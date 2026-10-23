@@ -155,7 +155,7 @@ export async function RecentCostsSlot({ supabase, tenantId, nowIso, month, tryb,
       <RecentExpensesFeed
         title="Ostatnie wydatki"
         description="Najnowsze wydatki z wybranego miesiąca"
-        data={recentCostItems(entries, month)}
+        data={recentCostItems(entries, month, tryb !== 'przyklad')}
         direction="out"
         empty={costsEmpty(entries, tryb)}
         className={className}
@@ -164,7 +164,7 @@ export async function RecentCostsSlot({ supabase, tenantId, nowIso, month, tryb,
   });
 }
 
-export async function CostVatSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
+export async function CostVatSlot({ supabase, tenantId, nowIso, month, tryb, className }: CardProps) {
   return loadAnalizyCard('VAT z wydatków', className, async () => {
     const vat = costVatSummary(await loadCostsWindow(supabase, tenantId, nowIso), month);
     return (
@@ -173,7 +173,7 @@ export async function CostVatSlot({ supabase, tenantId, nowIso, month, className
         // Poprawka 21.10.2026: opis w jednej linii jak w Finorze (dłuższy zawijał
         // się przy 375 px i podnosił kartę o 19,5 px).
         description="Wybrany miesiąc · VAT do odliczenia według dokumentu"
-        rows={costVatRows(vat)}
+        rows={costVatRows(vat, tryb === 'przyklad' ? null : `/expenses?filter=unreviewed&miesiac=${month}`)}
         className={className}
       />
     );

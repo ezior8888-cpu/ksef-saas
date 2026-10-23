@@ -106,9 +106,10 @@ export function salesAvgDaily(total: number, month: string, today: string): numb
 }
 
 /** „Ostatnie wydatki”: Finora `getRecentExpenses` + ikona kategorii wydatku. */
-export function recentCostItems(entries: readonly CostEntry[], month: string): FeedItem[] {
+export function recentCostItems(entries: readonly CostEntry[], month: string, linkItems = false): FeedItem[] {
   return recentCosts(entries, month).map((cost) => ({
     id: cost.id,
+    ...(linkItems ? { href: `/expenses/${cost.id}` } : {}),
     merchant: cost.name,
     subtitle: isoDatePl(cost.date),
     amount: cost.amount,
@@ -120,9 +121,10 @@ export function recentCostItems(entries: readonly CostEntry[], month: string): F
  * „Ostatnie faktury”: brutto dokumentu (korekta — różnica, może być ujemna),
  * druga linia „[Korekta · ]numer · DD.MM.RRRR”.
  */
-export function recentSaleItems(invoices: readonly SaleInvoice[], month: string): FeedItem[] {
+export function recentSaleItems(invoices: readonly SaleInvoice[], month: string, linkItems = false): FeedItem[] {
   return recentSales(invoices, month, saleBuyerName).map((sale) => ({
     id: sale.id,
+    ...(linkItems ? { href: `/invoices/${sale.id}` } : {}),
     merchant: sale.name,
     subtitle: [sale.kind === 'correction' ? 'Korekta' : null, sale.number, isoDatePl(sale.date)]
       .filter(Boolean)
@@ -178,8 +180,11 @@ const DOCUMENT_FORMS = ['dokument', 'dokumenty', 'dokumentów'] as const;
 const INVOICE_FORMS = ['faktura', 'faktury', 'faktur'] as const;
 const DAY_FORMS = ['dzień', 'dni', 'dni'] as const;
 
-/** „VAT z wydatków” w miejscu Finorowego „Spending Streaks” (plan P10, decyzja D3). */
-export function costVatRows(vat: CostVatSummary): SummaryRow[] {
+/**
+ * „VAT z wydatków” w miejscu Finorowego „Spending Streaks” (plan P10, decyzja D3).
+ * `reviewHref` (tylko prawdziwe dane): wiersz „Do opisania” prowadzi do listy nieopisanych.
+ */
+export function costVatRows(vat: CostVatSummary, reviewHref: string | null = null): SummaryRow[] {
   return [
     { icon: RiReceiptLine, iconClassName: 'text-foreground', title: 'VAT naliczony', value: formatZl(vat.vat) },
     { icon: RiPercentLine, iconClassName: 'text-primary', title: 'VAT do odliczenia', value: formatZl(vat.vatDeductible) },
@@ -188,6 +193,7 @@ export function costVatRows(vat: CostVatSummary): SummaryRow[] {
       iconClassName: vat.toReview > 0 ? 'text-destructive' : 'text-foreground',
       title: 'Do opisania',
       value: countLabel(vat.toReview, DOCUMENT_FORMS),
+      href: reviewHref,
     },
   ];
 }

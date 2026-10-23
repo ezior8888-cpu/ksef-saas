@@ -1,5 +1,8 @@
 // Kopia 1:1 z finora-src/src/views/pages/money-management/monthly-analytics/recent-expenses-feed.tsx (Analizy, decyzja Bartosza 21.10.2026): zmienione tylko teksty (z propsów), kwoty (zł, pl-PL), daty (DD.MM.RRRR), importy i źródło danych. Odstępstwa: Server Component (bez stanu); ikona i druga linia z danych (data DD.MM.RRRR, przy fakturze także numer); dwa kierunki — wydatki ('out': strzałka w dół, `text-destructive`, jak w Finorze) i faktury sprzedaży ('in': strzałka w górę, zielony `POSITIVE_TEXT_TONE` o kontraście AA); kwota ujemna (korekta in minus) odwraca strzałkę i kolor i ma minus typograficzny, żeby korekta sprzedaży nie wyglądała jak wpływ; długa nazwa i druga linia ucięte z pełnym tekstem w `title` (`min-w-0`, `truncate`), kolumna kwoty `shrink-0`, `tabular-nums`; przy fakturze („[Korekta · ]numer · data”) druga linia to jeden rząd flex, w którym data jest nieściśliwa, a ucina się numer (`SubtitleLine`) — poprawka 21.10.2026: na telefonie i przy dwóch kolumnach ucinała się data, jedyne, co Finora tu pokazuje, a `title` nie działa na dotyku; pusty stan z akcją z §7.3 (`FinoraEmpty`, ten sam `py-6`).
 
+// Next Imports
+import Link from 'next/link'
+
 // Third-party Imports
 import { RiArrowDownLine, RiArrowUpLine } from '@remixicon/react'
 
@@ -99,7 +102,13 @@ const RecentExpensesFeed = ({ title, description, data, direction, empty, classN
                 </div>
                 <div className='min-w-0 flex-1'>
                   <p className='truncate text-sm font-medium' title={expense.merchant}>
-                    {expense.merchant}
+                    {expense.href ? (
+                      <Link href={expense.href} className='hover:underline'>
+                        {expense.merchant}
+                      </Link>
+                    ) : (
+                      expense.merchant
+                    )}
                   </p>
                   <SubtitleLine text={expense.subtitle} />
                 </div>

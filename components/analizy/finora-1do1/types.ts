@@ -57,6 +57,8 @@ export interface FeedItem {
   subtitle: string
   amount: number
   icon: FinoraIcon
+  /** Dokument, do którego prowadzi nazwa wiersza (tylko prawdziwe dane); bez zmiany wyglądu. */
+  href?: string | null
 }
 
 export interface SummaryRow {
@@ -64,6 +66,8 @@ export interface SummaryRow {
   iconClassName: string
   title: string
   value: string
+  /** Cel napisu wartości (np. lista „Do opisania”); bez zmiany wyglądu. */
+  href?: string | null
 }
 
 /** Finora `getIncomeExpenseNet` */

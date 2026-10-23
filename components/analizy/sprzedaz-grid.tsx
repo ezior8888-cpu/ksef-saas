@@ -184,7 +184,7 @@ export async function RecentSalesSlot({ supabase, tenantId, nowIso, month, tryb,
         // Poprawka 21.10.2026: `getSalesInvoices` czyta tylko faktury przyjęte w KSeF —
         // opis musi to mówić (Pulpit pokazuje wszystkie statusy), a mieścić się w linii.
         description="Przyjęte w KSeF w wybranym miesiącu · brutto"
-        data={recentSaleItems(invoices, month)}
+        data={recentSaleItems(invoices, month, tryb !== 'przyklad')}
         direction="in"
         empty={salesEmpty(invoices, tryb)}
         className={className}
