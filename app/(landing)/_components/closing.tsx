@@ -1,10 +1,8 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 
-import { asset } from '../_assets';
 import { Container, Icon } from './ui';
 
 const COLUMNS = [
@@ -88,7 +86,10 @@ export function SiteFooter() {
       <Container className="flex flex-col gap-12">
         <div className="flex flex-col gap-10 md:flex-row md:justify-between">
           <div className="flex flex-col gap-5">
-            <Image src={asset.logo} alt="FaktWay" width={32} height={32} />
+            {/* Sam napis do czasu nowego logo (zielony znak zdjęty 23.10.2026). */}
+            <span className="z-lead font-semibold">
+              Fakt<span className="text-[var(--z-blue)]">Way</span>
+            </span>
             <span className="z-lead font-medium">Bądźmy w kontakcie</span>
             <div className="flex gap-3">
               {SOCIAL.map((id) => (

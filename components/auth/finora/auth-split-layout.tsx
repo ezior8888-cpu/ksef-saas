@@ -8,7 +8,8 @@
 //    ucina ekran bez przewijania;
 //  - prawa połowa jak w Finorze: czerń (#000000), biała karta z wycięciem
 //    i biały/czarny tekst na sztywno w OBU motywach (kontrast ≥ 4,5:1);
-//  - w białej karcie zamiast znaku i tekstu Finory nasz znak i hasło FaktWay;
+//  - w białej karcie zamiast znaku i tekstu Finory hasło FaktWay (znak
+//    marki zdjęty 23.10.2026, czeka na nowe logo);
 //  - poniżej `lg` prawa połowa jest ukryta (jak w Finorze), więc hasło stoi
 //    nad formularzem w jednym akapicie.
 // Klasa `ff-dashboard` daje skalę SM presetu D2 i font panelu (§10.1) —
@@ -18,7 +19,6 @@
 import type { ReactNode } from 'react'
 
 // Next Imports
-import Image from 'next/image'
 import Link from 'next/link'
 
 // Component Imports
@@ -97,16 +97,9 @@ export function AuthSplitLayout({
                 />
               </svg>
 
-              <div className='absolute top-0 right-0 flex size-15 items-center justify-center rounded-2xl bg-[#F5F5F5]/80'>
-                <Image
-                  src='/brand/faktflow-mark.png'
-                  alt=''
-                  width={128}
-                  height={128}
-                  className='size-10 rounded-lg object-contain'
-                  unoptimized
-                />
-              </div>
+              {/* W wycięciu stał zielony znak marki, zdjęty 23.10.2026.
+                  Wraca tu nowe logo; `pr-12` niżej zostaje, bo wycięcie
+                  karty jest na miejscu. */}
 
               <div className='flex flex-col gap-4 p-6 text-black'>
                 <p className='line-clamp-2 pr-12 text-3xl font-bold'>{AUTH_SLOGAN_TITLE}</p>

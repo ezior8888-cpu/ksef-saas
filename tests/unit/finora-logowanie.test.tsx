@@ -138,7 +138,8 @@ describe('układ logowania (AuthSplitLayout)', () => {
     expect(html).toMatch(/text-4xl[^"]*text-white|text-white[^"]*text-4xl/);
     expect(html).toContain('text-xl text-white');
     expect(html).toContain('fill="#ffff"');
-    expect(html).toContain('#F5F5F5');
+    // Zielony znak marki w wycięciu karty zdjęty 23.10.2026 (nowe logo osobno).
+    expect(html).not.toContain('<img');
     expect(html).toContain('text-black');
     expect(html).not.toMatch(/text-foreground[^"]*xl:text-5xl/);
     expect(html).not.toMatch(OLD_LOOK);
@@ -150,8 +151,7 @@ describe('układ logowania (AuthSplitLayout)', () => {
         <p>x</p>
       </AuthSplitLayout>,
     );
-    // Przed korzeniem React stawia tylko `<link rel="preload">` znaku (`priority`).
-    expect(html.replace(/^<link[^>]*>/, '')).toMatch(/^<div class="ff-dashboard min-h-dvh/);
+    expect(html).toMatch(/^<div class="ff-dashboard min-h-dvh/);
     expect(html).toContain('data-slot="portal-root"');
   });
 });
