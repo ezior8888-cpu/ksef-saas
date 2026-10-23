@@ -187,7 +187,7 @@ const CASES: Array<{ place: string; base: Base; node: ReactElement }> = [
     place: 'components/dashboard/finora/statistics-card-03.tsx (plakietka)',
     base: 'karta',
     node: (
-      <StatisticsCard icon={<RiFileList3Line />} trend="up" changePercentage="+5%" value="12" title="Faktury" badgeContent="Ten miesiąc" />
+      <StatisticsCard icon={<RiFileList3Line />} changePct={5} value="12" title="Faktury" badgeContent="Ten miesiąc" />
     ),
   },
   {

@@ -305,6 +305,12 @@ export interface SalesSeries {
   currentSeries: number[];
   /** Brutto tego samego okna rok wcześniej; `[]` przy `withPrevYear: false`. */
   prevSeries: number[];
+  /**
+   * NETTO tego samego okna rok wcześniej (te same wiersze co `prevSeries`);
+   * `[]` przy `withPrevYear: false`. Karta „Przychód netto” Pulpitu
+   * (PLAN-PRAWDZIWE-DANE E5) porównuje netto z netto.
+   */
+  prevNetSeries: number[];
   currentMonthKey: string;
   /** Sprzedaż NETTO per miesiąc okna — te same wiersze co `currentSeries`. */
   netSeries: number[];
@@ -410,6 +416,7 @@ export async function getSalesSeries(
   const currentByMonth = sumByMonth(current, gross);
   const prevByMonth = sumByMonth(previous, gross);
   const netByMonth = sumByMonth(current, (inv) => remainder(settled, inv, inv.net_total, 'net'));
+  const prevNetByMonth = sumByMonth(previous, (inv) => remainder(settled, inv, inv.net_total, 'net'));
   const vatByMonth = sumByMonth(current, (inv) => remainder(settled, inv, inv.vat_total, 'vat'));
 
   /**
@@ -425,6 +432,7 @@ export async function getSalesSeries(
     months: months.map(({ key, label }) => ({ key, label })),
     currentSeries: months.map((m) => cents(currentByMonth, m.key)),
     prevSeries: withPrevYear ? months.map((m) => cents(prevByMonth, m.prevKey)) : [],
+    prevNetSeries: withPrevYear ? months.map((m) => cents(prevNetByMonth, m.prevKey)) : [],
     currentMonthKey: today.slice(0, 7),
     netSeries: months.map((m) => cents(netByMonth, m.key)),
     vatSeries: months.map((m) => cents(vatByMonth, m.key)),

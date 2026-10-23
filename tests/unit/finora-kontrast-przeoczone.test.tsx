@@ -81,7 +81,9 @@ function ratio(cls: string, theme: Theme, variants: string[], base: Rgb): number
 describe('kontrast tekstu na tle primary/chart-2 (przeoczone)', () => {
   it('Pulpit: plakietka procentu w „Odwiedzający” (primary/15, ciemny /25)', () => {
     const cls = classOf(
-      renderToStaticMarkup(<TotalVisitorsCard title="Odwiedzający" totalVisitors="1 234" percentage={12} visitorData={[]} />),
+      renderToStaticMarkup(
+        <TotalVisitorsCard title="Należności" total="1 234 zł" badge="12% zaległe" detailsHref="/payments/overdue" visitorData={[]} />,
+      ),
       'bg-primary/15',
       // Plakietka (tekst), nie AvatarFallback z ikoną (wystarcza 3:1, WCAG 1.4.11).
       'focus-visible:ring-primary/20',
