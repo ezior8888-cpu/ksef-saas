@@ -96,11 +96,12 @@ async function html(node: ReactNode): Promise<string> {
 
 function decode(text: string): string {
   return text
-    .replaceAll('&amp;', '&')
     .replaceAll('&#x27;', "'")
     .replaceAll('&gt;', '>')
     .replaceAll('&lt;', '<')
-    .replaceAll('&quot;', '"');
+    .replaceAll('&quot;', '"')
+    // `&amp;` na końcu, inaczej „&amp;lt;” zamieniłoby się w „<” (CodeQL js/double-escaping).
+    .replaceAll('&amp;', '&');
 }
 
 /**
