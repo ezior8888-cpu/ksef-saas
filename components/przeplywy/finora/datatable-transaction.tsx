@@ -55,6 +55,9 @@ import { amountTone, signedAmount } from './operation-amount'
 
 export const OPERATION_STATUS_LABELS: Record<OperationStatus, string> = {
   paid: 'Opłacona',
+  // E11 (D-W): wpływ według terminu płatności albo dnia wystawienia — wspólny typ statusów z `cash-movements`.
+  due: 'Wg terminu',
+  issued: 'Wg wystawienia',
   reviewed: 'Zatwierdzony',
   pending: 'Do akceptacji',
   // Faktura zakupu z KSeF bez wydatku (E10) — wspólny typ statusów z `cash-movements`.
@@ -63,6 +66,8 @@ export const OPERATION_STATUS_LABELS: Record<OperationStatus, string> = {
 
 const STATUS_STYLES: Record<OperationStatus, string> = {
   paid: 'bg-green-700/10 text-green-800 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40',
+  due: 'bg-green-700/10 text-green-800 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40',
+  issued: 'bg-green-700/10 text-green-800 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40',
   reviewed:
     'bg-green-700/10 text-green-800 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40',
   ksef:

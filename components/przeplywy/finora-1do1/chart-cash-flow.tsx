@@ -17,22 +17,23 @@ import { DymekWiersz } from '@/components/dashboard/finora/dymek'
 
 // Util Imports
 import type { FlowBucket } from '@/lib/dashboard/cash-movements'
+import { INFLOW_EMPTY, INFLOW_EMPTY_TITLE, INFLOW_NOTE } from '@/lib/dashboard/inflow-labels'
 import { formatPlCompactNumber, formatPlInt, formatPlMoney } from '@/lib/format/pl'
-import { PAID_EMPTY_STATE } from '@/lib/invoices/paid-labels'
 import { cn } from '@/lib/utils'
 
 /**
  * PLAN-PRAWDZIWE-DANE E6: dane z propsów (`buildCashFlowChart` przez
  * `adaptery.ts`), wygląd bez zmian. Sumy nad wykresem idą za AKTYWNĄ
  * zakładką (w szablonie zawsze z miesięcy), oś Y z danych („12 tys.”),
- * dymek z „zł”, a okres bez oznaczonych wpłat mówi to wprost.
+ * dymek z „zł”. E11 (D-W): seria „Wpływy” według terminów płatności, a okres
+ * bez żadnej faktury z terminem mówi to wprost.
  */
 
 type TabValue = 'weekly' | 'monthly' | 'yearly'
 
 const cashFlowChartConfig = {
   inflow: {
-    label: 'Wpłaty',
+    label: 'Wpływy',
     color: 'var(--chart-2)'
   },
   outflow: {
@@ -86,17 +87,19 @@ function yAxisWidth(buckets: readonly FlowBucket[]): number {
 type CashFlowCardProps = {
   tabs: Record<TabValue, FlowBucket[]>
   subTitle: string
+  /** Pełne zdanie podtytułu (dymek i czytnik ekranu) — podtytuł mieści się w jednej linii. */
+  subTitleHint?: string
   menuItems?: CardMenuItem[]
   className?: string
 }
 
-const CashFlowCard = ({ tabs, subTitle, menuItems, className }: CashFlowCardProps) => {
+const CashFlowCard = ({ tabs, subTitle, subTitleHint, menuItems, className }: CashFlowCardProps) => {
   const [tab, setTab] = useState<TabValue>('monthly')
   const current = totals(tabs[tab])
 
   return (
     <Card className={cn(className)}>
-      <CardHeaderWithMenu title='Przepływy pieniężne' subTitle={subTitle} menuItems={menuItems} />
+      <CardHeaderWithMenu title='Przepływy pieniężne' subTitle={subTitle} subTitleHint={subTitleHint} menuItems={menuItems} />
 
       <Tabs value={tab} onValueChange={value => setTab(value as TabValue)} className='gap-6'>
         <CardContent className='flex flex-wrap items-center justify-between gap-4'>
@@ -106,11 +109,11 @@ const CashFlowCard = ({ tabs, subTitle, menuItems, className }: CashFlowCardProp
               <div className='flex flex-col'>
                 <span
                   className='text-xl font-semibold'
-                  title={current.inflowCount > 0 ? `${zl(current.inflow)} · według oznaczonych wpłat` : PAID_EMPTY_STATE}
+                  title={current.inflowCount > 0 ? `${zl(current.inflow)} · ${INFLOW_NOTE}` : INFLOW_EMPTY_TITLE}
                 >
                   {current.inflowCount > 0 ? formatPln(current.inflow) : '—'}
                 </span>
-                <span className='text-muted-foreground text-sm'>Suma wpłat</span>
+                <span className='text-muted-foreground text-sm'>Suma wpływów</span>
               </div>
             </div>
             <div className='flex items-center gap-2'>
@@ -166,7 +169,7 @@ const CashFlowCard = ({ tabs, subTitle, menuItems, className }: CashFlowCardProp
                               <DymekWiersz
                                 color={item.color}
                                 label={cashFlowChartConfig.inflow.label}
-                                value={bucket.inflowCount > 0 ? zl(Number(value)) : 'brak oznaczonych wpłat'}
+                                value={bucket.inflowCount > 0 ? zl(Number(value)) : INFLOW_EMPTY.toLowerCase()}
                               />
                             )
                           }

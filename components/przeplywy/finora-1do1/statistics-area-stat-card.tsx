@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
 /**
  * PLAN-PRAWDZIWE-DANE E6: kwota, plakietka, podpis plakietki i krzywa
  * narastająca dzień po dniu z propsów (`adaptery.ts`); wygląd bez zmian.
- * Brak podstawy procentu → „—”, brak wpłat → pusty stan w miejscu podpisu.
+ * Brak podstawy procentu → „—”, brak wpływów → pusty stan w miejscu podpisu.
  */
 
 export type StatisticsAreaStatCardProps = {

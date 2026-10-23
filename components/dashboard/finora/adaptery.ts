@@ -1,7 +1,8 @@
 import { PULPIT_EMPTY } from '@/components/dashboard/pulpit/card-states';
+import type { InflowTerms } from '@/lib/dashboard/inflow-terms';
+import { INFLOW_NOTE } from '@/lib/dashboard/inflow-labels';
 import { buildMonthReport } from '@/lib/dashboard/pulpit-report';
 import type { TopClient, TopProduct } from '@/lib/dashboard/rankings';
-import type { ReceivablesAging } from '@/lib/dashboard/receivables-aging';
 import type { VatLimitOverview } from '@/lib/dashboard/vat-limit';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { formatTimestampDatePl } from '@/lib/format/iso-date';
@@ -247,21 +248,25 @@ export function limitVatProps(o: VatLimitOverview, tryb: TrybDanych): LiniaDane 
   };
 }
 
-// ─── Należności według terminu ────────────────────────────────────────────
+// ─── Należności według terminów płatności ─────────────────────────────────
 
 /**
- * Z16: do potwierdzania wpłat (K2/N6) każda faktura z FaktWay wisi jako
- * nieopłacona. Karta nie ma miejsca na podpis — zastrzeżenie idzie do dymku
- * tytułu i czytnika ekranu.
+ * E11 (decyzja D-W): przyszłe terminy faktur sprzedaży bez prawdziwej
+ * zapłaty — zakładamy zapłatę w terminie, więc karta nie mówi o zaległościach.
+ * Karta nie ma miejsca na podpis — opis idzie do dymku tytułu i czytnika ekranu.
  */
 export const NALEZNOSCI_NOTA =
-  'Faktury z FaktWay, według oznaczonych wpłat. Wpłat jeszcze nie potwierdzamy — zapłacone faktury też są tu liczone.';
+  `Faktury sprzedaży z terminem płatności od dziś, bez potwierdzonej zapłaty — ${INFLOW_NOTE}.`;
 
-/** Krótkie nazwy kolumn (miejsce jak „Komputer”), pełne w dymku i dla czytnika ekranu. */
-const KOLUMNY: Record<ReceivablesAging['buckets'][number]['key'], { name: string; trend: 'up' | 'down' }> = {
-  notDue: { name: 'W terminie', trend: 'up' },
-  upTo30: { name: '1–30 dni', trend: 'down' },
-  over30: { name: '31+ dni', trend: 'down' },
+/**
+ * Krótkie nazwy kolumn (miejsce jak „Komputer”), pełne w dymku i dla czytnika
+ * ekranu. Strzałka nie ocenia (dawniej ↗ w terminie, ↙ po terminie): każda
+ * kolumna to pieniądze, które wpłyną — ↗ jak strzałka wpływu w Przepływach.
+ */
+const KOLUMNY: Record<InflowTerms['buckets'][number]['key'], { name: string; trend: 'up' | 'down' }> = {
+  thisWeek: { name: 'Ten tydzień', trend: 'up' },
+  upTo30: { name: 'Do 30 dni', trend: 'up' },
+  later: { name: 'Później', trend: 'up' },
 };
 
 /** Kolory kolumn Finory, po kolei. */
@@ -277,22 +282,29 @@ export interface NaleznosciDane {
   visitorData: TotalVisitorsColumn[];
 }
 
-export function naleznosciProps(a: ReceivablesAging, tryb: TrybDanych): NaleznosciDane {
-  const overdue = a.buckets.filter((b) => b.key !== 'notDue').reduce((sum, b) => sum + b.pct, 0);
+/**
+ * Plakietka (dawne „X% zaległe”): prawdziwa liczba w tym samym miejscu —
+ * ile faktur czeka na termin. Tytuł „Należności” zostaje: przyszłe terminy
+ * to należności, a dłuższy tytuł nie mieści się obok „Szczegóły” w kolumnie
+ * 1/3 na `xl`. „Szczegóły” prowadzą do Przepływów (Spodziewane wpływy), nie
+ * do listy zaległości.
+ */
+export function naleznosciProps(a: InflowTerms, tryb: TrybDanych): NaleznosciDane {
+  const faktury = (n: number) => `${n} ${plural(n, ['faktura', 'faktury', 'faktur'])}`;
   return {
     title: 'Należności',
     total: formatPlCompactMoney(a.total),
-    totalTitle: `${zl(a.total)} · ${a.count} ${plural(a.count, ['faktura', 'faktury', 'faktur'])}`,
-    badge: a.count === 0 && synchronizacja(tryb) ? POBIERAMY_KROTKO : `${overdue}% zaległe`,
-    note: tryb === 'przyklad' ? null : NALEZNOSCI_NOTA,
-    detailsHref: '/payments/overdue',
+    totalTitle: `${zl(a.total)} · ${faktury(a.count)} · ${INFLOW_NOTE}`,
+    badge: a.count === 0 && synchronizacja(tryb) ? POBIERAMY_KROTKO : faktury(a.count),
+    note: NALEZNOSCI_NOTA,
+    detailsHref: '/przeplywy',
     visitorData: a.buckets.map((b, i) => ({
       name: KOLUMNY[b.key].name,
       nameTitle: b.label,
       pct: b.pct,
       // Dwie cyfry znaczące: kolumna ma miejsce jak dawne „23.8” (pełna kwota w dymku).
       amount: formatPlCompactNumber(b.amount, 2),
-      amountTitle: `${zl(b.amount)} · ${b.count} ${plural(b.count, ['faktura', 'faktury', 'faktur'])}`,
+      amountTitle: `${zl(b.amount)} · ${faktury(b.count)}`,
       trend: KOLUMNY[b.key].trend,
       color: KOLORY_KOLUMN[i] ?? 'bg-chart-1',
     })),

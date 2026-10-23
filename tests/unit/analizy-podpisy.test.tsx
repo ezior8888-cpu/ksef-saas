@@ -18,7 +18,7 @@ const sprzedaz = await import('@/components/analizy/sprzedaz-grid');
 /**
  * E4 (PLAN-PRAWDZIWE-DANE §6.3) + zasada Bartosza 23.10.2026: tylko napisy
  * w istniejących miejscach. Podpisy kart mówią prawdę o źródle liczby
- * (koszty z KSeF i wydatków — E10, należności bez potwierdzonych wpłat),
+ * (koszty z KSeF i wydatków — E10, należności według terminów płatności — E11),
  * demo nie linkuje do nieistniejącej faktury-wzoru, a stan „synchronizacja”
  * (B) mówi „Pobieramy faktury z KSeF…” zamiast „Wystaw fakturę”.
  */
@@ -142,10 +142,13 @@ describe('E4, E10: podpisy kart kosztów mówią, że to faktury z KSeF i wydatk
 describe('E4: podpisy kart sprzedaży', () => {
   const p = props({ invoices: [invoice('a')], invoice_line_items: [] });
 
-  it('Należności: źródło i brak potwierdzania wpłat (Z16), pełne zdanie w dymku', async () => {
+  // E11 (D-W): zastrzeżenie Z16 („wpłat jeszcze nie oznaczamy”) zastąpione założeniem nazwanym w podpisie.
+  it('Należności: „według terminów płatności”, krótsze od dawnego zastrzeżenia, pełne zdanie w dymku', async () => {
     const out = html(await sprzedaz.ReceivablesSlot(p));
-    expect(description(out)).toBe('Faktury z FaktWay · wpłat jeszcze nie oznaczamy');
-    expect(out).toContain('title="Faktury z FaktWay, według oznaczonych wpłat. Wpłat jeszcze nie potwierdzamy — zapłacone faktury też są tu liczone."');
+    expect(description(out)).toBe('Faktury sprzedaży · według terminów płatności');
+    expect(description(out).length).toBeLessThanOrEqual('Faktury z FaktWay · wpłat jeszcze nie oznaczamy'.length);
+    expect(out).toContain('title="Faktury sprzedaży z terminem płatności od dziś, bez potwierdzonej zapłaty — według terminów płatności. Termin, który minął, liczymy jako wpływ w Przepływach."');
+    expect(out).not.toMatch(/oznacz|nie potwierdzamy/);
   });
 
   it('Przychody a koszty po stronie sprzedaży: ten sam podpis', async () => {

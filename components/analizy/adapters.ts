@@ -1,12 +1,12 @@
 import {
-  RiAlarmWarningLine,
+  RiCalendarLine,
   RiFileEditLine,
   RiFileList3Line,
   RiHourglassLine,
-  RiMoneyDollarCircleLine,
   RiPercentLine,
   RiReceiptLine,
   RiRepeatLine,
+  RiTimeLine,
 } from '@remixicon/react';
 
 import type { BreakdownSlice } from '@/lib/analytics-finance/breakdown';
@@ -16,8 +16,8 @@ import { countedDays, isoDatePl } from '@/lib/analytics-finance/months';
 import type { RecurringItem } from '@/lib/analytics-finance/recurring';
 import { recentSales, type SaleInvoice } from '@/lib/analytics-finance/sales';
 import type { CostEntry } from '@/lib/dashboard/costs';
+import type { InflowTerms } from '@/lib/dashboard/inflow-terms';
 import { costHref } from '@/lib/dashboard/ksef-invoice-cost';
-import type { Receivables } from '@/lib/dashboard/receivables';
 import { countLabel } from '@/lib/i18n/plural';
 import { setAsRecurringHref } from '@/lib/invoices/recurring/visibility';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
@@ -41,7 +41,7 @@ import type {
  * dopasować dane pasujące do naszych”). Karty w `finora-1do1/` dostają
  * dokładnie te pola, które Finora bierze ze swojej warstwy przykładowej
  * (`getMonthlyStats`, `getSpendTrend`…), a każda liczba pochodzi z `lib/`
- * (`loadCostsWindow`, `loadSalesWindow`, `loadProductLines`, `loadReceivables`)
+ * (`loadCostsWindow`, `loadSalesWindow`, `loadProductLines`, `loadUpcomingInflows`)
  * — tu nic się nie liczy od nowa, tylko przekłada. Czyste funkcje bez
  * `server-only`, więc testuje się je wprost.
  */
@@ -188,7 +188,6 @@ export function incomeExpenseNet(income: number, expense: number): IncomeExpense
 
 const DOCUMENT_FORMS = ['dokument', 'dokumenty', 'dokumentów'] as const;
 const INVOICE_FORMS = ['faktura', 'faktury', 'faktur'] as const;
-const DAY_FORMS = ['dzień', 'dni', 'dni'] as const;
 
 /**
  * „VAT z wydatków” w miejscu Finorowego „Spending Streaks” (plan P10, decyzja D3).
@@ -208,28 +207,24 @@ export function costVatRows(vat: CostVatSummary, reviewHref: string | null = nul
   ];
 }
 
-type ReceivablesSummary = Pick<Receivables, 'total' | 'count' | 'overdue' | 'overdueCount' | 'oldestOverdueDays'>;
+/** Wiersze należności po kolei: tytuł jak kolumna karty Pulpitu, ikona bez oceny. */
+const TERM_ROWS: Record<InflowTerms['buckets'][number]['key'], { title: string; icon: FinoraIcon }> = {
+  thisWeek: { title: 'Ten tydzień', icon: RiCalendarLine },
+  upTo30: { title: 'Do 30 dni', icon: RiTimeLine },
+  later: { title: 'Później', icon: RiHourglassLine },
+};
 
-/** „Należności” w miejscu Finorowego „Spending Streaks” (plan P11, decyzja D3). */
-export function receivablesRows(r: ReceivablesSummary): SummaryRow[] {
-  return [
-    {
-      icon: RiMoneyDollarCircleLine,
-      iconClassName: 'text-foreground',
-      title: 'Do zapłaty',
-      value: `${formatZl(r.total)} · ${countLabel(r.count, INVOICE_FORMS)}`,
-    },
-    {
-      icon: RiAlarmWarningLine,
-      iconClassName: r.overdue > 0 ? 'text-destructive' : 'text-foreground',
-      title: 'Po terminie',
-      value: `${formatZl(r.overdue)} · ${countLabel(r.overdueCount, INVOICE_FORMS)}`,
-    },
-    {
-      icon: RiHourglassLine,
-      iconClassName: 'text-foreground',
-      title: 'Najstarsza zaległość',
-      value: r.oldestOverdueDays === null ? 'Brak zaległości' : countLabel(r.oldestOverdueDays, DAY_FORMS),
-    },
-  ];
+/**
+ * „Należności” w miejscu Finorowego „Spending Streaks” (plan P11, decyzja D3).
+ * E11 (D-W): te same trzy przedziały przyszłych terminów co karta Pulpitu
+ * (`inflowTerms`) — bez „Po terminie” i „Najstarszej zaległości”, bo
+ * zakładamy zapłatę w terminie; ikony bez czerwieni.
+ */
+export function receivablesRows(terms: InflowTerms): SummaryRow[] {
+  return terms.buckets.map((b) => ({
+    icon: TERM_ROWS[b.key].icon,
+    iconClassName: 'text-foreground',
+    title: TERM_ROWS[b.key].title,
+    value: `${formatZl(b.amount)} · ${countLabel(b.count, INVOICE_FORMS)}`,
+  }));
 }

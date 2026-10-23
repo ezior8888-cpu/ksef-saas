@@ -312,7 +312,8 @@ describe('karty na pełnych kosztach: faktura z historii KSeF bez wydatku', () =
 
   it('Przepływy: operacja z faktury z KSeF — kategoria i status prawdziwe, menu otwiera fakturę', async () => {
     const entries = await costs.getCostsWithKsefPurchases(sb(tables()), TENANT, RANGE);
-    const ops = cashFlowOperations([], entries);
+    // E11: operacje biorą „dziś” (wpływy po dziś to Spodziewane wpływy).
+    const ops = cashFlowOperations([], entries, '2026-10-23');
     expect(ops).toEqual([expect.objectContaining({ id: 'out:z1', category: 'Faktury z KSeF', status: 'ksef', href: '/invoices/z1' })]);
     const [row] = tabelaProps(ops, 'prawdziwe').rows;
     expect(row).toMatchObject({ category: 'Faktury z KSeF', status: 'ksef', openLabel: 'Otwórz fakturę', href: '/invoices/z1' });

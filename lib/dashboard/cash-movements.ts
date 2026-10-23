@@ -1,21 +1,24 @@
 import type { CostEntry } from '@/lib/dashboard/costs';
 import { costHref, isKsefInvoiceCost } from '@/lib/dashboard/ksef-invoice-cost';
+import { isExpectedInflow } from '@/lib/dashboard/inflow-terms';
 import type { InflowEntry } from '@/lib/dashboard/inflows';
-import type { Receivables } from '@/lib/dashboard/receivables';
 import { shortCompanyName } from '@/lib/format/company-name';
 import { addDaysToIsoDate } from '@/lib/format/warsaw-date';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
  * Czyste agregaty kart `/przeplywy` (plan Finora §5 P2) na wynikach
- * `getInflows` (wpływy, §2.4 pkt 14) i `getCostsWithKsefPurchases` (koszty
- * brutto: wydatki i faktury zakupu z KSeF bez wydatku, E10) oraz
- * `getReceivables` (§2.4 pkt 11). Bez własnego odczytu bazy: każda karta
- * liczy z tych samych zbiorów, więc liczby się nie rozjeżdżają.
+ * `getInflows` (wpływy według terminów płatności, E11 / D-W) i
+ * `getCostsWithKsefPurchases` (koszty brutto: wydatki i faktury zakupu
+ * z KSeF bez wydatku, E10). Bez własnego odczytu bazy: każda karta liczy
+ * z tych samych zbiorów, więc liczby się nie rozjeżdżają.
  *
- * Wpływ = `paid_amount` faktury w dniu oznaczenia wpłaty. Wydatek = brutto
- * dokumentu kosztowego (`CostEntry.outflow`) w dniu jego wystawienia —
- * koszty nie mają w bazie dnia zapłaty (N7).
+ * Wpływ = faktura sprzedaży w dniu `InflowEntry.date` (prawdziwa zapłata,
+ * termin płatności albo dzień wystawienia). Wykres, kafel, źródła i operacje
+ * liczą tylko wpływy z dniem ≤ dziś (`receivedInflows`) — późniejszy termin
+ * to jeszcze nie wpływ, tylko „Spodziewane wpływy” (`upcomingInflows`).
+ * Wydatek = brutto dokumentu kosztowego (`CostEntry.outflow`) w dniu jego
+ * wystawienia — koszty nie mają w bazie dnia zapłaty (N7).
  *
  * Wszystkie daty to RRRR-MM-DD w Europe/Warsaw; „dziś” przychodzi z
  * `todayInWarsaw` wywołującego (§2.4 pkt 10).
@@ -91,7 +94,7 @@ export interface FlowBucket {
   inflow: number;
   /** Wydatki brutto, PLN. */
   outflow: number;
-  /** Liczba wpłat w okresie — 0 znaczy „brak oznaczonych wpłat”, nie „0 zł”. */
+  /** Liczba wpływów (faktur) w okresie — 0 znaczy „brak faktur z terminem”, nie „0 zł”. */
   inflowCount: number;
 }
 
@@ -115,9 +118,17 @@ interface Movement {
   isInflow: boolean;
 }
 
+/**
+ * Wpływy, które już były: dzień wpływu ≤ dziś (D-W). Późniejsze terminy to
+ * Spodziewane wpływy, nie pieniądze w kasie.
+ */
+export function receivedInflows(inflows: readonly InflowEntry[], today: string): InflowEntry[] {
+  return inflows.filter((i) => i.date <= today);
+}
+
 function movementsOf(inflows: readonly InflowEntry[], costs: readonly CostEntry[]): Movement[] {
   return [
-    ...inflows.map((i) => ({ date: i.paidOn, inflow: i.amount, outflow: 0, isInflow: true })),
+    ...inflows.map((i) => ({ date: i.date, inflow: i.amount, outflow: 0, isInflow: true })),
     ...costs.map((c) => ({ date: c.issueDate, inflow: 0, outflow: c.outflow, isInflow: false })),
   ];
 }
@@ -151,7 +162,7 @@ export function buildCashFlowChart(
   costs: readonly CostEntry[],
   today: string,
 ): CashFlowChartData {
-  const movements = movementsOf(inflows, costs);
+  const movements = movementsOf(receivedInflows(inflows, today), costs);
   const year = Number(today.slice(0, 4));
   const monthIndex = Number(today.slice(5, 7)) - 1;
 
@@ -193,7 +204,7 @@ export interface MonthFlow {
   amount: number;
   /** Suma poprzedniego miesiąca, PLN. */
   prevAmount: number;
-  /** Liczba ruchów w bieżącym miesiącu (wpłat albo dokumentów kosztowych). */
+  /** Liczba ruchów w bieżącym miesiącu (wpływów albo dokumentów kosztowych). */
   count: number;
   /** Zmiana vs poprzedni miesiąc w procentach; `null`, gdy poprzedni ≤ 0. */
   changePct: number | null;
@@ -244,7 +255,7 @@ export function monthFlows(
   today: string,
 ): { inflow: MonthFlow; outflow: MonthFlow } {
   return {
-    inflow: monthFlow(inflows.map((i) => ({ date: i.paidOn, amount: i.amount })), today),
+    inflow: monthFlow(receivedInflows(inflows, today).map((i) => ({ date: i.date, amount: i.amount })), today),
     outflow: monthFlow(costs.map((c) => ({ date: c.issueDate, amount: c.outflow })), today),
   };
 }
@@ -259,7 +270,7 @@ export interface CashFlowSource {
   nip: string | null;
   /** PLN. */
   amount: number;
-  /** Liczba wpłat albo dokumentów kosztowych. */
+  /** Liczba faktur sprzedaży (wpływów) albo dokumentów kosztowych. */
   count: number;
   /** Udział w sumie swojej strony (wpływy albo wydatki), procent całkowity. */
   share: number;
@@ -292,13 +303,14 @@ function isNewer(a: { date: string; id: string }, b: { date: string; id: string 
 }
 
 /**
- * Najwięksi klienci (+, opłacone faktury według nabywcy) i dostawcy (−,
+ * Najwięksi klienci (+, wpływy do dziś według nabywcy) i dostawcy (−,
  * wydatki brutto według `seller_nip`) razem, malejąco po kwocie. Grupa
  * z sumą ≤ 0 (np. sama korekta in minus) nie jest źródłem pieniędzy.
  */
 export function topCashFlowSources(
   inflows: readonly InflowEntry[],
   costs: readonly CostEntry[],
+  today: string,
   limit = 5,
 ): CashFlowSource[] {
   const groups = new Map<string, Group>();
@@ -322,14 +334,14 @@ export function topCashFlowSources(
     }
   };
 
-  for (const inflow of inflows) {
+  for (const inflow of receivedInflows(inflows, today)) {
     const name = inflow.consumers ? CONSUMERS_NAME : shortCompanyName(inflow.buyerName ?? UNNAMED_BUYER);
     add(
       `in:${inflow.buyerKey}`,
       { key: `in:${inflow.buyerKey}`, direction: 'in', consumers: inflow.consumers, nip: inflow.buyerNip },
       name,
       inflow.amount,
-      { date: inflow.paidOn, id: inflow.id },
+      { date: inflow.date, id: inflow.id },
     );
   }
   for (const cost of costs) {
@@ -373,32 +385,33 @@ export interface UpcomingInflow {
   dueDate: string;
   /** 0 = termin dziś. */
   daysLeft: number;
-  /** `outstandingOf`, PLN. */
+  /** Reszta do zapłaty po wpłatach częściowych (`InflowEntry.outstanding`), PLN. */
   amount: number;
 }
 
 export const UPCOMING_DAYS = 30;
 
 /**
- * Należności (§2.4 pkt 11, wynik `getReceivables`) z terminem od dziś do
- * dziś + `days` włącznie, najbliższy termin pierwszy. Faktury po terminie
- * i bez terminu tu nie trafiają — to karta „Zaległości”.
+ * Faktury sprzedaży z terminem od dziś do dziś + `days` włącznie i bez
+ * prawdziwej zapłaty (`isExpectedInflow`, D-W), najbliższy termin pierwszy.
+ * Termin, który minął, to już wpływ (zakładamy zapłatę w terminie), a faktura
+ * bez terminu wpływa w dniu wystawienia — żadna z nich tu nie trafia.
  */
 export function upcomingInflows(
-  receivables: Pick<Receivables, 'byInvoice'>,
+  inflows: readonly InflowEntry[],
   today: string,
   days = UPCOMING_DAYS,
   limit = 5,
 ): { items: UpcomingInflow[]; count: number; total: number } {
   const last = addDays(today, days);
-  const all = receivables.byInvoice
-    .filter((inv) => inv.paymentDueDate !== null && inv.paymentDueDate >= today && inv.paymentDueDate <= last)
+  const all = inflows
+    .filter((inv) => isExpectedInflow(inv, today) && inv.date <= last)
     .map((inv) => ({
       id: inv.id,
-      name: shortCompanyName(inv.buyerName ?? UNNAMED_BUYER),
+      name: inv.consumers && !inv.buyerName ? CONSUMERS_NAME : shortCompanyName(inv.buyerName ?? UNNAMED_BUYER),
       internalNumber: inv.internalNumber,
-      dueDate: inv.paymentDueDate!,
-      daysLeft: daysBetween(today, inv.paymentDueDate!),
+      dueDate: inv.date,
+      daysLeft: daysBetween(today, inv.date),
       amount: inv.outstanding,
     }))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -412,17 +425,19 @@ export function upcomingInflows(
 // ─── „Ostatnie operacje” i „Wszystkie operacje” ───────────────────────────
 
 /**
- * Wpłata „paid”; wydatek „reviewed” / „pending” (opisany albo do akceptacji);
- * faktura zakupu z KSeF bez wydatku „ksef” — nie ma jej w Wydatkach, więc nie
- * jest ani zatwierdzona, ani do akceptacji (E10).
+ * Wpływ: „paid” — prawdziwa zapłata (`paid_at` albo data zapłaty z FA(3)),
+ * „due” — według terminu płatności, „issued” — faktura bez terminu, według
+ * dnia wystawienia (E11, D-W). Wydatek „reviewed” / „pending” (opisany albo
+ * do akceptacji); faktura zakupu z KSeF bez wydatku „ksef” — nie ma jej
+ * w Wydatkach, więc nie jest ani zatwierdzona, ani do akceptacji (E10).
  */
-export type OperationStatus = 'paid' | 'reviewed' | 'pending' | 'ksef';
+export type OperationStatus = 'paid' | 'due' | 'issued' | 'reviewed' | 'pending' | 'ksef';
 
 export interface CashFlowOperation {
   /** Unikalny w liście: `in:<id faktury>` albo `out:<id wydatku lub faktury zakupu>`. */
   id: string;
   direction: 'in' | 'out';
-  /** RRRR-MM-DD: dzień wpłaty albo dzień wystawienia dokumentu kosztowego. */
+  /** RRRR-MM-DD: dzień wpływu (`InflowEntry.date`) albo dzień wystawienia dokumentu kosztowego. */
   date: string;
   counterparty: string;
   nip: string | null;
@@ -439,23 +454,28 @@ const INFLOW_CATEGORY: Record<string, string> = {
   regular: 'Sprzedaż',
   advance: 'Zaliczka',
   final: 'Faktura końcowa',
+  correction: 'Korekta',
 };
 
-/** Wpływy i wydatki razem, od najnowszego dnia; w dniu wpływy przed wydatkami. */
+/**
+ * Wpływy do dziś (`receivedInflows`) i wydatki razem, od najnowszego dnia;
+ * w dniu wpływy przed wydatkami.
+ */
 export function cashFlowOperations(
   inflows: readonly InflowEntry[],
   costs: readonly CostEntry[],
+  today: string,
 ): CashFlowOperation[] {
   const rows: CashFlowOperation[] = [
-    ...inflows.map((i): CashFlowOperation => ({
+    ...receivedInflows(inflows, today).map((i): CashFlowOperation => ({
       id: `in:${i.id}`,
       direction: 'in',
-      date: i.paidOn,
+      date: i.date,
       counterparty: i.consumers && !i.buyerName ? CONSUMERS_NAME : shortCompanyName(i.buyerName ?? UNNAMED_BUYER),
       nip: i.buyerNip,
       reference: i.internalNumber,
       category: INFLOW_CATEGORY[i.invoiceKind ?? ''] ?? 'Sprzedaż',
-      status: 'paid',
+      status: i.basis,
       amount: i.amount,
       href: `/invoices/${i.id}`,
     })),

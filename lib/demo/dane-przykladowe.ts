@@ -2,12 +2,17 @@
 // weryfikacją KSeF ma zobaczyć „pełną okazałość” aplikacji; PLAN-PRAWDZIWE-DANE
 // §5.3–5.4, etap E2). Zestaw tabel dla atrapy PostgREST-a: Pulpit, Przepływy
 // i Analizy czytają go TYMI SAMYMI loaderami co prawdziwą bazę, więc liczby są
-// spójne z definicji (zysk = przychód − koszty, wpłaty = zapłacone faktury).
+// spójne z definicji (zysk = przychód − koszty, wpływy = faktury sprzedaży
+// według terminów płatności).
 //
 // Firma usługowa: przychód ~30–45 tys. zł netto miesięcznie, koszty 33–37%
-// przychodu, 24 miesiące historii z datami względem `now` (strefa Warszawa),
-// dwie faktury po terminie (do 30 dni i ponad 30 dni). Firmy i NIP-y są
-// fikcyjne: każda nazwa z „Przykład”, NIP-y zaczynają się od zer (AGENTS.md).
+// przychodu, 24 miesiące historii z datami względem `now` (strefa Warszawa).
+// Wpływy jak u prawdziwej firmy po weryfikacji KSeF (E11, decyzja D-W):
+// klient nic nie oznacza, więc żadna faktura nie ma `paid_at` — wpływ to dzień
+// terminu płatności (korekta bez terminu — dzień wystawienia). Trzy faktury
+// z terminem liczonym od dziś wypełniają Należności: termin dziś („Ten
+// tydzień”) i dwa długie terminy („Później”). Firmy i NIP-y są fikcyjne:
+// każda nazwa z „Przykład”, NIP-y zaczynają się od zer (AGENTS.md).
 //
 // Koszty jak u prawdziwej firmy po weryfikacji KSeF (E10, decyzja D-K):
 // faktury zakupu z KSeF — z ostatnich miesięcy ze Skrzynki, każda z jednym
@@ -67,11 +72,6 @@ function dzien(kal: Kalendarz, k: number, day: number): string {
   return `${key}-${pad(d)}`;
 }
 
-/** Chwila zapłaty: dziś = `now`, wcześniej — przed południem tego dnia w Warszawie. */
-function chwila(kal: Kalendarz, iso: string): string {
-  return iso === kal.today ? kal.now.toISOString() : `${iso}T09:00:00.000Z`;
-}
-
 // ─── Sprzedaż ─────────────────────────────────────────────────────────────
 
 type Pozycja = [name: string, unit: string, share: number];
@@ -83,8 +83,6 @@ interface Klient {
   day: number;
   /** Termin płatności w dniach od wystawienia. */
   termin: number;
-  /** Po ilu dniach od wystawienia klient płaci (nie dłużej niż termin). */
-  zwloka: number;
   /** Netto faktury `k` miesięcy wstecz. */
   net: (k: number) => number;
   aktywny: (k: number) => boolean;
@@ -95,73 +93,75 @@ const ZAWSZE = () => true;
 
 const KLIENCI: Klient[] = [
   {
-    nip: '0000001010', name: 'Hurtownia Przykład sp. z o.o.', day: 3, termin: 30, zwloka: 29,
+    nip: '0000001010', name: 'Hurtownia Przykład sp. z o.o.', day: 3, termin: 30,
     net: (k) => 9600 - k * 110, aktywny: ZAWSZE,
     items: [['Abonament serwisowy', 'mies.', 0.55], ['Wdrożenie systemu', 'usł.', 0.45]],
   },
   {
     // Klient malejący — w rankingu strzałka w dół.
-    nip: '0000002020', name: 'Studio Projektowe Przykład', day: 5, termin: 14, zwloka: 12,
+    nip: '0000002020', name: 'Studio Projektowe Przykład', day: 5, termin: 14,
     net: (k) => 5600 + k * 70, aktywny: ZAWSZE,
     items: [['Projekt graficzny', 'szt.', 0.6], ['Konsultacje', 'godz.', 0.4]],
   },
   {
-    nip: '0000003030', name: 'Sklep Internetowy Przykład sp. z o.o.', day: 10, termin: 21, zwloka: 21,
+    nip: '0000003030', name: 'Sklep Internetowy Przykład sp. z o.o.', day: 10, termin: 21,
     net: (k) => 5200 - k * 45 + (k % 2) * 300, aktywny: ZAWSZE,
     items: [['Hosting', 'mies.', 0.3], ['Abonament serwisowy', 'mies.', 0.7]],
   },
   {
-    nip: '0000004040', name: 'Kancelaria Przykład', day: 14, termin: 30, zwloka: 26,
+    nip: '0000004040', name: 'Kancelaria Przykład', day: 14, termin: 30,
     net: (k) => 4200 - k * 15 + (k % 3 === 1 ? 600 : 0), aktywny: ZAWSZE,
     items: [['Konsultacje', 'godz.', 0.5], ['Abonament serwisowy', 'mies.', 0.5]],
   },
   {
-    nip: '0000006060', name: 'Gabinet Przykład', day: 7, termin: 14, zwloka: 3,
+    nip: '0000006060', name: 'Gabinet Przykład', day: 7, termin: 14,
     net: (k) => 2400 + k * 25, aktywny: ZAWSZE,
     items: [['Hosting', 'mies.', 0.4], ['Konsultacje', 'godz.', 0.6]],
   },
   {
-    nip: '0000007070', name: 'Drukarnia Przykład S.A.', day: 20, termin: 30, zwloka: 14,
+    nip: '0000007070', name: 'Drukarnia Przykład S.A.', day: 20, termin: 30,
     net: (k) => 3600 - k * 30 + (k % 4) * 80, aktywny: ZAWSZE,
     items: [['Wdrożenie systemu', 'usł.', 1]],
   },
   {
-    nip: '0000005050', name: 'Fundacja Przykład', day: 18, termin: 21, zwloka: 20,
+    nip: '0000005050', name: 'Fundacja Przykład', day: 18, termin: 21,
     net: () => 3400, aktywny: (k) => k % 2 === 0,
     items: [['Szkolenie zespołu', 'godz.', 1]],
   },
   {
-    nip: '0000008080', name: 'Biuro Podróży Przykład', day: 24, termin: 14, zwloka: 14,
+    nip: '0000008080', name: 'Biuro Podróży Przykład', day: 24, termin: 14,
     net: () => 5800, aktywny: (k) => k % 3 === 0,
     items: [['Szkolenie zespołu', 'godz.', 0.5], ['Konsultacje', 'godz.', 0.5]],
   },
   {
-    nip: '0000009090', name: 'Pracownia Przykład', day: 16, termin: 14, zwloka: 9,
+    nip: '0000009090', name: 'Pracownia Przykład', day: 16, termin: 14,
     net: () => 1900, aktywny: (k) => k % 4 === 1,
     items: [['Projekt graficzny', 'szt.', 1]],
   },
   {
     // Nowy klient (ostatnie 8 miesięcy) — w rankingu „nowy”, bez procentu.
-    nip: '0000011110', name: 'Agencja Eventowa Przykład sp. z o.o.', day: 26, termin: 21, zwloka: 18,
+    nip: '0000011110', name: 'Agencja Eventowa Przykład sp. z o.o.', day: 26, termin: 21,
     net: (k) => (k === 7 ? 6000 : 2600), aktywny: (k) => k <= 7,
     items: [['Licencja roczna', 'szt.', 0.35], ['Abonament serwisowy', 'mies.', 0.65]],
   },
 ];
 
 /**
- * Faktury po terminie (należności „do 30 dni” i „ponad 30 dni” po terminie) —
- * daty liczone od dziś, żeby kubełki były pełne każdego dnia.
+ * Faktury z terminem liczonym od dziś (E11), żeby karta Należności miała
+ * każdego dnia wszystkie trzy kolumny: termin dziś („Ten tydzień”) i dwa
+ * terminy za ponad 30 dni („Później”). „Do 30 dni” wypełniają zwykłe faktury.
  */
-const ZALEGLE: Array<{ klient: number; dniTemu: number; net: number; items: Pozycja[] }> = [
-  { klient: 7, dniTemu: 34, net: 3100, items: [['Szkolenie zespołu', 'godz.', 1]] },
-  { klient: 6, dniTemu: 61, net: 2450, items: [['Konsultacje', 'godz.', 1]] },
+const TERMINY_OD_DZIS: Array<{ klient: number; dniTemu: number; termin: number; net: number; items: Pozycja[] }> = [
+  { klient: 8, dniTemu: 14, termin: 14, net: 1900, items: [['Projekt graficzny', 'szt.', 1]] },
+  { klient: 7, dniTemu: 6, termin: 45, net: 3100, items: [['Szkolenie zespołu', 'godz.', 1]] },
+  { klient: 6, dniTemu: 12, termin: 60, net: 2450, items: [['Konsultacje', 'godz.', 1]] },
 ];
 
-/** Status jak wyzwalacz `update_invoice_payment_status` (00073): `paid_at` tylko przy pełnej zapłacie. */
-function platnosc(kal: Kalendarz, gross: number, due: string | null, paidOn: string | null) {
-  if (paidOn !== null && paidOn <= kal.today) {
-    return { payment_status: 'paid', paid_amount: gross, paid_at: chwila(kal, paidOn) };
-  }
+/**
+ * Bez wpłat (D-W: klient nic nie oznacza) — status jak wyzwalacz
+ * `update_invoice_payment_status` (00073) dla `paid_amount = 0`.
+ */
+function platnosc(kal: Kalendarz, due: string | null) {
   return {
     payment_status: due !== null && due < kal.today ? 'overdue' : 'unpaid',
     paid_amount: 0,
@@ -175,8 +175,6 @@ interface Faktura {
   issue: string;
   net: number;
   termin: number;
-  /** Dzień zapłaty (może być w przyszłości — wtedy faktura otwarta); `null` = nie zapłaci. */
-  paidOn: string | null;
   items: Pozycja[];
 }
 
@@ -189,15 +187,14 @@ function faktury(kal: Kalendarz, env: KsefEnvironment, opcje: OpcjePrzykladu): {
       if (!klient.aktywny(k)) return;
       const issue = dzien(kal, k, klient.day);
       plan.push({
-        id: `f-${k}-${i}`, klient, issue, net: r2(klient.net(k) * skala), termin: klient.termin,
-        paidOn: dodaj(issue, klient.zwloka), items: klient.items,
+        id: `f-${k}-${i}`, klient, issue, net: r2(klient.net(k) * skala), termin: klient.termin, items: klient.items,
       });
     });
   }
-  ZALEGLE.forEach(({ klient, dniTemu, net, items }, i) => {
+  TERMINY_OD_DZIS.forEach(({ klient, dniTemu, termin, net, items }, i) => {
     plan.push({
-      id: `f-zalegla-${i + 1}`, klient: KLIENCI[klient]!, issue: dodaj(kal.today, -dniTemu),
-      net: r2(net * skala), termin: 14, paidOn: null, items,
+      id: `f-termin-${i + 1}`, klient: KLIENCI[klient]!, issue: dodaj(kal.today, -dniTemu),
+      net: r2(net * skala), termin, items,
     });
   });
 
@@ -242,7 +239,7 @@ function faktury(kal: Kalendarz, env: KsefEnvironment, opcje: OpcjePrzykladu): {
       buyer_nip: f.klient.nip,
       buyer_data: { name: f.klient.name, nip: f.klient.nip },
       payment_due_date: due,
-      ...platnosc(kal, gross, due, f.paidOn),
+      ...platnosc(kal, due),
     });
     // Ostatnia pozycja domyka netto faktury co do grosza.
     let reszta = f.net;
@@ -270,7 +267,7 @@ function faktury(kal: Kalendarz, env: KsefEnvironment, opcje: OpcjePrzykladu): {
     buyer_nip: KLIENCI[1]!.nip,
     buyer_data: { name: KLIENCI[1]!.name, nip: KLIENCI[1]!.nip },
     payment_due_date: null,
-    ...platnosc(kal, r2(korNet + korVat), null, null),
+    ...platnosc(kal, null),
   });
   return { invoices, lines };
 }

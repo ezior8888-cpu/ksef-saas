@@ -6,10 +6,13 @@
  *
  * Obsługa: select (kolumny, count/head), insert (wiersz albo tablica, z
  * `.select()` zwraca wstawione), update, delete, eq/neq/in/is/not/gte/lte/gt/lt,
- * `or` dla kontroli środowiska z data-fetchera, order, limit, range, single,
+ * `or` dla kontroli środowiska z data-fetchera i proste alternatywy warunków
+ * (`orPredicate` atrapy: dzień wpływu E11), order, limit, range, single,
  * maybeSingle. Kolumny JSON jak w PostgREST: `alias:kolumna->klucz` w select
  * (pełny wiersz zostaje, alias dochodzi) i `kolumna->klucz` w filtrach.
  */
+
+import { orPredicate } from '@/lib/demo/fake-postgrest';
 
 export type Row = Record<string, unknown>;
 
@@ -112,8 +115,8 @@ export function memoryClient(tables: MemoryTables, options: { failInsertInto?: r
       or: (expr: string) => {
         // Kontrola proweniencji data-fetchera: przyjęte bez środowiska albo z innego.
         const m = /^ksef_environment\.is\.null,ksef_environment\.neq\.(test|demo|production)$/.exec(expr);
-        if (!m) throw new Error(`baza w pamięci: nieobsługiwany filtr or(${expr})`);
-        predicates.push((r) => r.ksef_environment == null || r.ksef_environment !== m[1]);
+        if (m) predicates.push((r) => r.ksef_environment == null || r.ksef_environment !== m[1]);
+        else predicates.push(orPredicate(expr)); // rzuca przy nieobsługiwanym warunku
         return q;
       },
       order: (key: string, o?: { ascending?: boolean }) => { sort = { key, ascending: o?.ascending ?? true }; return q; },

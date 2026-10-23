@@ -14,8 +14,9 @@ import { cn } from '@/lib/utils'
 
 /**
  * Karta z trzema kolumnami (dawne „Odwiedzający”, PLAN-PRAWDZIWE-DANE E5):
- * należności według terminu. Wysokość kolumny = udział kwoty (`pct`), nie
- * wpisana klasa; strzałka to ocena (w terminie ↗, po terminie ↙).
+ * należności według terminów płatności — od E11 (decyzja D-W) tylko przyszłe
+ * terminy. Wysokość kolumny = udział kwoty (`pct`), nie wpisana klasa;
+ * strzałka z propsów (`trend`) — adapter daje ↗ (wpływ) każdej kolumnie.
  */
 export type TotalVisitorsColumn = {
   name: string

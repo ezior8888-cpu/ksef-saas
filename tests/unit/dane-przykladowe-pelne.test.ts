@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * Pulpitu i Przepływów (§6.1, §6.2). Każdy loader ma dać pełny, niepusty
  * wynik („pełna okazałość” przed weryfikacją KSeF), a liczby mają być
  * spójne jak w prawdziwej firmie usługowej: przychód ~25–45 tys. zł netto
- * miesięcznie, koszty ~30–40% przychodu, 1–2 faktury po terminie, daty
- * względem `now` (strefa Warszawa).
+ * miesięcznie, koszty ~30–40% przychodu, wpływy według terminów płatności
+ * (E11, D-W — bez oznaczonych wpłat), daty względem `now` (strefa Warszawa).
  *
  * Kształt propsów kart (adaptery) dochodzi w E5/E6 — tu loadery i spójność.
  */
@@ -17,8 +17,7 @@ const { fakePostgrest } = await import('@/lib/demo/fake-postgrest');
 const { getSalesSeries, getMonthlyFigures } = await import('@/lib/dashboard/monthly-figures');
 const { getCosts, getCostsWithKsefPurchases, KSEF_INVOICE_COST_SOURCE, sumCostsByMonth } = await import('@/lib/dashboard/costs');
 const { buildMonthReport } = await import('@/lib/dashboard/pulpit-report');
-const { getReceivables } = await import('@/lib/dashboard/receivables');
-const { receivablesAging } = await import('@/lib/dashboard/receivables-aging');
+const { inflowTerms } = await import('@/lib/dashboard/inflow-terms');
 const { getTopClients, getTopProducts, warsawMonthWindow } = await import('@/lib/dashboard/rankings');
 const { getInflows } = await import('@/lib/dashboard/inflows');
 const {
@@ -26,6 +25,7 @@ const {
   cashFlowOperations,
   monthFlows,
   nextMonthStart,
+  receivedInflows,
   topCashFlowSources,
   upcomingInflows,
   yearsWindowStart,
@@ -42,7 +42,7 @@ const { todayInWarsaw } = await import('@/lib/format/warsaw-date');
 type Supabase = ReturnType<typeof analizyDemoSupabase>;
 type Row = Record<string, unknown>;
 
-/** Czwartek 23.10.2026, 10:00 w Warszawie — środek miesiąca. */
+/** Piątek 23.10.2026, 10:00 w Warszawie — środek miesiąca. */
 const NOW = new Date('2026-10-23T08:00:00Z');
 const T = DEMO_TENANT;
 
@@ -155,14 +155,13 @@ describe('T4 Pulpit: loadery kart na atrapie dają pełne wyniki', () => {
     expect(await readTenantBusinessStart(demo(), T)).toBe('2023-10-01');
   });
 
-  it('Należności: wszystkie trzy kubełki terminu, 1–2 faktury po terminie, suma kolumn = suma karty', async () => {
-    const receivables = await getReceivables(demo(), T, NOW);
-    const aging = receivablesAging(receivables);
-    expect(aging.buckets.map((b) => b.count > 0)).toEqual([true, true, true]);
-    expect(receivables.overdueCount).toBeGreaterThanOrEqual(1);
-    expect(receivables.overdueCount).toBeLessThanOrEqual(2);
-    expect(suma(aging.buckets.map((b) => b.amount))).toBeCloseTo(aging.total, 2);
-    expect(suma(aging.buckets.map((b) => b.pct))).toBe(100);
+  // E11 (D-W): Należności to przyszłe terminy (`inflowTerms`), nie faktury po terminie.
+  it('Należności: wszystkie trzy kolumny terminów, suma kolumn = suma karty', async () => {
+    const today = todayInWarsaw(NOW);
+    const terms = inflowTerms(await getInflows(demo(), T, { from: today }), today);
+    expect(terms.buckets.map((b) => b.count > 0)).toEqual([true, true, true]);
+    expect(suma(terms.buckets.map((b) => b.amount))).toBeCloseTo(terms.total, 2);
+    expect(suma(terms.buckets.map((b) => b.pct))).toBe(100);
   });
 
   it('Rankingi: 5 produktów (z j.m.) i 5 klientów z % zmiany, malejąco', async () => {
@@ -215,17 +214,17 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
     const sb = demo();
     const inflows = await getInflows(sb, T, recent);
     const costs = await getCostsWithKsefPurchases(sb, T, recent);
-    const wplywy = topCashFlowSources(inflows, []);
-    const wydatki = topCashFlowSources([], costs);
+    const wplywy = topCashFlowSources(inflows, [], today);
+    const wydatki = topCashFlowSources([], costs, today);
     expect(wplywy).toHaveLength(5);
     expect(wydatki).toHaveLength(5);
     expect(malejaco(wplywy.map((s) => s.amount))).toBe(true);
     expect(malejaco(wydatki.map((s) => s.amount))).toBe(true);
-    expect(topCashFlowSources(inflows, costs)).toHaveLength(5);
+    expect(topCashFlowSources(inflows, costs, today)).toHaveLength(5);
   });
 
   it('Spodziewane wpływy: co najmniej 5 faktur z terminem w 30 dni, rosnąco po terminie', async () => {
-    const upcoming = upcomingInflows(await getReceivables(demo(), T, NOW), today);
+    const upcoming = upcomingInflows(await getInflows(demo(), T, { from: today }), today);
     expect(upcoming.count).toBeGreaterThanOrEqual(5);
     expect(upcoming.items).toHaveLength(5);
     const dates = upcoming.items.map((i) => i.dueDate);
@@ -234,7 +233,7 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
 
   it('operacje: co najmniej 8 w 12 miesiącach (dwie strony tabeli), od najnowszej', async () => {
     const sb = demo();
-    const ops = cashFlowOperations(await getInflows(sb, T, recent), await getCostsWithKsefPurchases(sb, T, recent));
+    const ops = cashFlowOperations(await getInflows(sb, T, recent), await getCostsWithKsefPurchases(sb, T, recent), today);
     expect(ops.length).toBeGreaterThanOrEqual(8);
     expect(ops.some((o) => o.direction === 'in')).toBe(true);
     expect(ops.some((o) => o.direction === 'out' && o.status === 'pending')).toBe(true);
@@ -282,26 +281,20 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
     }
   });
 
-  it('faktury: paid_at tylko przy pełnej zapłacie, status jak wyzwalacz 00073, vat_total = brutto − netto', async () => {
+  // E11 (D-W): klient nic nie oznacza — demo bez `paid_at`, jak prawdziwa firma po weryfikacji.
+  it('faktury: bez oznaczonych wpłat, status jak wyzwalacz 00073 dla wpłaty 0, vat_total = brutto − netto', async () => {
     const invoices = await wszystkie(demo(), 'invoices');
     const today = todayInWarsaw(NOW);
     expect(invoices.length).toBeGreaterThan(0);
     for (const inv of invoices) {
       const gross = Number(inv.gross_total);
-      const paid = Number(inv.paid_amount);
       expect(Number(inv.vat_total)).toBeCloseTo(gross - Number(inv.net_total), 2);
       expect(inv.sale_date).toBe(inv.issue_date);
       expect(String(inv.issue_date) <= today).toBe(true);
-      if (inv.paid_at !== null) {
-        expect(paid, String(inv.id)).toBe(gross);
-        expect(inv.payment_status).toBe('paid');
-        expect(String(inv.paid_at) <= NOW.toISOString()).toBe(true);
-        expect(String(inv.paid_at) >= `${String(inv.issue_date)}T00:00:00`).toBe(true);
-      } else {
-        expect(paid, String(inv.id)).toBe(0);
-        const due = inv.payment_due_date as string | null;
-        expect(inv.payment_status).toBe(due !== null && due < today ? 'overdue' : 'unpaid');
-      }
+      expect(inv.paid_at, String(inv.id)).toBeNull();
+      expect(Number(inv.paid_amount), String(inv.id)).toBe(0);
+      const due = inv.payment_due_date as string | null;
+      expect(inv.payment_status).toBe(due !== null && due < today ? 'overdue' : 'unpaid');
     }
   });
 
@@ -328,7 +321,7 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
   describe.each(KRANCE)('%s: okna przesuwają się, karty zostają pełne', (_, now) => {
     beforeEach(() => vi.setSystemTime(now));
 
-    it('przychód, koszty i wpłaty bieżącego miesiąca, kubełki należności, wpływy i klienci', async () => {
+    it('przychód, koszty i wpływy bieżącego miesiąca, kolumny należności, wpływy i klienci', async () => {
       const sb = demo(now);
       const today = todayInWarsaw(now);
       const series = await getSalesSeries(sb, T, now, { months: 12, withPrevYear: true });
@@ -341,17 +334,18 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
       expect(costs.some((c) => c.issueDate.startsWith(today.slice(0, 7)))).toBe(true);
       expect(costs.every((c) => c.issueDate <= today)).toBe(true);
 
-      const receivables = await getReceivables(sb, T, now);
-      expect(receivablesAging(receivables).buckets.map((b) => b.count > 0)).toEqual([true, true, true]);
-      expect(upcomingInflows(receivables, today).count).toBeGreaterThanOrEqual(5);
+      const future = await getInflows(sb, T, { from: today });
+      expect(inflowTerms(future, today).buckets.map((b) => b.count > 0)).toEqual([true, true, true]);
+      expect(upcomingInflows(future, today).count).toBeGreaterThanOrEqual(5);
 
       const clients = await getTopClients(sb, T, now);
       expect(clients).toHaveLength(5);
       expect(clients.every((c) => c.changePct !== null)).toBe(true);
 
       const inflows = await getInflows(sb, T, recent);
-      expect(inflows.every((i) => i.paidOn <= today)).toBe(true);
-      expect(topCashFlowSources(inflows, []).length).toBe(5);
+      // Okno do końca miesiąca ma też terminy po dziś — karty liczą tylko wpływy do dziś.
+      expect(receivedInflows(inflows, today).length).toBeGreaterThan(0);
+      expect(topCashFlowSources(inflows, [], today).length).toBe(5);
       await expect(getCashFlowData(sb, T, now)).resolves.toBeDefined();
     });
   });
@@ -422,7 +416,10 @@ describe('atrapa PostgREST-a: operatory loaderów, reszta rzuca', () => {
 
   it('nieobsłużony operator rzuca, zamiast udawać pusty wynik', () => {
     const builder = fakePostgrest(tables).from('tenants').select('id') as unknown as Record<string, unknown>;
-    expect(() => (builder.or as (f: string) => unknown)('id.eq.a')).toThrow();
+    // E11: `or` z prostymi warunkami jest obsłużone; zagnieżdżone i nieznane operatory rzucają.
+    expect(() => (builder.or as (f: string) => unknown)('and(id.eq.a,id.eq.b)')).toThrow(/nieobsługiwane/);
+    expect(() => (builder.or as (f: string) => unknown)('id.like.a%')).toThrow(/nieobsługiwane/);
+    expect(() => (builder.ilike as (c: string, v: string) => unknown)('id', 'a%')).toThrow();
     expect(() => fakePostgrest(tables).from('tenants').select('id').not('id', 'like', 'a%')).toThrow(/nieobsługiwane/);
   });
 });

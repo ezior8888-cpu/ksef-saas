@@ -19,7 +19,8 @@ import { cn } from '@/lib/utils'
 
 /**
  * PLAN-PRAWDZIWE-DANE E6: ostatnie wpłaty i koszty z FaktWay z propsów
- * (kontrahent, „Wpłata · DD.MM.RRRR”, numer dokumentu w dymku); nazwa jest
+ * (kontrahent, „Termin · DD.MM.RRRR” albo „Wpłata · …” przy prawdziwej
+ * zapłacie — E11, numer dokumentu w dymku); nazwa jest
  * linkiem do faktury albo wydatku tylko w trybie prawdziwym (E7 pkt 3).
  */
 type Props = {

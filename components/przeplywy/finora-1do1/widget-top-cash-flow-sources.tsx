@@ -15,7 +15,7 @@ import CardHeaderWithMenu, { type CardMenuItem } from '@/components/dashboard/fi
 import { cn } from '@/lib/utils'
 
 /**
- * PLAN-PRAWDZIWE-DANE E6: źródła = kontrahenci (klienci z wpłat, dostawcy
+ * PLAN-PRAWDZIWE-DANE E6: źródła = kontrahenci (klienci z wpływów — od E11 według terminów płatności, dostawcy
  * z kosztów) z propsów; nazwa jest linkiem do kontrahentów tylko w trybie
  * prawdziwym (E7 pkt 3), wygląd wiersza bez zmian. Długa nazwa firmy jest
  * przycinana, żeby wiersz nie urósł o linię.

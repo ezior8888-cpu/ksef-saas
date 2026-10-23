@@ -58,8 +58,10 @@ const ZWERYFIKOWANA: Proof = { verifiedAt: '2026-10-12T08:00:00Z', verifiedEnvir
  * środowisko i walutę: +2), a pełne koszty czytają faktury zakupu z wydatkami
  * osadzonymi (+1), wydatki o tym samym NIP-ie i numerze (+1) i zwolnienie
  * z VAT (+1).
+ * E11 (D-W) świadomie −2: „Spodziewane wpływy” czytają wpływy (`getInflows`,
+ * jeden odczyt) zamiast należności (`getReceivables`: faktury, korekty i ROZ).
  */
-const READS_PRZEPLYWOW = 48;
+const READS_PRZEPLYWOW = 46;
 
 /** Klasy dzisiejszych (sprzed E6) Przepływów Finory — zrzut z renderu 23.10.2026. */
 const KLASY_FINORY: string[] = JSON.parse(
@@ -135,12 +137,15 @@ afterEach(() => {
 describe('Przepływy przed weryfikacją KSeF: dane przykładowe przez te same loadery', () => {
   it('karty Finory z prawdziwymi podpisami, bez napisów szablonu', async () => {
     const markup = await przeplywy();
+    // E11 (D-W): wpływy według terminów płatności — „Suma wpływów” (napis szablonu sprzed E6 wraca,
+    // bo znowu jest prawdziwy), drugi wiersz aktywności „Termin · …” (demo nie ma oznaczonych wpłat).
     for (const text of [
-      'Przepływy pieniężne', 'Suma wpłat', 'Suma kosztów', 'Tygodniowo', 'Miesięcznie', 'Rocznie',
+      'Przepływy pieniężne', 'Suma wpływów', 'Suma kosztów', 'Tygodniowo', 'Miesięcznie', 'Rocznie',
       'Odłóż na podatek', 'Szacunek PIT od 1 stycznia', 'Szacunek: liniowy, bez ZUS',
       'Wpłynęło w tym miesiącu', 'Koszty w tym miesiącu (brutto)', 'wobec poprzedniego miesiąca',
       'Największe źródła przepływów', 'Spodziewane wpływy', 'Następne 30 dni', 'Termin ',
-      'Ostatnia aktywność', 'Wpłata · ', 'Kontrahent', 'Kategoria', 'Status', 'Przykład',
+      'Ostatnia aktywność', 'Termin · ', 'Kontrahent', 'Kategoria', 'Status', 'Przykład',
+      'Terminy płatności, koszty brutto', 'Wg terminu',
     ]) {
       expect(markup).toContain(text);
     }
@@ -148,7 +153,8 @@ describe('Przepływy przed weryfikacją KSeF: dane przykładowe przez te same lo
       'Cel oszczędnościowy', 'Fundusz awaryjny', 'z celu', 'Przychody w tym miesiącu', 'Wydatki w tym miesiącu',
       'Nadchodzące rachunki', 'Czynsz za biuro', 'Wynagrodzenia', 'Rachunek firmowy', 'Rachunek oszczędnościowy',
       'Internet i media', 'Netflix', 'Allegro', 'Jakub Adamski', 'zrealizowana', 'nieudana', 'subskrypcja',
-      'Suma wpływów', 'Suma wydatków', 'Wpływy i wydatki w czasie', 'Udostępnij', 'Aktualizuj',
+      'Suma wydatków', 'Wpływy i wydatki w czasie', 'Udostępnij', 'Aktualizuj',
+      'Wpłata · ', 'Suma wpłat', 'oznacz', 'zaległ', 'nie potwierdzamy',
     ]) {
       expect(markup).not.toContain(text);
     }
@@ -206,10 +212,11 @@ describe('Przepływy po weryfikacji KSeF: prawdziwe dane', () => {
     state.proof = ZWERYFIKOWANA;
   });
 
-  it('pusta firma: bez znaczników przykładu, pusty stan wpłat z E0', async () => {
+  it('pusta firma: bez znaczników przykładu, pusty stan wpływów bez „oznaczania” (E11)', async () => {
     const markup = await przeplywy(memoryClient({ ksef_history_sync: [] }));
     expect(ZNACZNIKI_PRZYKLADU.filter((z) => markup.includes(z))).toEqual([]);
-    expect(markup).toContain('Wpłat jeszcze nie oznaczono');
+    expect(markup).toContain('Brak faktur z terminem');
+    expect(markup).not.toContain('Wpłat jeszcze nie oznaczono');
     expect(markup).not.toContain('Pobieramy faktury z KSeF');
   });
 
@@ -244,8 +251,11 @@ describe('Przepływy po weryfikacji KSeF: prawdziwe dane', () => {
 
   it('faktura w EUR zabiera tylko karty, które ją czytają; reszta działa', async () => {
     const tables = danePrzykladowe(NOW, 'test');
-    const wzor = tables.invoices!.find((f) => f.paid_at) ?? tables.invoices![0]!;
-    tables.invoices!.push({ ...wzor, id: 'eur-1', currency: 'EUR', issue_date: '2026-10-05', sale_date: '2026-10-05' });
+    // E11: demo nie ma `paid_at` — wzorem jest faktura sprzedaży; EUR z terminem w tym miesiącu.
+    const wzor = tables.invoices!.find((f) => f.direction === 'outgoing')!;
+    tables.invoices!.push({
+      ...wzor, id: 'eur-1', currency: 'EUR', issue_date: '2026-10-05', sale_date: '2026-10-05', payment_due_date: '2026-10-19',
+    });
     const markup = await przeplywy(fakePostgrest(tables), DEMO_TENANT);
     expect(markup).toContain('pomoc@faktway.pl');
     // Koszty nie czytają faktur sprzedaży.
@@ -278,7 +288,9 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
       'prawdziwe',
     );
     expect(dane.tabs.yearly.map((b) => b.inflow)).toEqual([100]);
-    expect(dane.subTitle).toBe('Oznaczone wpłaty i koszty brutto');
+    // E11 (D-W): wpływy według terminów płatności, ta sama długość co dawne „Oznaczone wpłaty i koszty brutto”.
+    expect(dane.subTitle).toBe('Terminy płatności, koszty brutto');
+    expect(dane.subTitleHint).toContain('według terminów płatności');
     const pusty = adaptery.wykresProps(
       { week: [bucket('13.10', 0, 0, 0)], month: [bucket('Paź', 0, 0, 0)], year: [bucket('2026', 0, 0, 0)] },
       'synchronizacja',
@@ -286,12 +298,12 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
     expect(pusty.subTitle).toBe('Pobieramy faktury z KSeF…');
   });
 
-  it('kafel wpłat: bez wpłat „—” i pusty stan E0, nie „0 zł”; jeden punkt dostaje zero na początku', () => {
+  it('kafel wpływów: bez wpływu „—” i pusty stan bez „oznaczania”, nie „0 zł”; jeden punkt dostaje zero na początku', () => {
     const flow = { amount: 0, prevAmount: 500, count: 0, changePct: -100, daily: [{ date: '2026-10-01', value: 0 }] };
     const dane = adaptery.wplywyMiesiacaProps(flow, 'prawdziwe');
     expect(dane.amount).toBe('—');
     expect(dane.changePercentage).toBe('—');
-    expect(dane.comparison).toBe('Wpłat jeszcze nie oznaczono');
+    expect(dane.comparison).toBe('Brak faktur z terminem');
     expect(dane.chartData).toHaveLength(2);
     expect(dane.chartData[0]!.value).toBe(0);
 
@@ -312,13 +324,14 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
       { key: 'in:3', name: 'Konsumenci', direction: 'in' as const, consumers: true, nip: null, amount: 100, count: 1, share: 2 },
     ];
     const prawdziwe = adaptery.zrodlaProps(src, 'prawdziwe');
-    expect(prawdziwe.items.map((s) => s.sourceType)).toEqual(['Klient · 3 wpłaty', 'Dostawca · 5 dokumentów', 'B2C · 1 wpłata']);
+    // E11: wpływ to faktura według terminu, nie oznaczona wpłata.
+    expect(prawdziwe.items.map((s) => s.sourceType)).toEqual(['Klient · 3 faktury', 'Dostawca · 5 dokumentów', 'B2C · 1 faktura']);
     expect(prawdziwe.items.map((s) => s.href)).toEqual(['/contractors', '/contractors', null]);
     expect(prawdziwe.items[1]!.share).toBe(60);
     expect(adaptery.zrodlaProps(src, 'przyklad').items.every((s) => s.href === null)).toBe(true);
   });
 
-  it('spodziewane wpływy: termin dziś / jutro / za N dni, kwota pozostała, zastrzeżenie Z16', () => {
+  it('spodziewane wpływy: termin dziś / jutro / za N dni, kwota pozostała, „według terminów płatności” (E11)', () => {
     const items = [0, 1, 12].map((daysLeft, i) => ({
       id: `f${i}`, name: `Klient ${i}`, internalNumber: `FV/${i}`, dueDate: '2026-10-23', daysLeft, amount: 1850,
     }));
@@ -326,7 +339,8 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
     expect(dane.items.map((b) => b.dueDate)).toEqual(['Termin dziś', 'Termin jutro', 'Termin za 12 dni']);
     expect(dane.items[0]!.amount).toBe('1850,00 zł');
     expect(dane.items[0]!.href).toBe('/invoices/f0');
-    expect(dane.note).toMatch(/Wpłat jeszcze nie potwierdzamy/);
+    expect(dane.note).toMatch(/według terminów płatności/);
+    expect(dane.note).not.toMatch(/nie potwierdzamy/);
   });
 
   it('operacje: kontrahent, rodzaj i data; korekta kosztu in minus to pieniądze na plus', () => {
@@ -370,7 +384,6 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
 
 // ─── Dawna siatka `PrzeplywyGrid` (w kodzie, nieużywana przez stronę od E6) ──
 
-const { default: CashFlowCard } = await import('@/components/przeplywy/finora/chart-cash-flow');
 const { default: VatSummaryCard } = await import('@/components/przeplywy/finora/chart-net-worth');
 const { TaxSavingsGoalCard, VatLimitGoalCard } = await import('@/components/przeplywy/finora/statistics-savings-goal-card');
 const { default: StatisticsAreaStatCard } = await import('@/components/przeplywy/finora/statistics-area-stat-card');
@@ -426,7 +439,9 @@ describe('dawna siatka: jedna karta = jedno źródło awarii', () => {
     expect(slots.map((slot) => (slot.props as { title: string }).title)).toHaveLength(12);
   });
 
-  it('faktura sprzedaży w EUR zatrzymuje karty sprzedaży, a karty ruchów działają', async () => {
+  // E11 (D-W): wpływy to te same faktury sprzedaży co przychód, więc faktura w EUR z terminem w oknie
+  // zatrzymuje też karty wpływów (jak przychód); karta kosztów dalej działa.
+  it('faktura sprzedaży w EUR zatrzymuje karty sprzedaży i wpływów, a karta kosztów działa', async () => {
     const supabase = db({
       invoices: [
         sale('eur', { currency: 'EUR' }),
@@ -437,15 +452,16 @@ describe('dawna siatka: jedna karta = jedno źródło awarii', () => {
 
     const vat = await card(grid.VatSummarySlotCard(props(supabase)));
     const kpir = await card(grid.KpirFinanceSlotCard(props(supabase)));
-    const chart = await card(grid.CashFlowSlotCard(props(supabase)));
     const inflow = await card(grid.InflowMonthSlotCard(props(supabase)));
+    const outflow = await card(grid.OutflowMonthSlotCard(props(supabase)));
 
     expect(vat.type).toBe(grid.PrzeplywyCardError);
     expect(String(vat.props.message)).toMatch(/PLN/);
     expect(kpir.type).toBe(grid.PrzeplywyCardError);
-    expect(chart.type).toBe(CashFlowCard);
-    expect(inflow.type).toBe(StatisticsAreaStatCard);
-    expect((inflow.props.flow as { amount: number }).amount).toBe(1230);
+    expect(inflow.type).toBe(grid.PrzeplywyCardError);
+    expect(String(inflow.props.message)).toMatch(/PLN/);
+    expect(outflow.type).toBe(StatisticsAreaStatCard);
+    expect((outflow.props.flow as { amount: number }).amount).toBe(123);
   });
 
   it('dane z bazy idą do kart sprzedaży i VAT', async () => {

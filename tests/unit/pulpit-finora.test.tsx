@@ -66,8 +66,10 @@ const NOW = new Date('2026-10-23T08:00:00Z');
  * (`getCosts` sprawdza ich środowisko i walutę: +2), a pełne koszty czytają
  * faktury zakupu z wydatkami osadzonymi (+1), wydatki o tym samym NIP-ie
  * i numerze (+1) i zwolnienie z VAT (+1).
+ * E11 (D-W) świadomie −2: Należności czytają wpływy od dziś (`getInflows`,
+ * jeden odczyt) zamiast `getReceivables` (faktury, korekty i ROZ).
  */
-const READS_PULPITU = 29;
+const READS_PULPITU = 27;
 const ZWERYFIKOWANA: Proof = { verifiedAt: '2026-10-12T08:00:00Z', verifiedEnvironment: 'test' };
 
 async function html(node: ReactNode): Promise<string> {
@@ -266,20 +268,23 @@ describe('Pulpit przed weryfikacją KSeF: dane przykładowe przez te same loader
       'Finanse', 'Ostatnie 7 miesięcy', 'Raport', 'Ten miesiąc', 'Zobacz przepływy',
       'Faktury w KSeF', 'Średnia faktura', 'Przychód netto', 'VAT należny', 'Ostatni rok',
       'Należności', 'Szczegóły', 'Najlepiej sprzedające się', 'Najwięksi klienci', 'Przykład',
+      // E11 (D-W): Należności to przyszłe terminy płatności, nie zaległości.
+      'Ten tydzień', 'Do 30 dni', 'Później', 'według terminów płatności',
     ]) {
       expect(markup).toContain(text);
     }
     for (const text of [
       'Przegląd roczny', 'Zobacz raport', 'Zamówienia', 'Zysk łącznie', 'Przychód łącznie', 'Wyświetlenia',
       'Odwiedzający', 'Najczęściej kupowane', 'Komputer', 'Tablet', 'Telefon', 'Samsung', 'Udostępnij',
-      'Aktualizuj', 'Total Orders', 'View Report',
+      'Aktualizuj', 'Total Orders', 'View Report', 'zaległe', 'po terminie', 'oznaczonych wpłat',
     ]) {
       expect(markup).not.toContain(text);
     }
     expect(markup).not.toMatch(/\$\d/);
     expect(markup).not.toContain('/images/avatars');
     expect(markup).toContain('href="/przeplywy"');
-    expect(markup).toContain('href="/payments/overdue"');
+    // E11: „Szczegóły” Należności prowadzą do Spodziewanych wpływów (Przepływy), nie do listy zaległości.
+    expect(markup).not.toContain('href="/payments/overdue"');
   });
 
   it('siatka Finory bez zmian: te same kontenery col-span', async () => {
@@ -365,11 +370,11 @@ describe('Odporność i koszt: karty czytają osobno', () => {
     const blad = 'Raport wstrzymany: faktura sprzedaży nie ma potwierdzonej waluty PLN.';
     // Finanse i VAT (wspólne okno 12 miesięcy) oraz rankingi (12 + poprzednie 12).
     expect(markup.split(blad).length - 1).toBe(3);
-    // Kafle, przychód (5 miesięcy i rok wcześniej) i należności zostają.
+    // Kafle, przychód (5 miesięcy i rok wcześniej) i należności (przyszłe terminy, E11) zostają.
     expect(markup).toContain('Faktury w KSeF');
     expect(markup).toContain('Średnia faktura');
     expect(markup).toContain('Przychód netto');
-    expect(markup).toMatch(/\d+% zaległe/);
+    expect(markup).toContain('Ten tydzień');
   });
 
   it('T9: liczba odczytów bazy na cały Pulpit — wzrost wymaga świadomej zmiany tej liczby', async () => {

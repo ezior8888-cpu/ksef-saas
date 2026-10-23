@@ -20,7 +20,6 @@ import {
 import { getCostsWithKsefPurchases } from '@/lib/dashboard/costs';
 import { getInflows } from '@/lib/dashboard/inflows';
 import { warsawMonthWindow } from '@/lib/dashboard/rankings';
-import { getReceivables } from '@/lib/dashboard/receivables';
 import { getVatLimit } from '@/lib/dashboard/vat-limit';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
@@ -55,10 +54,13 @@ import UpcomingBillsCard from './widget-upcoming-bills';
  * (`PrzeplywyCardError`: „napisz do nas”), reszta Przepływów działa.
  *
  * Ładowarki jak w dawnej siatce (`components/przeplywy/przeplywy-grid.tsx`):
- * wpłaty i koszty OSOBNO (strażnik jednego źródła nie zabiera kafla
+ * wpływy i koszty OSOBNO (strażnik jednego źródła nie zabiera kafla
  * drugiego), każde w dwóch oknach — 12 miesięcy (kafle, źródła, operacje,
  * tabela) i 5 lat (wykres, zakładka „Rocznie”); React `cache()` — jedno
- * zapytanie na żądanie.
+ * zapytanie na żądanie. Wpływy według terminów płatności (E11, D-W): okno
+ * wpływów nie ma końca, więc ten sam odczyt 12 miesięcy daje też przyszłe
+ * terminy do „Spodziewanych wpływów”; karty „do dziś” odcinają je same
+ * (`receivedInflows` w `cash-movements`).
  *
  * Oba tryby idą tymi samymi slotami: w trybie `przyklad` `supabase` to
  * atrapa bazy (`kontekstDanych`), w pozostałych — sesja klienta (RLS).
@@ -90,8 +92,9 @@ function movementsRange(nowIso: string, span: Span) {
     : warsawMonthWindow(now, RECENT_MONTHS);
 }
 
+/** Wpływy od początku okna, bez końca (przyszłe terminy też — Spodziewane wpływy). */
 const loadInflows = cache((supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span) =>
-  getInflows(supabase, tenantId, movementsRange(nowIso, span)));
+  getInflows(supabase, tenantId, { from: movementsRange(nowIso, span).from }));
 
 /** E10 (D-K): koszty = faktury zakupu z KSeF + wydatki spoza KSeF (KPiR bez zmian). */
 const loadCosts = cache((supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span) =>
@@ -106,8 +109,8 @@ async function loadMovements(supabase: PageContext['supabase'], tenantId: string
 }
 
 const loadOperations = cache(async (supabase: PageContext['supabase'], tenantId: string, nowIso: string) => {
-  const { inflows, costs } = await loadMovements(supabase, tenantId, nowIso, 'recent');
-  return cashFlowOperations(inflows, costs);
+  const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'recent');
+  return cashFlowOperations(inflows, costs, today);
 });
 
 /** Dane karty albo karta błędu z treścią wyjątku dla klienta. */
@@ -209,6 +212,7 @@ async function WykresKarta({ supabase, tenantId, nowIso, tryb, className }: Slot
         key={tenantId}
         tabs={dane.tabs}
         subTitle={dane.subTitle}
+        subTitleHint={dane.subTitleHint}
         menuItems={[ODSWIEZ, { label: 'Wydatki', href: '/expenses' }]}
         className={className}
       />
@@ -278,8 +282,8 @@ async function KosztyKarta({ supabase, tenantId, nowIso, tryb, kosztyKsefOd, cla
 
 async function ZrodlaKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte('Największe źródła przepływów', className, async () => {
-    const { inflows, costs } = await loadMovements(supabase, tenantId, nowIso, 'recent');
-    const dane = zrodlaProps(topCashFlowSources(inflows, costs), tryb);
+    const { inflows, costs, today } = await loadMovements(supabase, tenantId, nowIso, 'recent');
+    const dane = zrodlaProps(topCashFlowSources(inflows, costs, today), tryb);
     return (
       <TopCashFlowSourcesCard
         title="Największe źródła przepływów"
@@ -298,8 +302,8 @@ async function ZrodlaKarta({ supabase, tenantId, nowIso, tryb, className }: Slot
 
 async function SpodziewaneKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte('Spodziewane wpływy', className, async () => {
-    const now = new Date(nowIso);
-    const upcoming = upcomingInflows(await getReceivables(supabase, tenantId, now), todayInWarsaw(now));
+    const inflows = await loadInflows(supabase, tenantId, nowIso, 'recent');
+    const upcoming = upcomingInflows(inflows, todayInWarsaw(new Date(nowIso)));
     const dane = wplywySpodziewaneProps(upcoming.items, tryb);
     return (
       <UpcomingBillsCard

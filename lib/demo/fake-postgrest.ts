@@ -10,6 +10,8 @@ import type { PageContext } from '@/lib/supabase/page-context';
  * wartość spod ścieżki, a osadzenie po kluczu obcym jednej kolumny
  * (`tabela!tabela_kolumna_fkey(kolumny)`) — wiersze tabeli podrzędnej, których
  * `kolumna` = `id` wiersza (bez filtrów, jak PostgREST bez `!inner`).
+ * `or('a.gte.x,b->c->>d.eq.y')` — alternatywa prostych warunków (E11:
+ * dzień wpływu z kilku kolumn), bez zagnieżdżeń.
  * Operator, którego tu nie ma, rzuca (nie ma
  * metody albo `not(...)` z nieznanym operatorem) — loader z nowym filtrem
  * nie dostanie po cichu pustego wyniku (PLAN-PRAWDZIWE-DANE §7 E2).
@@ -90,6 +92,43 @@ function valueAt(row: Row, path: readonly string[]): unknown {
   return value ?? null;
 }
 
+const OR_CONDITION = /^(\w+(?:->>?\w+)*)\.(eq|neq|gt|gte|lt|lte|is)\.(.*)$/;
+
+/**
+ * `or(...)` PostgREST-a: warunki `kolumna[->klucz->>pole].operator.wartość`
+ * po przecinku, wiersz pasuje, gdy spełnia którykolwiek. Porównania jak
+ * w `gte`/`lt` (tekstowo, `null` nie spełnia żadnego poza `is.null`).
+ * Zagnieżdżone `and(...)`/`or(...)` i inne operatory rzucają.
+ */
+export function orPredicate(filters: string): (row: Row) => boolean {
+  if (/[()]/.test(filters)) throw new Error(`fakePostgrest: nieobsługiwane or(${filters})`);
+  const conditions = filters.split(',').map((part) => {
+    const m = OR_CONDITION.exec(part.trim());
+    if (!m) throw new Error(`fakePostgrest: nieobsługiwane or(${filters})`);
+    const path = m[1]!.split(/->>?/);
+    const op = m[2]!;
+    const value = m[3]!;
+    return (row: Row) => {
+      const actual = valueAt(row, path);
+      if (op === 'is') {
+        if (value !== 'null') throw new Error(`fakePostgrest: nieobsługiwane or(${filters})`);
+        return actual == null;
+      }
+      if (actual == null) return false;
+      const text = String(actual);
+      switch (op) {
+        case 'eq': return text === value;
+        case 'neq': return text !== value;
+        case 'gt': return text > value;
+        case 'gte': return text >= value;
+        case 'lt': return text < value;
+        default: return text <= value;
+      }
+    };
+  });
+  return (row) => conditions.some((condition) => condition(row));
+}
+
 function project(tables: Tables, row: Row, columns: readonly Column[]): Row {
   return Object.fromEntries(columns.map((c) => {
     if (!c.embed) return [c.key, valueAt(row, c.path)];
@@ -141,6 +180,7 @@ export function fakePostgrest(tables: Tables, reads: Read[] = []): PageContext['
         gte(c: string, v: string) { predicates.push((r) => r[c] != null && String(r[c]) >= v); return builder; },
         lt(c: string, v: string) { predicates.push((r) => r[c] != null && String(r[c]) < v); return builder; },
         in(c: string, v: unknown[]) { predicates.push((r) => v.includes(r[c])); return builder; },
+        or(filters: string) { predicates.push(orPredicate(filters)); return builder; },
         is(c: string, v: null) { predicates.push((r) => (v === null ? r[c] == null : r[c] === v)); return builder; },
         /** `not(c, 'is', null)` i `not(c, 'eq', '{}')` (pusta tablica) — tylko te, których używa kod. */
         not(c: string, op: string, v: unknown) {
