@@ -1275,6 +1275,22 @@ html:not(.dark) .ff-dashboard tbody tr:not([data-slot])[class*='hover:bg-']:hove
   }
 }
 
+/* Wejście treści Pulpitu i Przepływów (poprawka Bartosza 23.10.2026:
+ * „przejścia pomiędzy zakładkami nie są już takie clean”). Strona czeka na
+ * dane wszystkich kart i pojawia się RAZ, w całości — ten sam ruch co szablon
+ * trasy, bo szablon animuje się już przy kliknięciu (na pustym `loading.tsx`),
+ * a treść przychodzi chwilę później. `backwards` z tego samego powodu co
+ * wyżej: po animacji żadnego `transform`, więc żadnego bloku zawierającego. */
+.ff-route-content {
+  animation: ff-route-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-route-content {
+    animation: none;
+  }
+}
+
 
 /* Marketing shell — mesh/orby jak w `.ff-dashboard`, bez layoutu panelu. */
 .ff-marketing-shell {

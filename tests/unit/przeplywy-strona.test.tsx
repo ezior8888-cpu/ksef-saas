@@ -88,6 +88,9 @@ const KLASY_DODANE = [
   // Recenzja 2: plakietka obok tytułu zwęża się na wąskim ekranie (`DemoBadge skracana`: `shrink`
   // zamiast `shrink-0`, napis z `truncate`), żeby tytuł karty nie łamał się w drugą linię przy 320–360 px.
   'shrink',
+  // Poprawka Bartosza 23.10.2026 („przejścia nie są już takie clean”): strona wchodzi raz, w całości,
+  // z animacją szablonu trasy (`app/globals.css`) — opakowanie bez wpływu na układ siatki.
+  'ff-route-content',
 ];
 /**
  * Klasy usunięte z konieczności danych: `capitalize` dawała wielką literę
@@ -122,14 +125,12 @@ function decode(text: string): string {
     .replaceAll('&amp;', '&');
 }
 
-/** Prerender strumieniuje szkielet slotu, potem kartę — do porównań liczy się karta. */
-function bezSzkieletow(markup: string): string {
-  return markup.replace(/<!--\$\?--><template id="B:\d+"><\/template>[\s\S]*?<!--\/\$-->/g, '');
-}
-
+// Poprawka 23.10.2026: karty nie mają już `Suspense` ani szkieletów — prerender oddaje gotową
+// stronę bez podmian, więc dawne wycinanie szkieletów (`bezSzkieletow`) odpadło; gdyby szkielet
+// wrócił, jego klasy wyjdą w porównaniu niżej (i w `finora-wyglad-ladowanie.test.tsx`).
 function klasy(markup: string): Set<string> {
   const out = new Set<string>();
-  for (const m of bezSzkieletow(markup).matchAll(/class="([^"]*)"/g)) {
+  for (const m of markup.matchAll(/class="([^"]*)"/g)) {
     for (const c of decode(m[1]!).split(/\s+/)) if (c) out.add(c);
   }
   return out;
@@ -137,7 +138,7 @@ function klasy(markup: string): Set<string> {
 
 function przeplywy(supabase: unknown = memoryClient({}), tenantId = 'firma-a') {
   state.ctx = { supabase, tenantId, user: { id: 'uzytkownik-1', email: null }, role: 'owner' };
-  return PrzeplywyPage().then(html).then(bezSzkieletow);
+  return PrzeplywyPage().then(html);
 }
 
 beforeEach(() => {
@@ -191,9 +192,10 @@ describe('Przepływy przed weryfikacją KSeF: dane przykładowe przez te same lo
     const markup = await przeplywy();
     expect(markup).toContain('<h1 class="sr-only">Przepływy pieniężne</h1>');
     expect(markup).toContain('<div class="grid grid-cols-6 gap-6">');
-    // Prerender dopisuje gotowe sloty w kolejności ukończenia, więc porównujemy zbiór.
+    // Poprawka 23.10.2026: strona renderuje się raz, w całości — karty w kolejności siatki Finory
+    // (dawniej prerender dopisywał sloty w kolejności ukończenia i porównywaliśmy zbiór).
     const spans = [...markup.matchAll(/class="[^"]*?((?:col-span-full)(?: [a-z]+:col-span-\d)?)"/g)].map((m) => m[1]);
-    expect(spans.sort()).toEqual([
+    expect(spans).toEqual([
       'col-span-full xl:col-span-4',
       'col-span-full xl:col-span-2',
       'col-span-full sm:col-span-3',
@@ -202,7 +204,7 @@ describe('Przepływy przed weryfikacją KSeF: dane przykładowe przez te same lo
       'col-span-full lg:col-span-2',
       'col-span-full lg:col-span-2',
       'col-span-full',
-    ].sort());
+    ]);
   });
 
   it('karta nie zmienia klas układu: ten sam zbiór klas co Przepływy Finory', async () => {

@@ -88,34 +88,40 @@ const reportIcons: Record<FinanceReportRow['kind'], { icon: ReactNode; className
 
 const zl = (n: number) => `${formatPlMoney(n)} zł`
 
-/** Krok osi jak w recharts (1, 2, 2,5, 5 × 10ⁿ) — do oszacowania najdłuższej etykiety. */
-function niceStep(raw: number): number {
-  if (!(raw > 0)) return 1
-  const power = 10 ** Math.floor(Math.log10(raw))
-  const unit = [1, 2, 2.5, 5, 10].find(u => u * power >= raw) ?? 10
+/** Kroki „ładnej” osi (× 10ⁿ): etykiety to okrągłe kwoty, jak 0–50 w Finorze. */
+const NICE_STEPS = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
 
-  return unit * power
+/** Tyle przedziałów co w Finorze (etykiety 0, 10, 20, 30, 40, 50): sześć etykiet. */
+const Y_INTERVALS = 5
+
+/**
+ * Oś Y jak w Finorze (poprawka Bartosza 23.10.2026: „przywróć stare wykresy”):
+ * zamiast stałej skali 0–50 — „ładne” maksimum z danych i sześć
+ * etykiet od zera. Przy danych w skali Finory (do 50 tys.) to dokładnie
+ * 0, 10, 20, 30, 40, 50 (tys.). Pusty wykres — skala Finory 0–50.
+ */
+export function financeYAxis(max: number): { max: number; ticks: number[] } {
+  const raw = max > 0 ? max / Y_INTERVALS : 10
+  const power = 10 ** Math.floor(Math.log10(raw))
+  const step = (NICE_STEPS.find(u => u * power >= raw - 1e-9) ?? 10) * power
+
+  return { max: step * Y_INTERVALS, ticks: Array.from({ length: Y_INTERVALS + 1 }, (_, i) => step * i) }
 }
 
 /**
- * Szerokość osi Y tylko tyle, by zmieściły się etykiety („125 tys.”). Dla
- * kwot poniżej tysiąca daje 30 px, czyli dokładnie dawne `margin left -30`
+ * Szerokość osi Y tylko tyle, by zmieściły się etykiety („50 tys.”). Dla
+ * etykiet Finory („0”–„50”) daje 30 px, czyli dokładnie dawne `margin left -30`
  * przy domyślnej szerokości osi 60.
  */
-function yAxisWidth(max: number): number {
-  const step = niceStep(max / 4)
-  let longest = 1
-
-  for (let tick = 0; tick <= max + step; tick += step) {
-    longest = Math.max(longest, formatPlCompactNumber(tick).length)
-  }
+function yAxisWidth(ticks: readonly number[]): number {
+  const longest = Math.max(1, ...ticks.map(tick => formatPlCompactNumber(tick).length))
 
   return Math.max(30, Math.ceil(longest * 6 + 8))
 }
 
 const FinanceCard = ({ subTitle, costsLabel, months, report, financeMenu, reportMenu, demo, className }: FinanceCardProps) => {
   const config = { ...financeChartConfig, costs: { ...financeChartConfig.costs, label: costsLabel } } satisfies ChartConfig
-  const max = Math.max(0, ...months.map(m => m.profit + m.vat + m.costs))
+  const axis = financeYAxis(Math.max(0, ...months.map(m => m.profit + m.vat + m.costs)))
 
   return (
     <Card className={cn('grid grid-cols-1 gap-x-2 gap-y-4 lg:grid-cols-5', className)}>
@@ -134,7 +140,9 @@ const FinanceCard = ({ subTitle, costsLabel, months, report, financeMenu, report
                 tick={{ fill: 'var(--muted-foreground)' }}
               />
               <YAxis
-                width={yAxisWidth(max)}
+                domain={[0, axis.max]}
+                ticks={axis.ticks}
+                width={yAxisWidth(axis.ticks)}
                 tickFormatter={value => formatPlCompactNumber(Number(value))}
                 tickLine={false}
                 tickMargin={8}

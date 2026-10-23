@@ -1,4 +1,4 @@
-import { cache, Suspense, type ReactNode } from 'react';
+import { cache, type ReactNode } from 'react';
 import {
   RiBuilding2Line,
   RiFileList3Line,
@@ -10,8 +10,6 @@ import {
 import { PulpitCardError } from '@/components/dashboard/pulpit/card-states';
 import { PULPIT_GENERIC_ERROR, pulpitErrorMessage } from '@/components/dashboard/pulpit/pulpit-grid';
 import { SectionErrorBoundary } from '@/components/dashboard/section-error-boundary';
-import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { shiftMonthKey } from '@/lib/analytics-finance/months';
 import { getSalesInvoices, salesMonthStats } from '@/lib/analytics-finance/sales';
 import { getCostsWithKsefPurchases, sumCostsByMonth } from '@/lib/dashboard/costs';
@@ -24,7 +22,6 @@ import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 import { isSubjectiveVatExemption, readTenantVatExemption } from '@/lib/invoices/vat-exemption';
 import type { PageContext } from '@/lib/supabase/page-context';
-import { cn } from '@/lib/utils';
 
 import {
   ODSWIEZ,
@@ -46,10 +43,17 @@ import TopProductsCard from './widget-top-products';
 
 /**
  * Sloty Pulpitu (PLAN-PRAWDZIWE-DANE §5.6, E5): każda karta Finory to osobny
- * asynchroniczny Server Component w `<Suspense>` i `SectionErrorBoundary`.
+ * asynchroniczny loader z własną kartą błędu i `SectionErrorBoundary`.
  * Strażnik, który rzuci (faktura w EUR, przyjęta faktura bez środowiska),
  * zabiera JEDNĄ kartę z treścią wyjątku (`pulpitErrorMessage`), reszta
  * Pulpitu działa. Wzorzec: `components/analizy/card-slot.tsx`.
+ *
+ * Ładowanie jak przed E5 (poprawka Bartosza 23.10.2026: „przejścia nie są już
+ * takie clean”): bez `Suspense` i szkieletu w każdej karcie. Strona pobiera
+ * dane wszystkich kart RÓWNOLEGLE (`Promise.all` na slotach, które nigdy nie
+ * odrzucają — błąd to karta błędu) i renderuje się raz, w całości; wejście
+ * treści animuje `ff-route-content`, a trasa ma własny, pusty `loading.tsx`
+ * zamiast obcego szkieletu segmentu.
  *
  * Oba tryby idą tymi samymi slotami: w trybie `przyklad` `supabase` to
  * atrapa bazy z danymi przykładowymi (`kontekstDanych`), w pozostałych —
@@ -98,63 +102,18 @@ async function zaladujKarte(title: string, className: string | undefined, render
   }
 }
 
-// ─── Szkielety w kształcie kart Finory (bez skoku układu) ─────────────────
-
-type Wariant = 'finanse' | 'kafel' | 'wykres' | 'naleznosci' | 'listy';
-
-function Szkielet({ wariant, className }: { wariant: Wariant; className?: string }) {
-  if (wariant === 'finanse') {
-    return (
-      <Card className={cn('grid grid-cols-1 gap-x-2 gap-y-4 lg:grid-cols-5', className)} aria-busy="true">
-        <CardContent className="flex flex-col gap-10 lg:col-span-3">
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="min-h-65 w-full" />
-        </CardContent>
-        <CardContent className="flex flex-col gap-6 lg:col-span-2">
-          <Skeleton className="h-5 w-32" />
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-9 w-full" />
-          ))}
-        </CardContent>
-      </Card>
-    );
-  }
-  if (wariant === 'listy') {
-    return (
-      <Card className={cn('gap-x-2 gap-y-6 lg:flex-row', className)} aria-busy="true">
-        {[0, 1].map((side) => (
-          <CardContent key={side} className="flex flex-1 flex-col gap-4">
-            <Skeleton className="h-5 w-40" />
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="size-9 shrink-0 rounded-full" />
-                <Skeleton className="h-4 flex-1" />
-              </div>
-            ))}
-          </CardContent>
-        ))}
-      </Card>
-    );
-  }
-  return (
-    <Card className={className} aria-busy="true">
-      <CardContent className="flex flex-col gap-4">
-        {wariant === 'kafel' ? <Skeleton className="size-9.5 rounded-full" /> : <Skeleton className="h-5 w-28" />}
-        {wariant === 'kafel' ? <Skeleton className="h-6 w-24" /> : null}
-        {wariant === 'wykres' ? <Skeleton className="h-31 w-full" /> : null}
-        {wariant === 'naleznosci' ? <Skeleton className="min-h-35 w-full" /> : null}
-        <Skeleton className="h-5 w-20" />
-      </CardContent>
-    </Card>
-  );
-}
-
-function Slot({ title, wariant, className, children }: { title: string; wariant: Wariant; className?: string; children: ReactNode }) {
+/**
+ * Karta w granicy błędu renderu (komponent kliencki karty). Dane są już
+ * pobrane, a wyjątek loadera to karta błędu — slot nigdy nie odrzuca, więc
+ * `Promise.all` strony działa jak `Promise.allSettled`.
+ */
+async function slot(title: string, className: string | undefined, karta: () => Promise<ReactNode>) {
+  const tresc = await zaladujKarte(title, className, karta);
   return (
     <SectionErrorBoundary
       fallback={<PulpitCardError title={title} message="Nie udało się wyświetlić karty." className={className} />}
     >
-      <Suspense fallback={<Szkielet wariant={wariant} className={className} />}>{children}</Suspense>
+      {tresc}
     </SectionErrorBoundary>
   );
 }
@@ -318,60 +277,32 @@ async function RankingiKarta({ supabase, tenantId, nowIso, tryb, className }: Sl
   });
 }
 
-// ─── Sloty (karta + Suspense + granica błędu) ─────────────────────────────
+// ─── Sloty (karta + granica błędu; bez Suspense — strona czeka na wszystkie) ─
 
 export function FinanseSlot(props: SlotProps) {
-  return (
-    <Slot title="Finanse" wariant="finanse" className={props.className}>
-      <FinanseKarta {...props} />
-    </Slot>
-  );
+  return slot('Finanse', props.className, () => FinanseKarta(props));
 }
 
 export function KafelFakturSlot(props: SlotProps) {
-  return (
-    <Slot title="Faktury w KSeF" wariant="kafel" className={props.className}>
-      <KafelFakturKarta {...props} />
-    </Slot>
-  );
+  return slot('Faktury w KSeF', props.className, () => KafelFakturKarta(props));
 }
 
 export function KafelSredniejSlot(props: SlotProps) {
-  return (
-    <Slot title="Średnia faktura" wariant="kafel" className={props.className}>
-      <KafelSredniejKarta {...props} />
-    </Slot>
-  );
+  return slot('Średnia faktura', props.className, () => KafelSredniejKarta(props));
 }
 
 export function PrzychodSlot(props: SlotProps) {
-  return (
-    <Slot title="Przychód netto" wariant="wykres" className={props.className}>
-      <PrzychodKarta {...props} />
-    </Slot>
-  );
+  return slot('Przychód netto', props.className, () => PrzychodKarta(props));
 }
 
 export function VatSlot(props: SlotProps) {
-  return (
-    <Slot title="VAT należny" wariant="wykres" className={props.className}>
-      <VatKarta {...props} />
-    </Slot>
-  );
+  return slot('VAT należny', props.className, () => VatKarta(props));
 }
 
 export function NaleznosciSlot(props: SlotProps) {
-  return (
-    <Slot title="Należności" wariant="naleznosci" className={props.className}>
-      <NaleznosciKarta {...props} />
-    </Slot>
-  );
+  return slot('Należności', props.className, () => NaleznosciKarta(props));
 }
 
 export function RankingiSlot(props: SlotProps) {
-  return (
-    <Slot title="Najlepiej sprzedające się" wariant="listy" className={props.className}>
-      <RankingiKarta {...props} />
-    </Slot>
-  );
+  return slot('Najlepiej sprzedające się', props.className, () => RankingiKarta(props));
 }
