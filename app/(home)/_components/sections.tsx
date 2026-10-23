@@ -11,7 +11,8 @@ import {
 
 import { PRICE_GROSS, TRIAL_DAYS } from '@/lib/billing/pricing';
 
-import { BandGlow, ButtonLink, Container, SectionHeading } from './ui';
+import { Reveal, RevealGroup, RevealItem } from '@/components/site/motion';
+import { BandGlow, ButtonLink, Container, SectionHeading } from '@/components/site/ui';
 
 /*
  * Opisy funkcji pochodzą z poprzedniej strony głównej, cennika i pytań,
@@ -61,17 +62,17 @@ export function Features() {
           title="Od faktury do księgowej, bez przepisywania"
           lead="FaktWay prowadzi fakturę przez KSeF aż do Twojej księgowej. Ty wystawiasz, my pilnujemy reszty."
         />
-        <ul className="mx-auto mt-16 grid max-w-5xl gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+        <RevealGroup as="ul" className="mx-auto mt-16 grid max-w-5xl gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map(({ icon: Icon, title, text }) => (
-            <li key={title}>
+            <RevealItem as="li" key={title}>
               <span className="flex size-11 items-center justify-center rounded-xl bg-accent text-accent-foreground">
                 <Icon aria-hidden className="size-5" />
               </span>
               <h3 className="mt-5 text-lg font-semibold">{title}</h3>
               <p className="mt-2 text-pretty text-muted-foreground">{text}</p>
-            </li>
+            </RevealItem>
           ))}
-        </ul>
+        </RevealGroup>
       </Container>
     </section>
   );
@@ -97,12 +98,12 @@ export function Pricing() {
           title="Jeden plan, jedna cena"
           lead="Wszystkie funkcje od pierwszego dnia. Płacisz co miesiąc, bez umowy na rok."
         />
-        <div className="mx-auto mt-14 max-w-md rounded-3xl bg-primary p-8 text-primary-foreground shadow-xl shadow-primary/20 sm:p-10">
+        <Reveal y={40} className="mx-auto mt-14 max-w-md rounded-3xl bg-primary p-8 text-primary-foreground shadow-xl shadow-primary/20 sm:p-10">
           <h3 className="text-lg font-semibold">FaktWay</h3>
-          <p className="mt-1 text-sm text-primary-foreground/80">Dla firm i księgowych.</p>
+          <p className="mt-1 text-sm text-primary-foreground">Dla firm i księgowych.</p>
           <p className="mt-6 flex items-baseline gap-2">
             <span className="text-5xl font-semibold tracking-tight">{PRICE_GROSS}</span>
-            <span className="text-sm text-primary-foreground/80">/mies. z VAT</span>
+            <span className="text-sm text-primary-foreground">/mies. z VAT</span>
           </p>
           <ButtonLink href="/register" variant="inverse" className="mt-8 w-full">
             Wypróbuj za darmo
@@ -115,7 +116,7 @@ export function Pricing() {
               </li>
             ))}
           </ul>
-        </div>
+        </Reveal>
       </Container>
     </section>
   );
@@ -158,7 +159,7 @@ export function Faq() {
   return (
     <section id="faq" aria-labelledby="faq-title" className="bg-muted/50 py-20 sm:py-28">
       <Container>
-        <div className="max-w-2xl">
+        <Reveal className="max-w-2xl">
           <h2 id="faq-title" className="text-3xl font-semibold tracking-tight sm:text-4xl">
             Pytania i odpowiedzi
           </h2>
@@ -169,10 +170,11 @@ export function Faq() {
             </Link>
             .
           </p>
-        </div>
-        <div className="mt-14 grid gap-10 lg:grid-cols-3 lg:gap-8">
+        </Reveal>
+        <RevealGroup className="mt-14 grid gap-10 lg:grid-cols-3 lg:gap-8">
           {QUESTIONS.map((column, i) => (
-            <dl key={i} className="flex flex-col gap-10">
+            <RevealItem key={i}>
+            <dl className="flex flex-col gap-10">
               {column.map(({ q, a }) => (
                 <div key={q}>
                   <dt className="text-lg font-semibold">{q}</dt>
@@ -180,8 +182,9 @@ export function Faq() {
                 </div>
               ))}
             </dl>
+            </RevealItem>
           ))}
-        </div>
+        </RevealGroup>
       </Container>
     </section>
   );
@@ -195,17 +198,17 @@ export function CallToAction() {
     >
       <BandGlow className="rotate-180" />
       <Container className="relative">
-        <div className="mx-auto max-w-xl text-center">
+        <Reveal className="mx-auto max-w-xl text-center">
           <h2 id="start-title" className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
             Wystaw pierwszą fakturę jeszcze dziś
           </h2>
-          <p className="mt-4 text-lg text-pretty text-primary-foreground/80">
+          <p className="mt-4 text-lg text-pretty text-primary-foreground">
             {TRIAL_DAYS} dni za darmo. Rezygnujesz, kiedy chcesz.
           </p>
           <ButtonLink href="/register" variant="inverse" className="mt-10">
             Wypróbuj za darmo
           </ButtonLink>
-        </div>
+        </Reveal>
       </Container>
     </section>
   );

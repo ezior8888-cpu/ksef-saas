@@ -1,13 +1,14 @@
 import Link from 'next/link';
 
 import { MobileMenu } from './mobile-menu';
+import { Reveal } from './motion';
 import { ButtonLink, Container, Wordmark } from './ui';
 
 export const NAV_LINKS = [
-  { label: 'Funkcje', href: '#funkcje' },
-  { label: 'Agent FLO', href: '#flo' },
-  { label: 'Cennik', href: '#pricing' },
-  { label: 'Pytania', href: '#faq' },
+  { label: 'Funkcje', href: '/#funkcje' },
+  { label: 'Agent FLO', href: '/#flo' },
+  { label: 'Cennik', href: '/#pricing' },
+  { label: 'Pytania', href: '/#faq' },
   { label: 'Blog', href: '/blog' },
 ] as const;
 
@@ -15,6 +16,7 @@ export function SiteHeader() {
   return (
     <header className="py-6 sm:py-8">
       <Container>
+        <Reveal onLoad y={-12}>
         <nav aria-label="Główna" className="relative flex items-center justify-between">
           <div className="flex items-center gap-10">
             <Link href="/" aria-label="FaktWay, strona główna">
@@ -50,6 +52,7 @@ export function SiteHeader() {
             <MobileMenu links={NAV_LINKS} />
           </div>
         </nav>
+        </Reveal>
       </Container>
     </header>
   );

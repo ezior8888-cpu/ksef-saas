@@ -1,12 +1,11 @@
 import type { Metadata } from 'next';
 
+import { SiteShell } from '@/components/site/site-shell';
 import { PRICE_PER_MONTH, TRIAL_DAYS } from '@/lib/billing/pricing';
 
 import { FloSection } from './_components/flo-section';
 import { Hero } from './_components/hero';
 import { CallToAction, Faq, Features, Pricing } from './_components/sections';
-import { SiteFooter } from './_components/site-footer';
-import { SiteHeader } from './_components/site-header';
 
 export const metadata: Metadata = {
   title: 'FaktWay: faktury w KSeF bez stresu',
@@ -28,17 +27,13 @@ export const metadata: Metadata = {
  */
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <SiteHeader />
-      <main>
-        <Hero />
-        <Features />
-        <FloSection />
-        <Pricing />
-        <Faq />
-        <CallToAction />
-      </main>
-      <SiteFooter />
-    </div>
+    <SiteShell>
+      <Hero />
+      <Features />
+      <FloSection />
+      <Pricing />
+      <Faq />
+      <CallToAction />
+    </SiteShell>
   );
 }

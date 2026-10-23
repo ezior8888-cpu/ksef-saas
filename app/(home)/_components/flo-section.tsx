@@ -6,7 +6,8 @@ import { Check } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
-import { BandGlow, Container } from './ui';
+import { Reveal } from '@/components/site/motion';
+import { BandGlow, Container } from '@/components/site/ui';
 
 type Example = {
   message: string;
@@ -253,17 +254,17 @@ export function FloSection() {
       >
         <BandGlow />
         <Container className="relative">
-          <div className="mx-auto max-w-3xl text-center">
+          <Reveal className="mx-auto max-w-3xl text-center">
             <h2 id="flo-title" className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
               FLO pilnuje faktur za Ciebie
             </h2>
-            <p className="mt-5 text-lg text-pretty text-primary-foreground/80">
+            <p className="mt-5 text-lg text-pretty text-primary-foreground">
               FLO to agent AI wbudowany w FaktWay. Sam zauważa, co trzeba zrobić przy fakturach,
               i przygotowuje to za Ciebie. Ty tylko zatwierdzasz.
             </p>
-          </div>
+          </Reveal>
 
-          <div className="mt-14 grid items-center gap-8 lg:mt-20 lg:grid-cols-12 lg:gap-12">
+          <Reveal delay={0.1} y={32} className="mt-14 grid items-center gap-8 lg:mt-20 lg:grid-cols-12 lg:gap-12">
             <div
               role="tablist"
               aria-label="Co robi FLO"
@@ -288,14 +289,14 @@ export function FloSection() {
                       'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-foreground',
                       selected
                         ? 'bg-primary-foreground text-primary'
-                        : 'text-primary-foreground/80 hover:bg-primary-foreground/10 hover:text-primary-foreground',
+                        : 'text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground',
                     )}
                   >
                     <span className="font-semibold lg:text-lg">{item.title}</span>
                     <span
                       className={cn(
                         'mt-1 hidden text-sm lg:block',
-                        selected ? 'text-primary/80' : 'text-primary-foreground/70',
+                        selected ? 'text-muted-foreground' : 'text-primary-foreground',
                       )}
                     >
                       {item.text}
@@ -317,7 +318,7 @@ export function FloSection() {
             </div>
 
             <div id={panelId} role="tabpanel" aria-labelledby={tabId(active)} className="lg:col-span-7">
-              <p className="mb-6 text-center text-primary-foreground/90 lg:hidden">{task.text}</p>
+              <p className="mb-6 text-center text-primary-foreground lg:hidden">{task.text}</p>
               <div className="mx-auto w-full max-w-lg">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div
@@ -332,7 +333,7 @@ export function FloSection() {
                 </AnimatePresence>
               </div>
             </div>
-          </div>
+          </Reveal>
         </Container>
       </section>
     </MotionConfig>

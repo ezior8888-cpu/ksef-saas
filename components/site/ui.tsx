@@ -3,6 +3,8 @@ import type { ComponentProps, ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { Reveal } from './motion';
+
 /** Kontener strony głównej: ta sama szerokość we wszystkich sekcjach. */
 export function Container({ className, ...props }: ComponentProps<'div'>) {
   return <div className={cn('mx-auto max-w-6xl px-4 sm:px-6 lg:px-8', className)} {...props} />;
@@ -31,16 +33,20 @@ export function ButtonLink({
   href,
   variant = 'solid',
   className,
+  prefetch,
   children,
 }: {
   href: string;
   variant?: keyof typeof BUTTON_VARIANTS;
   className?: string;
+  /** Jak w `next/link`; `false` dla tras za logowaniem. */
+  prefetch?: boolean;
   children: ReactNode;
 }) {
   return (
     <Link
       href={href}
+      prefetch={prefetch}
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
@@ -53,7 +59,7 @@ export function ButtonLink({
   );
 }
 
-/** Nagłówek sekcji: tytuł i jedno zdanie pod nim. */
+/** Nagłówek sekcji: tytuł i jedno zdanie pod nim, odsłaniany przy przewijaniu. */
 export function SectionHeading({
   id,
   title,
@@ -66,18 +72,19 @@ export function SectionHeading({
   className?: string;
 }) {
   return (
-    <div className={cn('mx-auto max-w-2xl text-center', className)}>
+    <Reveal className={cn('mx-auto max-w-2xl text-center', className)}>
       <h2 id={id} className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
         {title}
       </h2>
       {lead ? <p className="mt-4 text-lg text-pretty text-muted-foreground">{lead}</p> : null}
-    </div>
+    </Reveal>
   );
 }
 
 /**
  * Tło niebieskich pasów: dwie miękkie poświaty w CSS, bez plików graficznych.
  * Kolory z tokenów, więc w ciemnym motywie poświaty idą za `--primary`.
+ * Słabe (10% i 6%), żeby biały tekst na pasie trzymał kontrast WCAG AA.
  */
 export function BandGlow({ className }: { className?: string }) {
   return (
@@ -86,8 +93,8 @@ export function BandGlow({ className }: { className?: string }) {
       className={cn('pointer-events-none absolute inset-0', className)}
       style={{
         background:
-          'radial-gradient(40rem 22rem at 12% 0%, color-mix(in oklch, var(--primary-foreground) 16%, transparent), transparent 70%),' +
-          'radial-gradient(36rem 26rem at 95% 100%, color-mix(in oklch, var(--primary-foreground) 10%, transparent), transparent 70%)',
+          'radial-gradient(40rem 22rem at 12% 0%, color-mix(in oklch, var(--primary-foreground) 10%, transparent), transparent 70%),' +
+          'radial-gradient(36rem 26rem at 95% 100%, color-mix(in oklch, var(--primary-foreground) 6%, transparent), transparent 70%)',
       }}
     />
   );
