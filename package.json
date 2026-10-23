@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "next dev",
+    "dev:local": "bash scripts/dev/baza-lokalna.sh && next dev",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
@@ -17,6 +18,7 @@
     "fa3:test": "tsx scripts/test-fa3-generation.ts",
     "seed:tenant": "tsx scripts/seed-tenant.ts",
     "seed:invoice": "tsx scripts/seed-test-invoice.ts",
+    "db:local": "bash scripts/dev/baza-lokalna.sh",
     "db:push:prod": "node scripts/supabase-push-production.mjs",
     "db:push:prod:dry": "node scripts/supabase-push-production.mjs --dry-run",
     "test": "tsx --test lib/xml/invoice-calculator.test.ts lib/xml/fa3-generator.test.ts lib/xml/validator.test.ts",
@@ -97,7 +99,7 @@
     "xml-core": "^1.2.5",
     "xmlbuilder2": "^4.0.3",
     "xmllint-wasm": "^5.2.0",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "browserslist": [
     "chrome >= 110",
