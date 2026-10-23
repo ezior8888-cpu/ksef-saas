@@ -12,8 +12,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 
 // Component Imports
-import { BrandWordmark } from '@/components/brand/brand-wordmark'
-import { FaktflowMark } from '@/components/brand/faktflow-mark'
+import { BrandMonogram, BrandWordmark } from '@/components/brand/brand-wordmark'
 import {
   Sidebar,
   SidebarContent,
@@ -150,16 +149,16 @@ export function AppSidebar() {
   return (
     <Sidebar variant={SIDEBAR_VARIANT} collapsible={SIDEBAR_COLLAPSIBLE}>
       <SidebarHeader className='h-(--ff-header-h) flex-row items-center px-3 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0'>
-        {/* Rozwinięty: wordmark. Zwinięty do ikon: sam znak (wordmark nie
-            mieści się w 3rem). */}
+        {/* Rozwinięty: wordmark. Zwinięty do ikon: inicjały (wordmark nie
+            mieści się w 3rem, a znaku marki nie ma do czasu nowego logo). */}
         <div className='min-w-0 group-data-[collapsible=icon]:hidden'>
           <BrandWordmark href='/dashboard' variant='app' className='text-[19px]' />
         </div>
         <Link
           href='/dashboard'
-          className='hidden shrink-0 transition-opacity group-data-[collapsible=icon]:flex hover:opacity-80 [&_img]:size-8 [&_img]:rounded-lg'
+          className='hidden size-8 shrink-0 items-center justify-center transition-opacity group-data-[collapsible=icon]:flex hover:opacity-80'
         >
-          <FaktflowMark variant='header' priority={false} />
+          <BrandMonogram />
         </Link>
       </SidebarHeader>
 

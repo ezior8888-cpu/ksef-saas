@@ -1,12 +1,9 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Menu, X } from 'lucide-react';
-
-import { asset } from '../_assets';
 
 // Odsyłacze muszą być bezwzględne: kotwica `#pricing` działa tylko na
 // stronie głównej, a ten sam pasek wisi też na /about i /blog.
@@ -15,7 +12,7 @@ const LINKS = [
   { label: 'O nas', href: '/about' },
   { label: 'Cennik', href: '/#pricing' },
   { label: 'Blog', href: '/blog' },
-  { label: 'Kontakt', href: '/#contact' },
+  { label: 'Kontakt', href: '/kontakt' },
 ];
 
 /**
@@ -36,14 +33,9 @@ export function SiteNav() {
         className="flex w-full max-w-[820px] items-center justify-between rounded-[16px] bg-white p-[10px_12px]"
         style={{ boxShadow: '0 5px 10px 0 rgba(0,0,0,0.08)' }}
       >
-        <Link href="/" className="flex shrink-0 items-center pl-1">
-          <Image
-            src={asset.logo}
-            alt="FaktWay"
-            width={24}
-            height={24}
-            priority
-          />
+        {/* Sam napis do czasu nowego logo (zielony znak zdjęty 23.10.2026). */}
+        <Link href="/" className="z-body flex shrink-0 items-center pl-1 font-semibold text-[var(--z-black)]">
+          Fakt<span className="text-[var(--z-blue)]">Way</span>
         </Link>
 
         <ul className="hidden items-center gap-6 md:flex">
