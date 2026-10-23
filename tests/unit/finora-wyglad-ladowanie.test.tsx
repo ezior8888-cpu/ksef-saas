@@ -16,7 +16,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *    szkieletów kart wskakujących po kolei (`Suspense` w każdym slocie)
  *    i bez obcego szkieletu segmentu w `loading.tsx` tych tras.
  * 2. Dane przykładowe mają kształt wykresów Finory: sumy słupków „Finance”,
- *    kolumny 17/65/18, wpływy „Miesięcznie”, pięć lat „Rocznie”.
+ *    kolumny 17/65/18, wpływy „Miesięcznie”, wydatki 55–90% wpływów (zrzuty
+ *    24.10.2026), pięć lat „Rocznie”.
  */
 
 type Proof = { verifiedAt: string | null; verifiedEnvironment: string | null };
@@ -146,10 +147,15 @@ describe('dane przykładowe w kształcie wykresów Finory', () => {
     expect(Math.max(...sumy)).toBeLessThanOrEqual(50_000);
     expect(financeYAxis(Math.max(...sumy)).ticks).toEqual([0, 10_000, 20_000, 30_000, 40_000, 50_000]);
     for (const m of dane.months) {
-      // Spójność: zysk = przychód − koszty bez straty, VAT 23% netto, zysk to najgrubszy segment jak w Finorze.
+      // Spójność: zysk = przychód − koszty bez straty, VAT 23% netto.
       expect(m.result).toBeGreaterThan(0);
+      expect(m.profit).toBeLessThan(m.revenue);
       expect(m.vat / m.revenue).toBeCloseTo(0.23, 2);
-      expect(m.profit).toBeGreaterThan(Math.max(m.vat, m.costs));
+      // Zrzuty 24.10.2026: koszty to 55–90% wpływów, więc dolny segment (od tej poprawki Koszty, dawniej
+      // Zysk — `financeChartConfig`) jest duży jak w Finorze (12–25 z 20–50): co najmniej połowa netto,
+      // a VAT na wierzchu najmniejszy. Świadomie zastępuje dawne „zysk to najgrubszy segment”.
+      expect(m.costs / m.revenue).toBeGreaterThanOrEqual(0.4);
+      expect(m.vat).toBeLessThan(m.costs);
     }
   });
 
@@ -186,6 +192,14 @@ describe('dane przykładowe w kształcie wykresów Finory', () => {
     // Finora Sty–Cze: 3200, 2800, 3500, 2600, 3800, 3000 (× 10 zł); bieżący miesiąc liczy się do wczoraj.
     const finora = [32_000, 28_000, 35_000, 26_000, 38_000, 30_000];
     chart.month.slice(0, 6).forEach((b, i) => expect(Math.abs(b.inflow / finora[i]! - 1), b.label).toBeLessThan(0.1));
+    // Zrzuty 24.10.2026: wydatki 55–90% wpływów (dawniej 25–40% — słupki ledwie od ziemi), na zmianę
+    // nisko i wysoko jak „Miesięcznie” Finory (1900/3420/2100/3250… przy 3400/3000/3800/2600…).
+    const udzialy = chart.month.map((b) => b.outflow / b.inflow);
+    udzialy.forEach((u, i) => {
+      expect(u, chart.month[i]!.label).toBeGreaterThanOrEqual(0.54);
+      expect(u, chart.month[i]!.label).toBeLessThanOrEqual(0.9);
+    });
+    udzialy.slice(1).forEach((u, i) => expect(Math.sign(u - udzialy[i]!), chart.month[i + 1]!.label).toBe(i % 2 === 0 ? 1 : -1));
     expect(chart.year.map((b) => b.label)).toEqual(['2022', '2023', '2024', '2025', '2026']);
     // „Rocznie” rośnie do zeszłego roku, bieżący (do dziś) niżej — jak 28,4 / 31,2 / 36,4 / 39,1 / 34,6.
     const lata = chart.year.map((b) => b.inflow);

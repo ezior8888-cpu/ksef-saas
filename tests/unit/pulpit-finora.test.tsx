@@ -42,6 +42,8 @@ const { default: StatisticsImpressionCard } = await import('@/components/dashboa
 const { default: TopProductsCard } = await import('@/components/dashboard/finora/widget-top-products');
 const { financeChartConfig, financeYAxis } = await import('@/components/dashboard/finora/chart-finance');
 const adaptery = await import('@/components/dashboard/finora/adaptery');
+const { default: TotalVisitorsCard } = await import('@/components/dashboard/finora/chart-total-visitors');
+const { Button } = await import('@/components/ui/button');
 const { danePrzykladowe, DEMO_TENANT } = await import('@/lib/demo/dane-przykladowe');
 const { fakePostgrest } = await import('@/lib/demo/fake-postgrest');
 
@@ -159,13 +161,15 @@ describe('Finanse (Z17 po zmianie Bartosza): stos Koszty + Zysk + VAT', () => {
     expect(paz).toMatchObject({ profit: 0, result: -1500.5, costs: 9500.5, vat: 1840 });
   });
 
-  it('trzy serie w tych samych kolorach Finory, z prawdziwymi nazwami', () => {
-    expect(financeChartConfig.profit).toEqual({ label: 'Zysk', color: 'var(--chart-2)' });
-    expect(financeChartConfig.vat).toEqual({ label: 'VAT należny', color: 'var(--chart-3)' });
-    expect(financeChartConfig.costs).toEqual({ label: 'Koszty', color: 'var(--chart-4)' });
+  // Zrzuty 24.10.2026 (świadoma zmiana): segmenty od dołu Koszty, Zysk, VAT — kolory segmentów jak w Finorze
+  // (dolny chart-2, środkowy chart-3, górny chart-4), zmieniło się tylko przypisanie wartości (dawniej Zysk, VAT, Koszty).
+  it('trzy serie w kolorach segmentów Finory, z prawdziwymi nazwami; od dołu Koszty, Zysk, VAT', () => {
+    expect(financeChartConfig.costs).toEqual({ label: 'Koszty', color: 'var(--chart-2)' });
+    expect(financeChartConfig.profit).toEqual({ label: 'Zysk', color: 'var(--chart-3)' });
+    expect(financeChartConfig.vat).toEqual({ label: 'VAT należny', color: 'var(--chart-4)' });
     const src = readFileSync(join(process.cwd(), 'components/dashboard/finora/chart-finance.tsx'), 'utf8');
-    const bars = [...src.matchAll(/<Bar dataKey='(\w+)' stackId='a'/g)].map((m) => m[1]);
-    expect(bars).toEqual(['profit', 'vat', 'costs']);
+    const bars = [...src.matchAll(/<Bar dataKey='(\w+)' stackId='a' fill='var\(--color-(\w+)\)'/g)].map((m) => [m[1], m[2]]);
+    expect(bars).toEqual([['costs', 'costs'], ['profit', 'profit'], ['vat', 'vat']]);
     // Oś Y z danych, nie wpisany zakres 0–50…
     expect(src).not.toMatch(/domain=\{\[0, 50\]\}|ticks=\{\[/);
     // …ale jak w Finorze (poprawka 23.10.2026): sześć etykiet od zera do „ładnego” maksimum.
@@ -302,6 +306,20 @@ describe('Pulpit przed weryfikacją KSeF: dane przykładowe przez te same loader
     expect(markup).toContain('href="/przeplywy"');
     // E11: „Szczegóły” Należności prowadzą do Spodziewanych wpływów (Przepływy), nie do listy zaległości.
     expect(markup).not.toContain('href="/payments/overdue"');
+  });
+
+  // Zrzuty 24.10.2026: link „Szczegóły” zgubił obramowanie dawnego `<Button variant='outline' size='xs'>` —
+  // sam `buttonVariants` zostawiał `border-transparent` obok `border-border` (bez `cn()`), a w arkuszu wygrywała przezroczysta.
+  it('Należności: „Szczegóły” z obramowaniem i klasami dawnego przycisku outline xs', () => {
+    const karta = renderToStaticMarkup(
+      <TotalVisitorsCard title='Należności' total='1 zł' badge='1 faktura' detailsHref='/przeplywy' visitorData={[]} />,
+    );
+    const link = /<a [^>]*href="\/przeplywy"[^>]*class="([^"]*)"|<a [^>]*class="([^"]*)"[^>]*href="\/przeplywy"/.exec(karta);
+    const klasyLinku = (link?.[1] ?? link?.[2] ?? '').split(' ');
+    expect(klasyLinku).toContain('border-border');
+    expect(klasyLinku).not.toContain('border-transparent');
+    const przycisk = /class="([^"]*)"/.exec(renderToStaticMarkup(<Button variant='outline' size='xs'>Szczegóły</Button>))![1]!.split(' ');
+    expect(new Set(klasyLinku)).toEqual(new Set(przycisk));
   });
 
   it('siatka Finory bez zmian: te same kontenery col-span', async () => {

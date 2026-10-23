@@ -9,7 +9,7 @@
 // o jezu, ale to jest ładne”). Generator nie losuje miesięcy, tylko celuje
 // w wykresy szablonu Finora, przeliczone na złote (× 1000 zł):
 //   - sprzedaż brutto 7 ostatnich miesięcy = sumy słupków „Finance” Finory
-//     (20, 28, 40, 25, 44, 50, 44) — stos Zysk + VAT należny + Koszty,
+//     (20, 28, 40, 25, 44, 50, 44) — stos Koszty + Zysk + VAT należny,
 //   - 5 miesięcy wcześniej dokłada początek linii „Wyświetlenia” (pary jak
 //     20-20, 50-50, 30), więc 12 miesięcy VAT należnego ma jej rytm,
 //   - ten sam okres rok wcześniej = blada seria „Telefon” karty przychodu,
@@ -18,11 +18,14 @@
 //   - terminy płatności układają wpływy miesięcy jak „Miesięcznie” Finory
 //     (32, 28, 35, 26, 38, 30), a należności bieżącego miesiąca w kolumny
 //     17% / 65% / 18% (dawne „Odwiedzający”),
-//   - koszty to dostawcy z dawnych danych przykładowych Analiz (sprzed E2,
-//     te same kategorie, kwoty i miesiące poza kilkoma opisanymi przy
-//     `DOSTAWCY`), więc Analiza kosztów wygląda jak dawniej, a wydatki
-//     miesięcy idą rytmem „Miesięcznie” Finory (wysoko 3 i 1 miesiąc temu);
-//     bez dawnego „podwykonawcy” dopełniającego koszty do 33–37% przychodu.
+//   - koszty brutto 7 ostatnich miesięcy to 55–90% wpływów, na zmianę nisko
+//     i wysoko jak „Miesięcznie” Finory (`KOSZTY_FINORY`, poprawka ze
+//     zrzutów 24.10.2026 — dawniej 25–40%, słupki wydatków ledwie od ziemi),
+//     zawsze z zyskiem; starsze lata — część sprzedaży jak „Rocznie” Finory.
+//     Stali dostawcy z dawnych danych przykładowych Analiz (sprzed E2, te
+//     same kategorie i miesiące, kwoty × 1,6), resztę dopełnia podwykonawca
+//     (koszt zmienny), więc kategorie Analizy kosztów są wyrównane jak
+//     w Finorze, a nie jedna wielka. Na „Finansach” koszty to dolny segment.
 // Wykresy Finory nie są ze sobą spójne (np. „Wyświetlenia” i „Finance” to
 // osobne wymyślone serie), a tu każda liczba wynika z tych samych faktur —
 // pierwszeństwo ma wykres „Finanse”, reszta jest tak blisko, jak pozwala
@@ -126,7 +129,7 @@ function koniecMiesiaca(kal: Kalendarz, k: number): string {
 /**
  * Sprzedaż brutto miesięcy k = 0…6 (k = miesięcy wstecz), tys. zł: sumy
  * słupków „Finance” Finory od lipca wstecz do stycznia (44, 50, 44, 25, 40,
- * 28, 20). Stos na karcie: Zysk + VAT należny (23% netto) + Koszty.
+ * 28, 20). Stos na karcie (od dołu): Koszty + Zysk + VAT należny (23% netto).
  *
  * Szczyt 49,05 zamiast 50 (poprawka ze zrzutów 24.10.2026): netto 39,9 tys.
  * mieści się w automatycznej osi recharts 0–40 tys., więc słupki kart
@@ -168,6 +171,15 @@ const WPLYWY_FINORY = [30, 38, 26, 35, 28, 32];
  * tydzień najniżej (liczy się tylko do wczoraj).
  */
 const TYGODNIE_FINORY = [620, 340, 780, 410, 890, 460, 300];
+/**
+ * Wagi tygodni do rozkładu terminów: przed siedmioma tygodniami Finory jeszcze
+ * dwa — ósmy, bo krzywa kafla „Wpływy w tym miesiącu” ma 8 punktów (sumy
+ * tygodni, zrzuty 24.10.2026), i dziewiąty jako zapas: terminy ścięte do
+ * końca miesiąca tuż przed ósmym tygodniem mogą zejść poza krzywą. Bez nich
+ * terminy z początku i końca miesiąca zbierały się w ósmym tygodniu wstecz
+ * i krzywa zaczynała się szczytem 2–3 razy wyższym od reszty.
+ */
+const WAGI_TYGODNI = [480, 480, ...TYGODNIE_FINORY];
 
 /** Należności bieżącego miesiąca według terminów: „Ten tydzień” / „Do 30 dni” / „Później” — 17 / 65 / 18 jak kolumny Finory. */
 const NALEZNOSCI_FINORY = { tenTydzien: 17, do30: 65, pozniej: 18 } as const;
@@ -193,12 +205,28 @@ function planSprzedazy(kal: Kalendarz): number[] {
 }
 
 /**
- * Mnożnik kosztów starszych lat: wydatki „Rocznie” Finory (24,2 / 33 / 30 /
- * 36 przy wpływach 28,4 / 31,2 / 36,4 / 39,1) — kolejno lata Y−1…Y−4.
+ * Koszty brutto miesięcy k = 0…6 (tys. zł) — słupki „Wydatki” wykresu
+ * „Przepływy pieniężne” (poprawka ze zrzutów 24.10.2026: dawniej 25–40%
+ * wpływów, w Finorze 55–125%). Na zmianę nisko i wysoko jak „Miesięcznie”
+ * Finory (1900, 3420, 2100, 3250, 2000, 2400, 2400 od lipca wstecz): 55–90%
+ * wpływów miesiąca (32, 30, 38, 26, 35, 28, 32 tys.), bez straty — przy
+ * niskiej sprzedaży (20 tys. sprzed 6 miesięcy, 25 tys. sprzed 3) koszty
+ * zostają pod przychodem netto, więc Finora 125% to tu ~85%.
  */
-const KOSZTY_LAT_FINORY = [1, 30 / 36, 33 / 36, 24.2 / 36];
+const KOSZTY_FINORY = [19, 26.8, 20.8, 22.1, 20, 22.4, 17.6];
+/**
+ * Starsze miesiące: koszty brutto jako część sprzedaży brutto miesiąca, rok
+ * po roku (bieżący rok, Y−1 … Y−4) — „Rocznie” Finory (wydatki 26,18 / 36 /
+ * 30 / 33 / 24,2 przy wpływach 34,6 / 39,1 / 36,4 / 31,2 / 28,4), ścięte tak,
+ * żeby każdy rok miał zysk.
+ */
+const UDZIAL_KOSZTOW_LAT = [0.65, 0.78, 0.7, 0.86, 0.72];
+/** Lekka fala starszych miesięcy (±3%), żeby rok kosztów nie był płaski. */
+const FALA_KOSZTOW = FALA.map((f) => 1 + (f - 1) / 2);
+/** Kwoty stałych dostawców (czynsz, leasing, księgowość…) wobec dawnych danych Analiz — resztę do celu dopełnia podwykonawca. */
+const SKALA_DOSTAWCOW = 1.6;
 /** Koszty miesiąca nie przekraczają tej części przychodu netto (zysk zostaje, słupek „Finanse” się nie odwraca). */
-const MAKS_UDZIAL_KOSZTOW = 0.7;
+const MAKS_UDZIAL_KOSZTOW = 0.9;
 
 /** Ile lat wstecz (0 = bieżący rok) leży miesiąc `k`. */
 function rokWstecz(kal: Kalendarz, k: number): number {
@@ -389,7 +417,8 @@ function poniedzialek(iso: string): string {
 }
 
 /**
- * Wpływy ostatnich 7 tygodni rytmem „Tygodniowo” Finory: terminy, które już
+ * Wpływy ostatnich 9 tygodni (7 rytmem „Tygodniowo” Finory i dwa przed nimi,
+ * `WAGI_TYGODNI`): terminy, które już
  * minęły, przesuwamy w obrębie TEGO SAMEGO miesiąca (sumy „Miesięcznie” bez
  * zmian) i nie przed dniem wystawienia. Najpierw każda faktura idzie do
  * tygodnia z największym względnym brakiem wobec udziału Finory (największe
@@ -398,7 +427,7 @@ function poniedzialek(iso: string): string {
  */
 function tygodnie(kal: Kalendarz, plan: Faktura[]): void {
   const wczoraj = dodaj(kal.today, -1);
-  const pierwszy = dodaj(poniedzialek(kal.today), -7 * (TYGODNIE_FINORY.length - 1));
+  const pierwszy = dodaj(poniedzialek(kal.today), -7 * (WAGI_TYGODNI.length - 1));
   if (wczoraj < pierwszy) return;
   const wOknie = plan.filter((f) => f.k >= 1 && f.due !== null && f.due >= pierwszy && f.due <= wczoraj);
   if (wOknie.length === 0) return;
@@ -414,7 +443,7 @@ function tygodnie(kal: Kalendarz, plan: Faktura[]): void {
   }));
   const tygodnieFaktury = (f: Faktura) => [...new Set(dni.get(f.id)!.map(tydzien))];
   const dostepne = new Set(wOknie.flatMap(tygodnieFaktury));
-  const wagi = TYGODNIE_FINORY.map((w, t) => (dostepne.has(t) ? w : 0));
+  const wagi = WAGI_TYGODNI.map((w, t) => (dostepne.has(t) ? w : 0));
   const cel = wagi.map((w) => (w * suma(wOknie.map((f) => f.gross))) / suma(wagi));
   const przypisane = wagi.map(() => 0);
   const wybor = new Map<string, number>();
@@ -487,7 +516,11 @@ function terminyBiezace(kal: Kalendarz, plan: Faktura[]): void {
     });
 }
 
-function faktury(kal: Kalendarz, env: KsefEnvironment, opcje: OpcjePrzykladu): { invoices: Row[]; lines: Row[]; netto: number[] } {
+function faktury(
+  kal: Kalendarz,
+  env: KsefEnvironment,
+  opcje: OpcjePrzykladu,
+): { invoices: Row[]; lines: Row[]; brutto: number[]; netto: number[] } {
   const skala = opcje.zwolnionyZVat ? 0.45 : 1;
   const vatRate = opcje.zwolnionyZVat ? 0 : 0.23;
   const brutto = planSprzedazy(kal);
@@ -579,7 +612,7 @@ function faktury(kal: Kalendarz, env: KsefEnvironment, opcje: OpcjePrzykladu): {
   // Korekta w bieżącym miesiącu: rabat do faktury Studia z poprzedniego miesiąca.
   // 1. dnia miesiąca byłaby jedynym wpływem miesiąca (bez terminu wpływa w dniu
   // wystawienia) — kafel „Wpływy w tym miesiącu” pokazałby „−492 zł”; wtedy jej nie ma.
-  if (kal.day === 1) return { invoices, lines, netto };
+  if (kal.day === 1) return { invoices, lines, brutto, netto };
   // Najpóźniej wczoraj: korekta z dziś byłaby jedynym wpływem bieżącego tygodnia (słupek pod osią).
   const kor = `${kal.month}-${pad(Math.min(Number(dzien(kal, 0, 16).slice(8, 10)), kal.day - 1))}`;
   const korVat = r2(korNet * vatRate);
@@ -598,7 +631,7 @@ function faktury(kal: Kalendarz, env: KsefEnvironment, opcje: OpcjePrzykladu): {
     payment_due_date: null,
     ...platnosc(kal, null),
   });
-  return { invoices, lines, netto };
+  return { invoices, lines, brutto, netto };
 }
 
 // ─── Wydatki ──────────────────────────────────────────────────────────────
@@ -627,9 +660,9 @@ interface Dostawca {
 
 /**
  * Miesiące 0…6 jak w dawnych danych przykładowych Analiz (przed E2: te same
- * kwoty i miesiące), starsze — co `co` miesięcy. Dwie zmiany wobec dawnych
- * list, żeby wydatki szły rytmem „Miesięcznie” Finory (wysoko 3 i 1 miesiąc
- * temu): szkolenie z 4. miesiąca wstecz w 3., reklama z 2. w 1.
+ * miesiące, kwoty × `SKALA_DOSTAWCOW`), starsze — co `co` miesięcy. Dwie
+ * zmiany wobec dawnych list (szkolenie z 4. miesiąca wstecz w 3., reklama
+ * z 2. w 1.) — sumy miesięcy i tak wyznacza `KOSZTY_FINORY`.
  */
 function miesiace(lista: readonly number[], co: number, przesuniecie = 0) {
   return (k: number) => (k <= 6 ? lista.includes(k) : k % co === przesuniecie);
@@ -638,7 +671,7 @@ function miesiace(lista: readonly number[], co: number, przesuniecie = 0) {
 const pol = (k: number) => (k <= 6 ? k : k % 7);
 
 const DOSTAWCY: Dostawca[] = [
-  // Czynsz 2400 zł netto (dawniej 2460 brutto): koszt roku większy od piątego klienta, więc
+  // Czynsz 2400 zł netto (dawniej 2460 brutto; × `SKALA_DOSTAWCOW` — 3840): koszt roku większy od piątego klienta, więc
   // „Największe źródła przepływów” mieszają wpływy i koszty jak w Finorze (zielone i czerwone kwoty).
   // Faktura za czynsz 1. dnia (poprawka ze zrzutów 24.10.2026; dawniej 3.): skok o 1/3 kosztów
   // tuż po starcie wyginał krzywą kafla „Koszty w tym miesiącu” w dołek pod pierwszym punktem.
@@ -661,6 +694,25 @@ const DOSTAWCY: Dostawca[] = [
   { nip: '0000000112', name: 'Kurier Przykład sp. z o.o.', category: 'Pozostałe', day: 4, gross: (k) => 36.9 + pol(k), aktywny: ZAWSZE },
   { nip: '0000000123', name: 'Sklep Komputerowy Przykład S.A.', category: 'Oprogramowanie', day: 22, gross: () => 1845, aktywny: miesiace([3], 12, 3), kanal: 'ksef' },
 ];
+
+/**
+ * Podwykonawca (programista na fakturze z KSeF) dopełnia koszty miesiąca do
+ * celu (`KOSZTY_FINORY`, `UDZIAL_KOSZTOW_LAT`) — koszt zmienny firmy
+ * usługowej, który rośnie i spada z projektami; stali dostawcy mają stałe kwoty.
+ */
+const PODWYKONAWCA: DaneDostawcy = {
+  nip: '0000000134',
+  name: 'Programista Przykład',
+  category: 'Usługi obce',
+  kanal: 'ksef',
+};
+/** Podwykonawca fakturuje dwa razy w miesiącu (połowa i koniec) — koszty tygodni bez jednego szpica. */
+const PODWYKONAWCA_FAKTURY = [
+  { day: 11, udzial: 0.45 },
+  { day: 25, udzial: 0.55 },
+] as const;
+/** Poniżej tej kwoty brutto podwykonawca nie wystawia faktury w miesiącu. */
+const MIN_PODWYKONAWCA = 300;
 
 /**
  * Skrzynka KSeF działa od tylu miesięcy (z bieżącym): faktury zakupu z tego
@@ -801,9 +853,21 @@ function dokument(
   if (!faktura || faktura.origin === 'ksef_inbox') out.expenses.push(row);
 }
 
+/**
+ * Koszty brutto miesiąca `k` (zł, przed skalą firmy zwolnionej): ostatnie
+ * siedem miesięcy z `KOSZTY_FINORY`, starsze — część sprzedaży brutto roku.
+ */
+function celKosztow(kal: Kalendarz, k: number, brutto: readonly number[]): number {
+  const stala = KOSZTY_FINORY[k];
+  if (stala !== undefined) return stala * 1000;
+  const udzial = UDZIAL_KOSZTOW_LAT[rokWstecz(kal, k)] ?? UDZIAL_KOSZTOW_LAT.at(-1)!;
+  return (brutto[k] ?? 0) * udzial * FALA_KOSZTOW[k % FALA_KOSZTOW.length]!;
+}
+
 function wydatki(
   kal: Kalendarz,
   env: KsefEnvironment,
+  brutto: readonly number[],
   netto: readonly number[],
   opcje: OpcjePrzykladu,
 ): { expenses: Row[]; purchases: Row[] } {
@@ -811,17 +875,32 @@ function wydatki(
   const zwolniony = opcje.zwolnionyZVat === true;
   const out = { expenses: [] as Row[], purchases: [] as Row[] };
   for (let k = 0; k < kal.miesiace; k++) {
-    const rok = rokWstecz(kal, k);
-    // Ostatnie 12 miesięcy bez mnożnika (Analizy jak dawniej), starsze lata rytmem „Rocznie” Finory.
-    const mnoznik = (k < 12 || rok === 0 ? 1 : KOSZTY_LAT_FINORY[rok - 1] ?? KOSZTY_LAT_FINORY.at(-1)!) * skala;
     const aktywni = DOSTAWCY.map((d, i) => ({ d, i })).filter(({ d }) => d.aktywny(k));
-    const surowe = suma(aktywni.map(({ d }) => kosztKpir(d, d.gross(k) * mnoznik, zwolniony)));
-    // Słabszy miesiąc (linia VAT) nie kończy się stratą — koszty najwyżej 70% przychodu netto.
-    const ogranicz = Math.min(1, (MAKS_UDZIAL_KOSZTOW * (netto[k] ?? 0)) / surowe);
-    for (const { d, i } of aktywni) {
+    const stale = aktywni.map(({ d }) => d.gross(k) * SKALA_DOSTAWCOW * skala);
+    const cel = celKosztow(kal, k, brutto) * skala;
+    // Stali dostawcy mieszczą się w celu (słaby miesiąc — mniejsze kwoty), resztę dopełnia podwykonawca.
+    const zmniejsz = Math.min(1, cel / suma(stale));
+    const reszta = cel - suma(stale) * zmniejsz;
+    const podwykonawca = reszta >= MIN_PODWYKONAWCA * skala ? reszta : 0;
+    // Żaden miesiąc nie kończy się stratą — koszty najwyżej 90% przychodu netto.
+    const kpir = suma(aktywni.map(({ d }, j) => kosztKpir(d, stale[j]! * zmniejsz, zwolniony)))
+      + kosztKpir(PODWYKONAWCA, podwykonawca, zwolniony);
+    const ogranicz = Math.min(1, (MAKS_UDZIAL_KOSZTOW * (netto[k] ?? 0)) / kpir);
+    aktywni.forEach(({ d, i }, j) => {
       const date = dzien(kal, k, d.day);
-      const gross = r2(d.gross(k) * mnoznik * ogranicz);
+      const gross = r2(stale[j]! * zmniejsz * ogranicz);
       dokument(kal, env, k, `${k}-${pad(i)}`, 100 + i, d, date, gross, r2(gross / 1.23), zwolniony, !(k === 0 && d.doOpisania), out);
+    });
+    if (podwykonawca > 0) {
+      // Dwie faktury w miesiącu (`PODWYKONAWCA_FAKTURY`) — jedna duża dawała na krzywej
+      // kafla „Koszty w tym miesiącu” (sumy tygodni) pojedynczy szpic.
+      const razem = r2(podwykonawca * ogranicz);
+      let reszta = razem;
+      PODWYKONAWCA_FAKTURY.forEach(({ day, udzial }, j) => {
+        const gross = j === PODWYKONAWCA_FAKTURY.length - 1 ? r2(reszta) : r2(razem * udzial);
+        reszta -= gross;
+        dokument(kal, env, k, `${k}-9${j}`, 23 + j, PODWYKONAWCA, dzien(kal, k, day), gross, r2(gross / 1.23), zwolniony, true, out);
+      });
     }
   }
   return out;
@@ -844,8 +923,8 @@ function firma(kal: Kalendarz, opcje: OpcjePrzykladu): Row {
  */
 export function danePrzykladowe(now: Date, env: KsefEnvironment, opcje: OpcjePrzykladu = {}): Tables {
   const kal = kalendarz(now);
-  const { invoices, lines, netto } = faktury(kal, env, opcje);
-  const { expenses, purchases } = wydatki(kal, env, netto, opcje);
+  const { invoices, lines, brutto, netto } = faktury(kal, env, opcje);
+  const { expenses, purchases } = wydatki(kal, env, brutto, netto, opcje);
   return {
     tenants: [firma(kal, opcje)],
     invoices: [...invoices, ...purchases],

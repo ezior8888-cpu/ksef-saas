@@ -1,16 +1,20 @@
 import { POBIERAMY } from '@/components/dashboard/finora/adaptery';
-import type {
-  CashFlowChartData,
-  CashFlowOperation,
-  CashFlowSource,
-  FlowBucket,
-  MonthFlow,
-  UpcomingInflow,
+import {
+  receivedInflows,
+  type CashFlowChartData,
+  type CashFlowOperation,
+  type CashFlowSource,
+  type FlowBucket,
+  type MonthFlow,
+  type UpcomingInflow,
 } from '@/lib/dashboard/cash-movements';
+import type { CostEntry } from '@/lib/dashboard/costs';
+import type { InflowEntry } from '@/lib/dashboard/inflows';
 import type { TaxEstimate } from '@/lib/dashboard/tax-estimate';
 import type { VatLimitOverview } from '@/lib/dashboard/vat-limit';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { formatPlCompactMoney, formatPlInt, formatPlMoney, formatPlPercentChange } from '@/lib/format/pl';
+import { addDaysToIsoDate } from '@/lib/format/warsaw-date';
 import { INFLOW_EMPTY, INFLOW_EMPTY_TITLE, INFLOW_NOTE } from '@/lib/dashboard/inflow-labels';
 import { plural } from '@/lib/i18n/plural';
 
@@ -101,40 +105,95 @@ export interface KafelMiesiacaDane {
 /** Dawny podpis plakietki — zostaje, gdy procent ma podstawę. */
 const WOBEC = 'wobec poprzedniego miesiąca';
 
+/** Tyle punktów ma krzywa kafla — jak 8 punktów krzywej Finory. */
+export const TYGODNIE_KRZYWEJ = 8;
+
+/** Kwota w dniu (RRRR-MM-DD) — wpływ albo dokument kosztowy. */
+export interface RuchKrzywej {
+  date: string;
+  amount: number;
+}
+
+/** Poniedziałek tygodnia (pn–nd) dnia `iso`; arytmetyka UTC na polach daty, bez strefy procesu. */
+function poniedzialek(iso: string): string {
+  const dow = new Date(`${iso.slice(0, 10)}T12:00:00Z`).getUTCDay(); // 0 = niedziela
+  return addDaysToIsoDate(iso.slice(0, 10), -((dow + 6) % 7)) ?? iso;
+}
+
+const centy = (n: number) => Math.round(n * 100) / 100 || 0;
+
 /**
- * Krzywa narastająca dzień po dniu. 1. dnia miesiąca `daily` ma jeden
- * punkt, z którego wykres obszarowy nic nie rysuje — zero na początku.
+ * Krzywa kafla (poprawka ze zrzutów 24.10.2026): 8 punktów = sumy 8 ostatnich
+ * tygodni pn–nd, ostatni = bieżący tydzień. Dawniej suma narastająca od
+ * 1. dnia miesiąca — zawsze rosła (a 1. dnia była płaska), w Finorze to
+ * falista linia z 8 punktów. Kwota, procent i tytuł kafla zostają
+ * miesięczne; krzywa pokazuje rytm ostatnich tygodni, a dymek punktu —
+ * zakres tygodnia („13.10–19.10”) i jego sumę. Ruchy spoza 8 tygodni (także
+ * dokument z datą po bieżącym tygodniu) się nie liczą; które ruchy wchodzą,
+ * wybiera wywołujący (`krzywaWplywow`, `krzywaKosztow`).
  */
-function krzywa(flow: MonthFlow): KafelMiesiacaDane['chartData'] {
-  const points = flow.daily.map((p) => ({ label: dzienMiesiac(p.date), value: p.value }));
-  if (points.length === 1) return [{ label: points[0]!.label, value: 0 }, ...points];
-  return points;
+export function krzywaTygodni(ruchy: readonly RuchKrzywej[], today: string): KafelMiesiacaDane['chartData'] {
+  const ten = poniedzialek(today);
+  const starty = Array.from(
+    { length: TYGODNIE_KRZYWEJ },
+    (_, i) => addDaysToIsoDate(ten, -7 * (TYGODNIE_KRZYWEJ - 1 - i)) ?? ten,
+  );
+  const sumy = new Map(starty.map((s) => [s, 0]));
+  for (const r of ruchy) {
+    const tydzien = poniedzialek(r.date);
+    const suma = sumy.get(tydzien);
+    if (suma !== undefined) sumy.set(tydzien, suma + r.amount);
+  }
+  return starty.map((s) => ({
+    label: `${dzienMiesiac(s)}–${dzienMiesiac(addDaysToIsoDate(s, 6) ?? s)}`,
+    value: centy(sumy.get(s)!),
+  }));
+}
+
+/** Wpływy, które już były (`receivedInflows`: termin od dziś to jeszcze „Spodziewane wpływy”), według dnia wpływu. */
+export function krzywaWplywow(inflows: readonly InflowEntry[], today: string): KafelMiesiacaDane['chartData'] {
+  return krzywaTygodni(receivedInflows(inflows, today).map((i) => ({ date: i.date, amount: i.amount })), today);
+}
+
+/** Koszty brutto według daty dokumentu — jak kwota kafla i słupki wydatków wykresu. */
+export function krzywaKosztow(costs: readonly CostEntry[], today: string): KafelMiesiacaDane['chartData'] {
+  return krzywaTygodni(costs.map((c) => ({ date: c.issueDate, amount: c.outflow })), today);
 }
 
 /**
  * „Wpływy w tym miesiącu (wg terminów)”: wpływy od 1. dnia miesiąca do dziś
  * według terminów płatności (E11, D-W; termin dziś — jeszcze spodziewany);
- * bez żadnego wpływu — „—” i pusty stan, nie „0 zł”.
+ * bez żadnego wpływu — „—” i pusty stan, nie „0 zł”. Krzywa: 8 tygodni
+ * (`krzywaWplywow`).
  */
-export function wplywyMiesiacaProps(flow: MonthFlow, tryb: TrybDanych): KafelMiesiacaDane {
+export function wplywyMiesiacaProps(
+  flow: MonthFlow,
+  krzywa: KafelMiesiacaDane['chartData'],
+  tryb: TrybDanych,
+): KafelMiesiacaDane {
   const brak = flow.count === 0;
   return {
     amount: brak ? '—' : zlCale(flow.amount),
     amountTitle: brak ? INFLOW_EMPTY_TITLE : `${zl(flow.amount)} · ${INFLOW_NOTE}`,
     changePercentage: brak || flow.changePct === null ? '—' : formatPlPercentChange(flow.changePct),
     comparison: brak ? (synchronizacja(tryb) ? POBIERAMY : INFLOW_EMPTY) : WOBEC,
-    chartData: krzywa(flow),
+    chartData: krzywa,
   };
 }
 
-/** „Koszty w tym miesiącu (brutto)”: dokumenty kosztowe według daty dokumentu. */
-export function kosztyMiesiacaProps(flow: MonthFlow, tryb: TrybDanych, notaKsef = ''): KafelMiesiacaDane {
+/** „Koszty w tym miesiącu (brutto)”: dokumenty kosztowe według daty dokumentu; krzywa — 8 tygodni (`krzywaKosztow`). */
+export function kosztyMiesiacaProps(
+  flow: MonthFlow,
+  krzywa: KafelMiesiacaDane['chartData'],
+  tryb: TrybDanych,
+  notaKsef = '',
+): KafelMiesiacaDane {
   return {
     amount: zlCale(flow.amount),
     amountTitle: `${zl(flow.amount)} brutto, według daty dokumentu${notaKsef}`,
     changePercentage: flow.changePct === null ? '—' : formatPlPercentChange(flow.changePct),
     comparison: flow.count === 0 && synchronizacja(tryb) ? POBIERAMY : WOBEC,
-    chartData: krzywa(flow),
+    chartData: krzywa,
   };
 }
 
@@ -150,10 +209,15 @@ export interface PierscienDane {
   caption: string;
 }
 
+/** Stawka podatku liniowego w środku pierścienia „Odłóż na podatek” (procent). */
+const STAWKA_LINIOWA = 19;
+
 /**
- * Płatnik VAT (Z10): szacunek PIT od 1 stycznia, pełny łuk (nie znamy
- * kwoty już odłożonej). W środku stawka, kwota i „do odłożenia” — te same
- * trzy wiersze i rozmiary co „68% / 6,8 tys. zł / z celu”.
+ * Płatnik VAT (Z10): szacunek PIT od 1 stycznia. W środku stawka, kwota
+ * i „do odłożenia” — te same trzy wiersze i rozmiary co „68% / 6,8 tys. zł
+ * / z celu”. Łuk = pokazany procent (19% obwodu na jasnym torze, jak 68%
+ * w Finorze; poprawka ze zrzutów 24.10.2026) — dawniej pełny łuk przy
+ * napisie „19%” był niespójny i zasłaniał tor.
  */
 export function podatekProps(estimate: TaxEstimate, tryb: TrybDanych): PierscienDane {
   return {
@@ -163,8 +227,8 @@ export function podatekProps(estimate: TaxEstimate, tryb: TrybDanych): Pierscien
       : estimate.fullYear
         ? 'Szacunek PIT od 1 stycznia'
         : estimate.label.replace('Szac. podatek', 'Szacunek PIT'),
-    pct: 100,
-    lines: ['19%', formatPlCompactMoney(estimate.amount), 'do odłożenia'],
+    pct: STAWKA_LINIOWA,
+    lines: [`${STAWKA_LINIOWA}%`, formatPlCompactMoney(estimate.amount), 'do odłożenia'],
     caption: 'Szacunek: liniowy, bez ZUS',
   };
 }

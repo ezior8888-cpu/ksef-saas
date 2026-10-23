@@ -65,17 +65,26 @@ export type FinanceCardProps = {
   className?: string
 }
 
+/**
+ * Serie stosu od dołu: Koszty, Zysk, VAT należny (poprawka ze zrzutów
+ * 24.10.2026). Kolory i kolejność segmentów jak w Finorze (dolny `chart-2`,
+ * środkowy `chart-3`, górny `chart-4`) — zmieniło się tylko, która wartość
+ * idzie do którego segmentu: Koszty + Zysk = przychód netto, VAT na wierzchu
+ * = sprzedaż brutto. Przy kosztach 55–90% wpływów (dane przykładowe jak
+ * „Przepływy” Finory) to koszty dają duży dolny segment, jak dawny zysk.
+ * Nazwy w dymku idą za wartościami.
+ */
 export const financeChartConfig = {
+  costs: {
+    label: 'Koszty',
+    color: 'var(--chart-2)'
+  },
   profit: {
     label: 'Zysk',
-    color: 'var(--chart-2)'
+    color: 'var(--chart-3)'
   },
   vat: {
     label: 'VAT należny',
-    color: 'var(--chart-3)'
-  },
-  costs: {
-    label: 'Koszty',
     color: 'var(--chart-4)'
   }
 } satisfies ChartConfig
@@ -168,9 +177,9 @@ const FinanceCard = ({ subTitle, costsLabel, months, report, financeMenu, report
                   />
                 }
               />
+              <Bar dataKey='costs' stackId='a' fill='var(--color-costs)' />
               <Bar dataKey='profit' stackId='a' fill='var(--color-profit)' />
               <Bar dataKey='vat' stackId='a' fill='var(--color-vat)' />
-              <Bar dataKey='costs' stackId='a' fill='var(--color-costs)' />
             </BarChart>
           </ChartContainer>
         </CardContent>

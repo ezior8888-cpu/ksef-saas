@@ -274,6 +274,9 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
    * Poprawka Bartosza 23.10.2026 („przywróć stare wykresy”): miesiące mają
    * kształt Finory (słupki 20–50 tys. zł brutto, linia VAT od 11 tys.), więc
    * widełki zastępuje sama spójność — kształt pilnuje `finora-wyglad-ladowanie`.
+   * Zrzuty 24.10.2026: koszty 55–90% wpływów jak „Przepływy” Finory, więc
+   * sufit kosztów wobec przychodu netto świadomie 0,9 (dawniej 0,7) — zysk
+   * zostaje w każdym miesiącu.
    */
   it('12 pełnych miesięcy: zysk > 0, koszty < przychód netto, sprzedaż do 50 tys. zł brutto', async () => {
     const sb = demo();
@@ -288,7 +291,7 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
       const net = series.netSeries[i]!;
       expect(net, keys[i]).toBeGreaterThan(0);
       expect(costs[i]!, keys[i]).toBeGreaterThan(0);
-      expect(costs[i]! / net, keys[i]).toBeLessThanOrEqual(0.7 + 1e-9);
+      expect(costs[i]! / net, keys[i]).toBeLessThanOrEqual(0.9 + 1e-9);
       expect(series.currentSeries[i]!, keys[i]).toBeLessThanOrEqual(50_000);
     }
   });

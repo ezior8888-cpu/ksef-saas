@@ -29,6 +29,8 @@ import { cn } from '@/lib/utils';
 import {
   aktywnoscProps,
   kosztyMiesiacaProps,
+  krzywaKosztow,
+  krzywaWplywow,
   limitProps,
   podatekProps,
   tabelaProps,
@@ -225,12 +227,13 @@ const TYTUL_WPLYWOW = 'Wpływy w tym miesiącu (wg terminów)';
 async function WplywyKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte(TYTUL_WPLYWOW, className, async () => {
     const inflows = await loadInflows(supabase, tenantId, nowIso, 'recent');
-    const flow = monthFlows(inflows, [], todayInWarsaw(new Date(nowIso))).inflow;
+    const today = todayInWarsaw(new Date(nowIso));
+    const flow = monthFlows(inflows, [], today).inflow;
     return (
       <StatisticsAreaStatCard
         chartKey="income"
         title={TYTUL_WPLYWOW}
-        {...wplywyMiesiacaProps(flow, tryb)}
+        {...wplywyMiesiacaProps(flow, krzywaWplywow(inflows, today), tryb)}
         color="var(--chart-4)"
         badgeClassName="bg-chart-4/10 text-chart-4"
         className={className}
@@ -248,7 +251,7 @@ async function KosztyKarta({ supabase, tenantId, nowIso, tryb, kosztyKsefOd, cla
       <StatisticsAreaStatCard
         chartKey="expense"
         title="Koszty w tym miesiącu (brutto)"
-        {...kosztyMiesiacaProps(flow, tryb, notaKosztowKsef(tryb, kosztyKsefOd, today.slice(0, 7)))}
+        {...kosztyMiesiacaProps(flow, krzywaKosztow(costs, today), tryb, notaKosztowKsef(tryb, kosztyKsefOd, today.slice(0, 7)))}
         color="var(--chart-4)"
         badgeClassName="bg-chart-4/10 text-chart-4"
         className={className}
