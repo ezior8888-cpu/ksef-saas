@@ -1008,6 +1008,21 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
   flex-grow: 1;
 }
 
+/* Zakładki w karcie (`components/lists/section-tabs.tsx`): dotknięta zakładka
+ * przejmuje podkreślenie od razu, zanim jej strona przyjdzie z serwera.
+ * Znacznik `[data-link-pending]` wstawia `SectionTabPending` tylko na czas
+ * oczekiwania. Zwykły CSS, nie warstwa: wygrywa z klasami Tailwinda zakładki. */
+.ff-section-tabs:has([data-link-pending]) > a:not(:has([data-link-pending]))::after {
+  opacity: 0;
+}
+
+.ff-section-tabs > a:has([data-link-pending]) {
+  color: var(--foreground);
+}
+
+.ff-section-tabs > a:has([data-link-pending])::after {
+  opacity: 1;
+}
 
 
 /* ─── Telefon: bezpieczne obszary i wysokości szkieletu ─────────────────────
