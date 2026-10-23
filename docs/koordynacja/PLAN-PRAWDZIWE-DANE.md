@@ -108,6 +108,27 @@ Numeracja Z#, żeby nie mylić z D# wyżej. W nawiasie numer z audytu §7.
 | Z16 (audyt D12) | Należności do czasu K2 (N6): bez potwierdzania wpłat każda faktura z FaktWay wisi jako nieopłacona, więc „Należności według terminu”, „X% po terminie” i „Spodziewane wpływy” rosną z każdą fakturą (audyt §0 pkt 4) | **K2 przed launchem.** Do tego czasu podpis „Wpłat jeszcze nie potwierdzamy — zapłacone faktury też są tu liczone” w kartach Należności (Pulpit, Analizy) i Spodziewanych wpływów. Alternatywa: tytuł „Faktury według terminu płatności” | E4, E5, E6 (podpis) |
 | Z17 (audyt D13) | „Finanse”: stos Koszty + Zysk (sylwetka słupka ta sama, 2 kolory) czy 3 słupki obok siebie (`stackId` usunięty, 3 kolory, inna sylwetka) | **Stos Koszty + Zysk** — bliżej obecnego wyglądu; przy stracie słupek = koszty, „Zysk” 0, strata w dymku i Raporcie | E5 |
 
+**Rozstrzygnięcia Bartosza 23.10.2026.** Przyjęte rekomendacje Z1–Z17 z
+następującymi zmianami (nadrzędna zasada: wszystko zostaje identyczne
+rozmiarowo i designowo, zmieniają się tylko napisy i źródło danych):
+
+- **Design identyczny:** bez Z3 (linii stanu nad siatką), bez Z2
+  (bezpiecznika ze starymi kartami) i bez pkt 5–6 z E7. Żadnych nowych
+  kart, linii ani wierszy; dłuższe wyjaśnienia tylko w `title` / `sr-only`.
+- **Z17:** stos Koszty + Zysk + VAT = sprzedaż brutto.
+- **D-P (druczek):** przed weryfikacją KSeF Pulpit i Przepływy mają
+  plakietkę „Dane przykładowe” (ta sama co w Księgowości i Analizach).
+- **D-W (wpłaty, zamiast N6 / Z16):** klient niczego nie oznacza.
+  Zakładamy zapłatę faktury sprzedaży w dniu terminu płatności (brak
+  terminu: data wystawienia); prawdziwa data zapłaty (`invoices.paid_at`
+  albo `Zaplacono` + `DataZaplaty` z FA(3)) ma pierwszeństwo. Podpisy:
+  „według terminów płatności”; Należności nie twierdzą, że ktoś zalega.
+- **D-K (koszty):** wykresy i karty kosztów pokazują pełne koszty z KSeF
+  (faktury zakupowe, także z archiwum historii, plus wydatki spoza KSeF
+  bez powiązanej faktury, bez podwójnego liczenia). KPiR, JPK, eksporty
+  i tabela `expenses` bez zmian (rozliczenie podatkowe klienta).
+- **Wdrożenie:** zgoda na scalenie i wdrożenie w tej samej sesji.
+
 ---
 
 ## 4. Stany firmy i co widzi klient
@@ -574,6 +595,18 @@ Wszystkie z audytu §6, bez zmiany siatki i wyglądu kart:
 - **Czerwony test:** po wgraniu certyfikatu strumień z
   `last_error_code='certificate_expired'` ma błąd wyczyszczony (dziś nie).
 
+### E9–E12 — Zmiany po rozstrzygnięciach 23.10.2026 (zrobione na gałęzi `claude/dane-prawdziwe`)
+
+- **E9 — nazwy produktów:** ranking produktów bez okresu w nazwie.
+- **E10 — koszty z KSeF (D-K):** wykresy i karty kosztów liczą faktury
+  zakupowe z KSeF plus wydatki spoza KSeF; KPiR bez zmian.
+- **E11 — wpływy według terminów płatności (D-W):** zakładana zapłata
+  w dniu terminu, prawdziwa data zapłaty ma pierwszeństwo; podpisy
+  „według terminów płatności”.
+- **E12 — druczek (D-P):** plakietka „Dane przykładowe” w nagłówku
+  pierwszej karty Pulpitu („Finanse”) i Przepływów (wykres przepływów),
+  tylko w trybie przykładu; wysokość nagłówka bez zmian.
+
 ---
 
 ## 8. Testy
@@ -753,3 +786,35 @@ Z8, Z16** (blokują E0–E3 i podpisy należności) i opcjonalnie Z5–Z7, Z9,
 Z17 (blokują E5–E6). Potem PR z audytem i planem do `main`, a następna
 sesja robi **E0** (XS) i **E1 — bezpiecznik „zero przecieku”**. E7
 (mikro-UI) i E8 mogą iść równolegle po E1.
+| 23.10.2026 | E9–E12 | (PR w tej sesji) | gotowe na gałęzi `claude/dane-prawdziwe` | — | commity: patrz niżej |
+
+Commity (`git log --oneline origin/main..HEAD`, 23.10.2026):
+
+- `6098dbf4` Prawdziwe dane E12: plakietka „Dane przykładowe” na Pulpicie i Przepływach (D-P)
+- `8d4a2a4a` Prawdziwe dane E11: wpływy według terminów płatności (D-W)
+- `da1c5ac8` Prawdziwe dane E10: koszty z KSeF na wykresach (D-K)
+- `67f0cb49` Prawdziwe dane: poprawki z recenzji
+- `fdb66a99` Prawdziwe dane E9: ranking produktów bez okresu w nazwie
+- `57a8a5ab` Prawdziwe dane E8: czyszczenie błędów certyfikatu po wgraniu
+- `9a4c9b0c` Prawdziwe dane E7: wiersze Analiz jako linki do dokumentów
+- `bd639ece` Prawdziwe dane E4: uczciwe podpisy w Analizach, demo bez fałszywych linków
+- `65c2bebe` Prawdziwe dane E6: Przepływy na prawdziwych danych w kartach Finory
+- `7dd17440` Prawdziwe dane E5: Pulpit na prawdziwych danych w kartach Finory
+- `7cb60e6d` Prawdziwe dane E2: atrapa bazy zasila loadery Pulpitu i Przepływów
+- `76387a49` Prawdziwe dane E1b: jedna funkcja trybu danych i granica importów lib/demo
+- `73228880` Prawdziwe dane E0: pusty stan wpłat bez wezwania do oznaczania
+- `eeb2a285` Audyt danych Pulpitu, Analiz i Przepływów + plan prawdziwych danych
+
+**Następny krok (23.10.2026):** PR, CI, scalenie, wdrożenie (ta sesja).
+
+---
+
+## 15. Następne (poza tym planem)
+
+- „Na rękę” — wymaga ekranu ustawień podatkowych (forma opodatkowania, ZUS).
+- „Twój rok w KSeF” — podsumowanie roku do udostępnienia.
+- Adres e-mail do faktur zagranicznych + OCR.
+- Import wyciągu (N5) i open banking — wymaga firmy i umowy z pośrednikiem.
+- Koszty z historii KSeF w KPiR (K1) — decyzja podatkowa.
+- Automatyczne „Zapłacono” w wystawianym XML — zmiana treści faktury.
+- FLO — tor Bartosza.
