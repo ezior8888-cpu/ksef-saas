@@ -81,7 +81,9 @@ function expense(id: string, fields: Row = {}): Row {
 }
 
 function props(tables: Record<string, Row[]>, month = '2026-10') {
-  return { supabase: fakePostgrest(tables), tenantId: TENANT, nowIso: NOW_ISO, month };
+  // Tryb danych strony (`kontekstDanych`): bez KSeF = przykład; tu karty czytają podaną bazę.
+  const tryb = verified.value ? ('prawdziwe' as const) : ('przyklad' as const);
+  return { supabase: fakePostgrest(tables), tenantId: TENANT, nowIso: NOW_ISO, month, tryb };
 }
 
 describe('karty analizy sprzedaży', () => {

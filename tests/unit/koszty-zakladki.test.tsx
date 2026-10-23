@@ -21,7 +21,7 @@ vi.mock('@/lib/dashboard/expense-stats', () => ({
   countExpensesToReview: vi.fn(async () => 0),
   getLastInboxFetchAt: vi.fn(async () => null),
 }));
-vi.mock('@/lib/dashboard-shell-data', () => ({ getDashboardActiveOrgVerified: vi.fn(async () => true) }));
+vi.mock('@/lib/demo/tryb-danych', () => ({ trybDanych: vi.fn(async () => ({ tryb: 'prawdziwe', stan: 'C', verifiedAt: null })) }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }) }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/app/actions/expenses', () => ({

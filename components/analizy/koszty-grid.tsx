@@ -4,6 +4,7 @@ import { HEATMAP_DAYS, monthKeysEnding, shiftMonthKey, TREND_MONTHS, currentMont
 import { RECURRING_MONTHS, recurringSuppliers } from '@/lib/analytics-finance/recurring';
 import { salesOfMonth } from '@/lib/analytics-finance/sales';
 import type { CostEntry } from '@/lib/dashboard/costs';
+import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
 
 import {
@@ -29,7 +30,7 @@ import SpendTrendChart from './finora-1do1/spend-trend-chart';
 import SpendingStreaksCard from './finora-1do1/spending-streaks-card';
 import SubscriptionsCard from './finora-1do1/subscriptions-card';
 import { ANALIZY_EMPTY, type EmptyStateProps } from './finora/empty';
-import { loadCostsWindow, loadKsefVerified, loadSalesWindow } from './loaders';
+import { loadCostsWindow, loadSalesWindow } from './loaders';
 
 /**
  * Analiza kosztów `/analizy/koszty` — poprawka Bartosza 21.10.2026: Analizy
@@ -44,10 +45,13 @@ import { loadCostsWindow, loadKsefVerified, loadSalesWindow } from './loaders';
 
 type CardProps = AnalizyCardProps & { className?: string };
 
-/** Pusty miesiąc: firma bez KSeF i bez żadnych wydatków dostaje „Podłącz KSeF” (§7.3). */
-async function costsEmpty(entries: readonly CostEntry[]): Promise<EmptyStateProps> {
+/**
+ * Pusty miesiąc: firma bez KSeF i bez żadnych wydatków dostaje „Podłącz KSeF” (§7.3).
+ * „Bez KSeF” = tryb `przyklad` z `kontekstDanych` (jedno źródło decyzji).
+ */
+function costsEmpty(entries: readonly CostEntry[], tryb: TrybDanych): EmptyStateProps {
   if (entries.length > 0) return ANALIZY_EMPTY.noCostsThisMonth;
-  return (await loadKsefVerified()) ? ANALIZY_EMPTY.noCostsThisMonth : ANALIZY_EMPTY.connectKsef;
+  return tryb !== 'przyklad' ? ANALIZY_EMPTY.noCostsThisMonth : ANALIZY_EMPTY.connectKsef;
 }
 
 /**
@@ -55,12 +59,13 @@ async function costsEmpty(entries: readonly CostEntry[]): Promise<EmptyStateProp
  * ŻADNEGO wydatku — wtedy zera byłyby nieprawdą (świeża firma albo koszty
  * bez KSeF). Z choćby jednym wydatkiem wykres Finory rysuje się zawsze (`null`).
  */
-async function costsWindowEmpty(
+function costsWindowEmpty(
   entries: readonly CostEntry[],
   inWindow: EmptyStateProps,
-): Promise<EmptyStateProps | null> {
+  tryb: TrybDanych,
+): EmptyStateProps | null {
   if (entries.length > 0) return null;
-  return (await loadKsefVerified()) ? inWindow : ANALIZY_EMPTY.connectKsef;
+  return tryb !== 'przyklad' ? inWindow : ANALIZY_EMPTY.connectKsef;
 }
 
 export async function CostStatsSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
@@ -88,13 +93,13 @@ export async function CostStatsSlot({ supabase, tenantId, nowIso, month, classNa
   });
 }
 
-export async function CostTrendSlot({ supabase, tenantId, nowIso, className }: CardProps) {
+export async function CostTrendSlot({ supabase, tenantId, nowIso, tryb, className }: CardProps) {
   return loadAnalizyCard('Trend wydatków', className, async () => {
     const entries = await loadCostsWindow(supabase, tenantId, nowIso);
     const data = toTrendData(costTrend(entries, monthKeysEnding(currentMonthKey(new Date(nowIso)), TREND_MONTHS)));
     // Słupki Finory zawsze, także z jednym miesiącem; pusto tylko, gdy wszystkie 6 to zero (D8).
     const empty = isAllZero(data)
-      ? ((await costsWindowEmpty(entries, ANALIZY_EMPTY.noCostsInTrend)) ?? ANALIZY_EMPTY.noCostsInTrend)
+      ? (costsWindowEmpty(entries, ANALIZY_EMPTY.noCostsInTrend, tryb) ?? ANALIZY_EMPTY.noCostsInTrend)
       : null;
     return (
       <SpendTrendChart
@@ -109,7 +114,7 @@ export async function CostTrendSlot({ supabase, tenantId, nowIso, className }: C
   });
 }
 
-export async function CostCategoriesChartSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
+export async function CostCategoriesChartSlot({ supabase, tenantId, nowIso, month, tryb, className }: CardProps) {
   return loadAnalizyCard('Wydatki według kategorii', className, async () => {
     const entries = await loadCostsWindow(supabase, tenantId, nowIso);
     return (
@@ -117,14 +122,14 @@ export async function CostCategoriesChartSlot({ supabase, tenantId, nowIso, mont
         title="Wydatki według kategorii"
         description="Udział w wydatkach wybranego miesiąca"
         data={toCategorySlices(costCategoryBreakdown(entries, month))}
-        empty={await costsEmpty(entries)}
+        empty={costsEmpty(entries, tryb)}
         className={className}
       />
     );
   });
 }
 
-export async function CostCategoriesListSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
+export async function CostCategoriesListSlot({ supabase, tenantId, nowIso, month, tryb, className }: CardProps) {
   return loadAnalizyCard('Największe kategorie', className, async () => {
     const entries = await loadCostsWindow(supabase, tenantId, nowIso);
     return (
@@ -132,14 +137,14 @@ export async function CostCategoriesListSlot({ supabase, tenantId, nowIso, month
         title="Największe kategorie"
         description="Według kwoty wydanej w wybranym miesiącu"
         data={toRankedItems(toCategorySlices(costCategoryBreakdown(entries, month)), (s) => costCategoryIcon(s.label))}
-        empty={await costsEmpty(entries)}
+        empty={costsEmpty(entries, tryb)}
         className={className}
       />
     );
   });
 }
 
-export async function RecentCostsSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
+export async function RecentCostsSlot({ supabase, tenantId, nowIso, month, tryb, className }: CardProps) {
   return loadAnalizyCard('Ostatnie wydatki', className, async () => {
     const entries = await loadCostsWindow(supabase, tenantId, nowIso);
     return (
@@ -148,7 +153,7 @@ export async function RecentCostsSlot({ supabase, tenantId, nowIso, month, class
         description="Najnowsze wydatki z wybranego miesiąca"
         data={recentCostItems(entries, month)}
         direction="out"
-        empty={await costsEmpty(entries)}
+        empty={costsEmpty(entries, tryb)}
         className={className}
       />
     );
@@ -199,7 +204,7 @@ export async function RecurringCostsSlot({ supabase, tenantId, nowIso, className
   });
 }
 
-export async function CostHeatmapSlot({ supabase, tenantId, nowIso, className }: CardProps) {
+export async function CostHeatmapSlot({ supabase, tenantId, nowIso, tryb, className }: CardProps) {
   return loadAnalizyCard('Kalendarz wydatków', className, async () => {
     const entries = await loadCostsWindow(supabase, tenantId, nowIso);
     const days = dailyTotals(entries, (e) => e.issueDate, (e) => e.outflow, todayInWarsaw(new Date(nowIso)), HEATMAP_DAYS);
@@ -210,7 +215,7 @@ export async function CostHeatmapSlot({ supabase, tenantId, nowIso, className }:
         // motywie dzień z wydatkami jest JAŚNIEJSZY od pustego; i jedna linia jak w Finorze.
         description={`Ostatnie ${HEATMAP_DAYS} dni — mocniejszy kolor to więcej wydatków`}
         data={days}
-        empty={await costsWindowEmpty(entries, ANALIZY_EMPTY.noCostsInWindow)}
+        empty={costsWindowEmpty(entries, ANALIZY_EMPTY.noCostsInWindow, tryb)}
         className={className}
       />
     );

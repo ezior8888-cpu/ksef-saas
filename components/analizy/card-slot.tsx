@@ -6,6 +6,7 @@ import { SectionErrorBoundary } from '@/components/dashboard/section-error-bound
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import type { PageContext } from '@/lib/supabase/page-context';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +27,8 @@ export interface AnalizyCardProps {
   nowIso: string;
   /** Wybrany miesiąc RRRR-MM (już sprawdzony przez `resolveAnalyticsMonth`). */
   month: string;
+  /** Tryb danych strony (`kontekstDanych`) — puste stany zależne od weryfikacji KSeF. */
+  tryb: TrybDanych;
 }
 
 /** Dane karty albo karta błędu z treścią wyjątku dla klienta. */

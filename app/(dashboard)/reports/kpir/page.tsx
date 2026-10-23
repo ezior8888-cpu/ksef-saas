@@ -5,8 +5,7 @@ import { KpirToolbar } from '@/components/reports/kpir/kpir-toolbar';
 import { KsiegowoscTabs } from '@/components/reports/ksiegowosc-tabs';
 import { Card } from '@/components/ui/card';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
-import { czyZweryfikowana } from '@/lib/demo/kontekst-przykladowy';
-import { kpirPrzykladowe } from '@/lib/demo/kpir-przykladowe';
+import { kpirPrzykladowe, trybDanych } from '@/lib/demo/tryb-danych';
 import { getKpirData, resolveKpirPeriod } from '@/lib/reports/kpir-data';
 import { getPageContext } from '@/lib/supabase/page-context';
 
@@ -32,11 +31,13 @@ export default async function KpirPage({
   searchParams: Promise<{ month?: string; year?: string }>;
 }) {
   const sp = await searchParams;
-  const { supabase, tenantId } = await getPageContext();
+  const ctx = await getPageContext();
+  const { supabase, tenantId } = ctx;
   // Poprawka Bartosza 21.10.2026: przed weryfikacją KSeF księga z danymi
   // przykładowymi (lib/demo/kpir-przykladowe.ts) i plakietką — klient widzi
-  // pełną okazałość ekranu. Prawdziwych danych wtedy nie czytamy.
-  if (!(await czyZweryfikowana())) {
+  // pełną okazałość ekranu. Prawdziwych danych wtedy nie czytamy. Decyzję
+  // podejmuje jedna funkcja trybu (lib/demo/tryb-danych.ts, Z15).
+  if ((await trybDanych(ctx, new Date())).tryb === 'przyklad') {
     const { month, year } = resolveKpirPeriod(sp);
     const demo = kpirPrzykladowe(month, year);
     return (

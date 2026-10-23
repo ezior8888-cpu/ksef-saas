@@ -171,6 +171,23 @@ export async function getDashboardOrgSwitcherProps(): Promise<{
 }
 
 /**
+ * Dowód KSeF firmy `tenantId` — tej samej, z której strona czyta dane
+ * (`getPageContext().tenantId`, PLAN-PRAWDZIWE-DANE §4 „Uwaga do F”), a nie
+ * firmy z cookie. Z wierszy członkostwa użytkownika (`cache()` na żądanie —
+ * layout już je przeczytał, więc bez nowego zapytania). `null`: firmy nie ma
+ * w aktywnych członkostwach. Interpretuje go `lib/demo/tryb-danych.ts`.
+ */
+export async function getTenantKsefProof(
+  userId: string,
+  tenantId: string,
+): Promise<{ verifiedAt: string | null; verifiedEnvironment: string | null } | null> {
+  const rows = await getCachedMembershipRowsWithTenants(userId);
+  const tenant = tenantFromActiveRow(rows.find((r) => r.organization_id === tenantId));
+  if (!tenant) return null;
+  return { verifiedAt: tenant.ksef_verified_at, verifiedEnvironment: tenant.ksef_verified_environment };
+}
+
+/**
  * Czy aktywna organizacja ma zweryfikowany KSeF (puste stany kart: „Podłącz KSeF”).
  */
 export async function getDashboardActiveOrgVerified(): Promise<boolean> {

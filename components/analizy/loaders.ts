@@ -4,7 +4,6 @@ import { cache } from 'react';
 
 import { analyticsDataRange, monthRange } from '@/lib/analytics-finance/months';
 import { getSalesInvoices } from '@/lib/analytics-finance/sales';
-import { getDashboardActiveOrgVerified } from '@/lib/dashboard-shell-data';
 import { getCosts } from '@/lib/dashboard/costs';
 import { fetchProductLines } from '@/lib/dashboard/rankings';
 import { getReceivables } from '@/lib/dashboard/receivables';
@@ -30,5 +29,3 @@ export const loadReceivables = cache((supabase: Supabase, tenantId: string, nowI
 
 export const loadProductLines = cache((supabase: Supabase, tenantId: string, month: string) =>
   fetchProductLines(supabase, tenantId, monthRange(month)));
-
-export const loadKsefVerified = cache(() => getDashboardActiveOrgVerified());
