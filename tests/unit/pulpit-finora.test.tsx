@@ -10,7 +10,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Read } from '@/lib/demo/fake-postgrest';
 
 import { memoryClient, type MemoryTables } from './helpers/baza-w-pamieci';
-import { color, contrast, themes } from './helpers/kontrast';
 
 /**
  * Pulpit = strona Finance Finory 1:1 (decyzja Bartosza 19.10.2026), od E5
@@ -39,6 +38,8 @@ vi.mock('@/lib/dashboard-shell-data', () => ({ getTenantKsefProof: async () => s
 const { ZNACZNIKI_PRZYKLADU } = await import('@/lib/demo/znaczniki');
 const { default: DashboardHomePage } = await import('@/app/(dashboard)/dashboard/page');
 const { default: StatisticsCard } = await import('@/components/dashboard/finora/statistics-card-03');
+const { default: StatisticsImpressionCard } = await import('@/components/dashboard/finora/statistics-impression-card');
+const { default: TopProductsCard } = await import('@/components/dashboard/finora/widget-top-products');
 const { financeChartConfig } = await import('@/components/dashboard/finora/chart-finance');
 const adaptery = await import('@/components/dashboard/finora/adaptery');
 const { danePrzykladowe, DEMO_TENANT } = await import('@/lib/demo/dane-przykladowe');
@@ -53,9 +54,10 @@ const KLASY_FINORY: string[] = JSON.parse(
 const KLASY_USUNIETE = ['h-[17%]', 'h-[18%]', 'h-[65%]'];
 /**
  * Klasy dodane z konieczności danych: przycięcie długiej nazwy (prawdziwe
- * pozycje i firmy są dłuższe niż „Dell XPS 13”) i kolor spadku VAT.
+ * pozycje i firmy są dłuższe niż „Dell XPS 13”). Kolorów nie dodajemy
+ * (zasada Bartosza 23.10.2026) — spadek VAT niesie minus, nie czerwień.
  */
-const KLASY_DODANE = ['truncate', 'min-w-0', 'text-destructive'];
+const KLASY_DODANE = ['truncate', 'min-w-0'];
 
 const NOW = new Date('2026-10-23T08:00:00Z');
 /** T9 (PLAN-PRAWDZIWE-DANE §9): odczyty całego Pulpitu na atrapie, zmierzone 23.10.2026. */
@@ -145,6 +147,8 @@ describe('Finanse (Z17 po zmianie Bartosza): stos Koszty + Zysk + VAT', () => {
     expect(bars).toEqual(['profit', 'vat', 'costs']);
     // Oś Y z danych, nie wpisany zakres 0–50.
     expect(src).not.toMatch(/domain=\{\[0, 50\]\}|ticks=\{\[/);
+    // Dymek jak w Finorze: bez wiersza z nazwą miesiąca (miesiąc jest na osi X pod słupkiem).
+    expect(src).toMatch(/<ChartTooltipContent\s+hideLabel/);
   });
 
   it('Raport: ten miesiąc, „Strata” przy stracie, średnia netto w podtytule', () => {
@@ -192,18 +196,55 @@ describe('Kafle: strzałka i znak liczone z danych', () => {
   });
 });
 
-describe('Kolor trendu ze znaku (VAT należny)', () => {
-  it('spadek w `text-destructive` ma kontrast tekstu ≥ 4,5:1 na karcie w obu motywach', () => {
-    for (const theme of Object.values(themes)) {
-      expect(contrast(color('destructive', theme), color('card', theme))).toBeGreaterThanOrEqual(4.5);
-    }
+describe('Zmiana VAT należnego: kolor Finory, znak z danych', () => {
+  const months = [{ label: 'Wrz' }, { label: 'Paź' }];
+  const card = (vatSeries: number[]) =>
+    renderToStaticMarkup(<StatisticsImpressionCard {...adaptery.vatNaleznyProps({ months, vatSeries }, 'prawdziwe')} />);
+
+  it('spadek: minus typograficzny w tym samym `text-primary` co w Finorze — bez nowego koloru', () => {
+    const markup = card([1000, 800]);
+    expect(markup).toContain('<span class="text-primary text-base">−20%</span>');
+    expect(markup).not.toContain('text-destructive');
   });
 
-  it('adapter: spadek → destructive, wzrost → primary, brak podstawy → bez procentu', () => {
-    const months = [{ label: 'Wrz' }, { label: 'Paź' }];
-    expect(adaptery.vatNaleznyProps({ months, vatSeries: [1000, 800] }, 'prawdziwe')).toMatchObject({ side: '−20%', sideTone: 'destructive' });
-    expect(adaptery.vatNaleznyProps({ months, vatSeries: [1000, 1100] }, 'prawdziwe')).toMatchObject({ side: '+10%', sideTone: 'primary' });
-    expect(adaptery.vatNaleznyProps({ months, vatSeries: [0, 1100] }, 'prawdziwe')).toMatchObject({ side: null });
+  it('wzrost: plus; brak podstawy: bez procentu', () => {
+    expect(card([1000, 1100])).toContain('<span class="text-primary text-base">+10%</span>');
+    expect(card([0, 1100])).toContain('<span class="text-primary text-base"></span>');
+  });
+});
+
+describe('Limit VAT (firma zwolniona): napis po prawej mieści się jak „+24%” w Finorze', () => {
+  // Pomiar 23.10.2026 (Chromium, Outfit): kafel ma przy 1280 px ok. 142 px, a „z 240 tys. zł”
+  // obok procentu zawijało się do drugiej linii — kwota bez „zł”, pełna w dymku wartości.
+  const overview = {
+    year: 2026, today: '2026-10-23', months: [{ key: '2026-10', label: 'Paź' }], cumulative: [18_900],
+    used: 18_900, annualLimit: 240_000, startedOn: '2020-01-01',
+    limit: { effectiveLimit: 240_000, prorated: false, activeDays: 365, daysInYear: 365, pct: 7.875, remaining: 221_100, level: 0, formula: '' },
+  } as unknown as Parameters<typeof adaptery.limitVatProps>[0];
+
+  it('„7%” i „z 240 tys.”; pełne kwoty w złotych w dymku', () => {
+    const dane = adaptery.limitVatProps(overview, 'prawdziwe');
+    expect(dane.value).toBe('7%');
+    expect(dane.side?.replace(/\s/g, ' ')).toBe('z 240 tys.');
+    expect(dane.valueTitle?.replace(/\s/g, ' ')).toBe('Sprzedaż 18 900,00 zł z limitu 240 000,00 zł');
+  });
+});
+
+describe('Rankingi: wiersz zawsze w dwóch liniach jak w Finorze', () => {
+  it('długa nazwa i długa druga linia („Nabywcy bez NIP (B2C)”, „NIP …”) są przycinane, pełny tekst w dymku', () => {
+    const row = { icon: <RiFileList3Line />, productName: 'Przedsiębiorstwo Handlowo-Usługowe Przykład sp. z o.o.', productBrand: 'Nabywcy bez NIP (B2C)' };
+    const markup = renderToStaticMarkup(
+      <TopProductsCard
+        salesTitle="Najlepiej sprzedające się"
+        productsBySalesData={[{ ...row, sales: '1 zł' }]}
+        volumeTitle="Najwięksi klienci"
+        productsByVolumeData={[{ ...row, volume: '1 zł', changePercentage: null }]}
+      />,
+    );
+    const subs = [...markup.matchAll(/<span class="([^"]*)"[^>]*>Nabywcy bez NIP \(B2C\)<\/span>/g)].map((m) => m[1]!.split(' '));
+    expect(subs).toHaveLength(2);
+    for (const cls of subs) expect(cls).toEqual(expect.arrayContaining(['truncate', 'text-muted-foreground', 'text-sm']));
+    expect(markup).toContain('title="Nabywcy bez NIP (B2C)"');
   });
 });
 

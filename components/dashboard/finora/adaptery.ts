@@ -55,17 +55,25 @@ const synchronizacja = (tryb: TrybDanych) => tryb === 'synchronizacja';
 
 /**
  * Z9: faktury kosztowe z KSeF dochodzą od weryfikacji (skrzynka nie sięga
- * wstecz), więc koszty miesięcy od `fromMonthKey` dostają dopisek „KSeF od
- * DD.MM”, jeśli weryfikacja wypadła w tym okresie. Przykład i firmy
- * zweryfikowane wcześniej — bez dopisku.
+ * wstecz), więc koszty okna karty od `from` dostają „KSeF od DD.MM”, jeśli
+ * weryfikacja wypadła w tym oknie. `from` to miesiąc „RRRR-MM” (karty
+ * miesięczne) albo dzień „RRRR-MM-DD” (kalendarz 180 dni) — porównanie
+ * z tą samą dokładnością. Przykład i firmy zweryfikowane wcześniej — nic.
+ * Jedno źródło dla Pulpitu, Przepływów i Analiz (`components/analizy/podpisy.ts`).
  */
-export function notaKosztowKsef(tryb: TrybDanych, verifiedAt: string | null, fromMonthKey: string): string {
+export function ksefOd(tryb: TrybDanych, verifiedAt: string | null | undefined, from: string): string {
   if (tryb === 'przyklad' || !verifiedAt) return '';
   const date = formatTimestampDatePl(verifiedAt);
   if (date === '—') return '';
   const [dd, mm, yyyy] = date.split('.');
-  if (`${yyyy}-${mm}` < fromMonthKey) return '';
-  return ` (KSeF od ${dd}.${mm})`;
+  if (`${yyyy}-${mm}-${dd}`.slice(0, from.length) < from) return '';
+  return `KSeF od ${dd}.${mm}`;
+}
+
+/** `ksefOd` jako dopisek w nawiasie: „Koszty (KSeF od 12.10)”. */
+export function notaKosztowKsef(tryb: TrybDanych, verifiedAt: string | null, fromMonthKey: string): string {
+  const od = ksefOd(tryb, verifiedAt, fromMonthKey);
+  return od ? ` (${od})` : '';
 }
 
 // ─── Finanse + Raport ─────────────────────────────────────────────────────
@@ -191,7 +199,7 @@ export function przychodProps(
 
 export type LiniaDane = Omit<StatisticsImpressionCardProps, 'className'>;
 
-/** Płatnik VAT: VAT należny 12 miesięcy, wartość = bieżący miesiąc, % m/m z kolorem ze znaku. */
+/** Płatnik VAT: VAT należny 12 miesięcy, wartość = bieżący miesiąc, % m/m ze znakiem. */
 export function vatNaleznyProps(
   s: { months: readonly { label: string }[]; vatSeries: readonly number[] },
   tryb: TrybDanych,
@@ -204,8 +212,8 @@ export function vatNaleznyProps(
     description: empty && synchronizacja(tryb) ? POBIERAMY_PODPIS : 'Ostatni rok',
     value: formatPlCompactMoney(current),
     valueTitle: `${zl(current)} w tym miesiącu`,
+    // Kolor napisu jak w Finorze (`text-primary`) — spadek niesie minus, nie nowy kolor (zasada 23.10.2026).
     side: change === null ? null : formatPlPercentChange(change),
-    sideTone: change !== null && Math.round(change) < 0 ? 'destructive' : 'primary',
     seriesLabel: 'VAT należny',
     points: s.months.map((m, i) => ({ month: m.label, value: s.vatSeries[i] ?? 0 })),
   };
@@ -230,8 +238,8 @@ export function limitVatProps(o: VatLimitOverview, tryb: TrybDanych): LiniaDane 
     valueTitle: o.limit
       ? `Sprzedaż ${zl(o.used)} z limitu ${zl(o.limit.effectiveLimit)}`
       : `Co najmniej — podaj datę rozpoczęcia działalności w ustawieniach firmy`,
-    side: `z ${formatPlCompactMoney(o.limit?.effectiveLimit ?? o.annualLimit)}`,
-    sideTone: 'primary',
+    // Bez „zł”: obok procentu w kaflu ~142 px „z 240 tys. zł” schodziło do drugiej linii (pomiar 23.10.2026).
+    side: `z ${formatPlCompactNumber(o.limit?.effectiveLimit ?? o.annualLimit)}`,
     seriesLabel: 'Sprzedaż od 1 stycznia',
     points: o.months.map((m, i) => ({ month: m.label, value: o.cumulative[i] ?? 0 })),
   };

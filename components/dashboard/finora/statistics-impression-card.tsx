@@ -27,10 +27,8 @@ export type StatisticsImpressionCardProps = {
   description: string
   value: string
   valueTitle?: string
-  /** Napis po prawej (zmiana m/m albo limit); `null` → pusto. */
+  /** Napis po prawej (zmiana m/m ze znakiem albo limit); `null` → pusto. Kolor jak w Finorze. */
   side: string | null
-  /** Kolor napisu po prawej ze znaku zmiany: spadek → `destructive`. */
-  sideTone: 'primary' | 'destructive'
   /** Nazwa serii w dymku. */
   seriesLabel: string
   points: LiniaPunkt[]
@@ -43,7 +41,6 @@ const StatisticsImpressionCard = ({
   value,
   valueTitle,
   side,
-  sideTone,
   seriesLabel,
   points,
   className
@@ -91,7 +88,7 @@ const StatisticsImpressionCard = ({
         <span className='text-xl font-semibold' title={valueTitle}>
           {value}
         </span>
-        <span className={sideTone === 'destructive' ? 'text-destructive text-base' : 'text-primary text-base'}>{side}</span>
+        <span className='text-primary text-base'>{side}</span>
       </CardContent>
     </Card>
   )

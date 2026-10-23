@@ -68,7 +68,8 @@ const UpcomingBillsCard = ({ title, subTitle, note, bills, empty, menuItems, cla
                 <span className='text-muted-foreground truncate text-sm'>{bill.dueDate}</span>
               </div>
             </div>
-            <span className='text-sm font-medium'>{bill.amount}</span>
+            {/* Kwota nieściśliwa: przy długiej nazwie firmy ucina się nazwa, a nie zawija kwota. */}
+            <span className='shrink-0 text-sm font-medium'>{bill.amount}</span>
           </div>
         ))}
       </CardContent>

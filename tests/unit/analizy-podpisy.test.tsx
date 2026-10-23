@@ -111,6 +111,16 @@ describe('E4: podpisy kart kosztów mówią, że to dokumenty z FaktWay', () => 
     expect(description(html(await koszty.CostHeatmapSlot(withProof)))).toBe('Z dokumentów, KSeF od 09.10 · ostatnie 180 dni');
   });
 
+  it('Kalendarz: okno to 180 dni, nie 6 miesięcy kalendarzowych (dzień, nie miesiąc)', async () => {
+    // NOW 17.10.2026: kalendarz od 21.04.2026, trend (6 miesięcy) od 01.05.2026.
+    const wOknie = props({ expenses: [expense('e')], invoices: [] }, 'prawdziwe', '2026-04-25T08:00:00.000Z');
+    expect(description(html(await koszty.CostHeatmapSlot(wOknie)))).toBe('Z dokumentów, KSeF od 25.04 · ostatnie 180 dni');
+    expect(description(html(await koszty.CostTrendSlot(wOknie)))).toBe('Z dokumentów w FaktWay · brutto, 6 mies.');
+    // Ten sam miesiąc, ale przed pierwszym dniem kalendarza — wszystkie dni okna mają już KSeF.
+    const przedOknem = props({ expenses: [expense('e')], invoices: [] }, 'prawdziwe', '2026-04-10T08:00:00.000Z');
+    expect(description(html(await koszty.CostHeatmapSlot(przedOknem)))).toBe('Z dokumentów w FaktWay · ostatnie 180 dni');
+  });
+
   it('weryfikacja sprzed okna karty: bez dopisku', async () => {
     const old = props({ expenses: [expense('e')], invoices: [] }, 'prawdziwe', '2025-01-09T08:00:00.000Z');
     expect(description(html(await koszty.CostCategoriesChartSlot(old)))).toBe('Z dokumentów w FaktWay · wybrany miesiąc');

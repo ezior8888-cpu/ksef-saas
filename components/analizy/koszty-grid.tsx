@@ -31,7 +31,7 @@ import SpendingStreaksCard from './finora-1do1/spending-streaks-card';
 import SubscriptionsCard from './finora-1do1/subscriptions-card';
 import { ANALIZY_EMPTY, type EmptyStateProps } from './finora/empty';
 import { loadCostsWindow, loadSalesWindow } from './loaders';
-import { ksefOd, oknoKosztowOd, podpisKosztow, pobieramy } from './podpisy';
+import { ksefOd, oknoKalendarzaOd, oknoKosztowOd, podpisKosztow, pobieramy } from './podpisy';
 
 /**
  * Analiza kosztów `/analizy/koszty` — poprawka Bartosza 21.10.2026: Analizy
@@ -216,7 +216,7 @@ export async function CostHeatmapSlot({ supabase, tenantId, nowIso, tryb, verifi
       <SpendHeatmap
         title="Kalendarz wydatków"
         // Podpis mówi o źródle liczb i oknie (E4); wcześniejszy dopisek „mocniejszy kolor to więcej” odpadł dla zachowania jednej linii.
-        description={podpisKosztow(`ostatnie ${HEATMAP_DAYS} dni`, ksefOd(tryb, verifiedAt, oknoKosztowOd(nowIso)))}
+        description={podpisKosztow(`ostatnie ${HEATMAP_DAYS} dni`, ksefOd(tryb, verifiedAt, oknoKalendarzaOd(nowIso)))}
         data={days}
         empty={costsWindowEmpty(entries, ANALIZY_EMPTY.noCostsInWindow, tryb)}
         className={className}

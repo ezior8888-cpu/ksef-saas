@@ -74,6 +74,14 @@ describe('E7 pkt 3: wiersze Analiz jako linki do dokumentów', () => {
     expect(demo).not.toContain('href=');
   });
 
+  it('wygląd bez zmian: link bez własnych klas (ani `hover:underline`), jak nazwy w kartach Przepływów', async () => {
+    const sales = html(await sprzedaz.RecentSalesSlot(props({ invoices: [invoice('a')], invoice_line_items: [] }, 'prawdziwe')));
+    expect(sales).toContain('<a href="/invoices/a">Klient Testowy</a>');
+    const vat = html(await koszty.CostVatSlot(props({ expenses: [expense('e1')], invoices: [] }, 'prawdziwe')));
+    expect(vat).toMatch(/<a href="\/expenses\?filter=unreviewed&amp;miesiac=2026-10">[^<]+<\/a>/);
+    expect(sales + vat).not.toContain('hover:underline');
+  });
+
   it('adapter: link dostaje tylko wiersz „Do opisania”', () => {
     const rows = costVatRows({ vat: 23, vatDeductible: 23, toReview: 2 }, '/expenses?filter=unreviewed&miesiac=2026-10');
     expect(rows.map((r) => r.href ?? null)).toEqual([null, null, '/expenses?filter=unreviewed&miesiac=2026-10']);

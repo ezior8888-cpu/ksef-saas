@@ -69,7 +69,8 @@ const RecentActivityCard = ({ title, activity, empty, menuItems, className }: Pr
                 </span>
               </div>
             </div>
-            <div className='flex items-center gap-2 text-sm'>
+            {/* Kwota nieściśliwa: przy długiej nazwie firmy ucina się nazwa, a nie zawija kwota. */}
+            <div className='flex shrink-0 items-center gap-2 text-sm'>
               <span>
                 {item.direction === 'out' ? '-' : '+'}
                 {item.amount}

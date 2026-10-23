@@ -142,7 +142,7 @@ const FinanceCard = ({ subTitle, costsLabel, months, report, financeMenu, report
                 cursor={false}
                 content={
                   <ChartTooltipContent
-                    labelFormatter={(_, payload) => String(payload?.[0]?.payload?.month ?? '')}
+                    hideLabel
                     formatter={(_value, name, item) => {
                       const m = item.payload as FinanseMiesiac
 

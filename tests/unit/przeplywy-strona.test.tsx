@@ -245,6 +245,21 @@ describe('Przepływy po weryfikacji KSeF: prawdziwe dane', () => {
   });
 });
 
+describe('Wiersze list: kwota w jednej linii, długa nazwa się przycina (ta sama wysokość wiersza)', () => {
+  // Pomiar 23.10.2026 (Chromium, Outfit, 1280 px): przy prawdziwych nazwach firm kwota
+  // „6396,00 zł” w „Spodziewanych wpływach” i „Ostatniej aktywności” schodziła do drugiej linii.
+  it('kontener kwoty jest nieściśliwy (`shrink-0`) w obu kartach', async () => {
+    state.proof = ZWERYFIKOWANA;
+    const markup = await przeplywy(fakePostgrest(danePrzykladowe(NOW, 'test')), DEMO_TENANT);
+    const kwotyTerminow = [...markup.matchAll(/<span class="([^"]*)">\d[\d\s\u00a0]*,\d{2}\s?zł<\/span>/g)].map((m) => m[1]!.split(' '));
+    expect(kwotyTerminow.length).toBeGreaterThan(0);
+    for (const cls of kwotyTerminow) expect(cls).toContain('shrink-0');
+    const aktywnosc = [...markup.matchAll(/<div class="([^"]*)"><span>[+-](?:<!-- -->)?\d/g)].map((m) => m[1]!.split(' '));
+    expect(aktywnosc.length).toBeGreaterThan(0);
+    for (const cls of aktywnosc) expect(cls).toContain('shrink-0');
+  });
+});
+
 describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej nie ma', () => {
   const bucket = (label: string, inflow: number, outflow: number, inflowCount = 1) =>
     ({ key: label, label, period: label, inflow, outflow, inflowCount });

@@ -33,7 +33,7 @@ const SpendingStreaksCard = ({ title, description, descriptionTitle, rows, class
               <p className='text-sm font-medium'>{row.title}</p>
               <p className='text-muted-foreground text-sm tabular-nums'>
                 {row.href ? (
-                  <Link href={row.href} className='hover:underline'>
+                  <Link href={row.href}>
                     {row.value}
                   </Link>
                 ) : (

@@ -78,7 +78,9 @@ const TopProductsCard = ({
                   <span className='truncate text-base' title={product.productName}>
                     {product.productName}
                   </span>
-                  <span className='text-muted-foreground text-sm'>{product.productBrand || EMPTY_LINE}</span>
+                  <span className='text-muted-foreground truncate text-sm' title={product.productBrand || undefined}>
+                    {product.productBrand || EMPTY_LINE}
+                  </span>
                 </div>
               </div>
               <span className='shrink-0 text-sm' title={product.salesTitle}>
@@ -113,7 +115,9 @@ const TopProductsCard = ({
                   <span className='truncate text-base' title={product.productName}>
                     {product.productName}
                   </span>
-                  <span className='text-muted-foreground text-sm'>{product.productBrand || EMPTY_LINE}</span>
+                  <span className='text-muted-foreground truncate text-sm' title={product.productBrand || undefined}>
+                    {product.productBrand || EMPTY_LINE}
+                  </span>
                 </div>
               </div>
               <div className='flex shrink-0 items-center justify-between gap-3 text-sm'>

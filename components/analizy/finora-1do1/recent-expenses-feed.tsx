@@ -103,7 +103,7 @@ const RecentExpensesFeed = ({ title, description, data, direction, empty, classN
                 <div className='min-w-0 flex-1'>
                   <p className='truncate text-sm font-medium' title={expense.merchant}>
                     {expense.href ? (
-                      <Link href={expense.href} className='hover:underline'>
+                      <Link href={expense.href}>
                         {expense.merchant}
                       </Link>
                     ) : (
