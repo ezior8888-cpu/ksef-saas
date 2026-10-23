@@ -1,6 +1,6 @@
 /**
- * Ładowanie tras z kartami Finory (Pulpit, Przepływy) — poprawka Bartosza
- * 23.10.2026: „przejścia pomiędzy zakładkami nie są już takie clean”.
+ * Ładowanie tras z kartami Finory (Pulpit, Przepływy, Analizy) — poprawka
+ * Bartosza 23.10.2026: „przejścia pomiędzy zakładkami nie są już takie clean”.
  *
  * Bez szkieletu: ogólny szkielet segmentu `(dashboard)/loading.tsx` nie
  * pasuje do siatki Finory i migał przed każdą stroną. Tu tylko puste miejsce

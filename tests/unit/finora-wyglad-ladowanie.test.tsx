@@ -55,8 +55,13 @@ const { todayInWarsaw } = await import('@/lib/format/warsaw-date');
 const NOW = new Date('2026-10-23T08:00:00Z');
 const T = DEMO_TENANT;
 
-/** Sumy słupków „Finance” Finory (Sty–Lip: profit + income + expense), tys. — nasze 7 miesięcy w zł brutto. */
-const FINANCE_FINORY = [20, 28, 40, 25, 44, 50, 44];
+/**
+ * Sumy słupków „Finance” Finory (Sty–Lip: profit + income + expense), tys. — nasze 7 miesięcy w zł brutto.
+ * Szczyt 49,05 zamiast 50 świadomie (poprawka ze zrzutów 24.10.2026): netto poniżej 40 tys. trzyma
+ * automatyczną oś recharts kart „Przychód netto” i „Trend sprzedaży” na 0–40 tys. (przy 50 była 0–60
+ * i słupki miały 2/3 wysokości); na osi „Finanse” 0–50 tys. różnicy nie widać.
+ */
+const FINANCE_FINORY = [20, 28, 40, 25, 44, 49.05, 44];
 
 async function html(node: ReactNode): Promise<string> {
   const { prelude } = await prerenderToNodeStream(<>{node}</>);
@@ -137,7 +142,6 @@ describe('dane przykładowe w kształcie wykresów Finory', () => {
       months: series.months, net: series.netSeries, vat: series.vatSeries, costs, tryb: 'przyklad', kosztyKsefOd: null,
     });
     const sumy = dane.months.map((m) => m.profit + m.vat + m.costs);
-    expect(sumy.map((v) => Math.round(v / 1000))).toEqual(FINANCE_FINORY);
     sumy.forEach((v, i) => expect(Math.abs(v - FINANCE_FINORY[i]! * 1000)).toBeLessThan(1));
     expect(Math.max(...sumy)).toBeLessThanOrEqual(50_000);
     expect(financeYAxis(Math.max(...sumy)).ticks).toEqual([0, 10_000, 20_000, 30_000, 40_000, 50_000]);
@@ -152,7 +156,15 @@ describe('dane przykładowe w kształcie wykresów Finory', () => {
   it('VAT należny: 12 punktów, na początku pary jak linia „Wyświetlenia” (20-20, 50-50)', async () => {
     const { vatSeries } = await getSalesSeries(sb(), T, NOW, { months: 12, withPrevYear: false });
     const tys = vatSeries.map((v) => Math.round(v / 0.23 * 1.23 / 1000));
-    expect(tys).toEqual([11, 11, 26, 26, 16, ...FINANCE_FINORY]);
+    expect(tys).toEqual([11, 11, 26, 26, 16, ...FINANCE_FINORY.map(Math.round)]);
+  });
+
+  it('Przychód netto i Trend sprzedaży: szczyt netto tuż pod 40 tys. — automatyczna oś 0–40 tys., najwyższy słupek pod górą wykresu', async () => {
+    const s = await getSalesSeries(sb(), T, NOW, { months: 6, withPrevYear: true });
+    const wszystkie = [...s.netSeries, ...s.prevNetSeries.slice(-5)];
+    // recharts dzieli [0, max] na 4 kroki „ładne” co 500 zł do 40 tys., powyżej co 5 tys. (oś 0–60 tys.).
+    expect(Math.max(...wszystkie)).toBeLessThan(40_000);
+    expect(Math.max(...wszystkie)).toBeGreaterThan(0.95 * 40_000);
   });
 
   it('Przychód netto: ten rok i rok wcześniej na zmianę wyżej i niżej (seria „Telefon”)', async () => {

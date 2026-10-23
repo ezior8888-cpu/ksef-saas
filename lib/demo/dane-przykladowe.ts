@@ -127,8 +127,14 @@ function koniecMiesiaca(kal: Kalendarz, k: number): string {
  * Sprzedaż brutto miesięcy k = 0…6 (k = miesięcy wstecz), tys. zł: sumy
  * słupków „Finance” Finory od lipca wstecz do stycznia (44, 50, 44, 25, 40,
  * 28, 20). Stos na karcie: Zysk + VAT należny (23% netto) + Koszty.
+ *
+ * Szczyt 49,05 zamiast 50 (poprawka ze zrzutów 24.10.2026): netto 39,9 tys.
+ * mieści się w automatycznej osi recharts 0–40 tys., więc słupki kart
+ * „Przychód netto” i „Trend sprzedaży” sięgają pod górę wykresu jak w Finorze.
+ * Przy 50 tys. brutto (netto 40,65) oś skakała do 60 tys. i najwyższy słupek
+ * miał 2/3 wysokości. Na osi „Finanse” (0–50 tys.) różnicy nie widać.
  */
-const FINANSE_FINORY = [44, 50, 44, 25, 40, 28, 20];
+const FINANSE_FINORY = [44, 49.05, 44, 25, 40, 28, 20];
 /**
  * k = 7…11: początek linii „Wyświetlenia” Finory (20-20, 50-50, 30 przy
  * szczycie 105) w skali karty VAT — dalszych siedem punktów to już słupki
@@ -439,15 +445,30 @@ function tygodnie(kal: Kalendarz, plan: Faktura[]): void {
     }
     if (!poprawa) break;
   }
-  for (const f of wOknie) {
-    const wTygodniu = dni.get(f.id)!.filter((d) => tydzien(d) === wybor.get(f.id));
-    // Środek dostępnych dni tygodnia (bez weekendu, jeśli się da) — termin jak u prawdziwej faktury.
-    const robocze = wTygodniu.filter((d) => {
-      const dow = new Date(`${d}T12:00:00Z`).getUTCDay();
-      return dow !== 0 && dow !== 6;
+  // Faktury tygodnia rozłożone po jego dniach roboczych (poprawka ze zrzutów
+  // 24.10.2026): wszystkie w środku tygodnia dawały na kaflu „Wpływy w tym
+  // miesiącu” schodek na jeden dzień i płaskie plateau — krzywa narastająca ma
+  // iść łagodnie jak w Finorze. Sumy tygodni i miesięcy bez zmian.
+  const wTygodniuFaktury = new Map<number, Faktura[]>();
+  for (const f of kolejnosc) {
+    const t = wybor.get(f.id)!;
+    wTygodniuFaktury.set(t, [...(wTygodniuFaktury.get(t) ?? []), f]);
+  }
+  for (const faktury of wTygodniuFaktury.values()) {
+    faktury.forEach((f, r) => {
+      const wTygodniu = dni.get(f.id)!.filter((d) => tydzien(d) === wybor.get(f.id));
+      // Dni robocze (bez weekendu, jeśli się da) — termin jak u prawdziwej faktury.
+      const robocze = wTygodniu.filter((d) => {
+        const dow = new Date(`${d}T12:00:00Z`).getUTCDay();
+        return dow !== 0 && dow !== 6;
+      });
+      const zbior = robocze.length > 0 ? robocze : wTygodniu;
+      // Jedna faktura — środek tygodnia; kilka — równo od pierwszego do ostatniego dnia (większe kwoty wcześniej).
+      const idx = faktury.length === 1
+        ? Math.floor((zbior.length - 1) / 2)
+        : Math.round((r * (zbior.length - 1)) / (faktury.length - 1));
+      f.due = zbior[idx]!;
     });
-    const zbior = robocze.length > 0 ? robocze : wTygodniu;
-    f.due = zbior[Math.floor((zbior.length - 1) / 2)]!;
   }
 }
 
@@ -619,7 +640,9 @@ const pol = (k: number) => (k <= 6 ? k : k % 7);
 const DOSTAWCY: Dostawca[] = [
   // Czynsz 2400 zł netto (dawniej 2460 brutto): koszt roku większy od piątego klienta, więc
   // „Największe źródła przepływów” mieszają wpływy i koszty jak w Finorze (zielone i czerwone kwoty).
-  { nip: '0000000011', name: 'Coworking Przykład sp. z o.o.', category: 'Czynsz', day: 3, gross: () => 2952, aktywny: ZAWSZE, kanal: 'ksef' },
+  // Faktura za czynsz 1. dnia (poprawka ze zrzutów 24.10.2026; dawniej 3.): skok o 1/3 kosztów
+  // tuż po starcie wyginał krzywą kafla „Koszty w tym miesiącu” w dołek pod pierwszym punktem.
+  { nip: '0000000011', name: 'Coworking Przykład sp. z o.o.', category: 'Czynsz', day: 1, gross: () => 2952, aktywny: ZAWSZE, kanal: 'ksef' },
   { nip: '0000000022', name: 'Leasing Przykład S.A.', category: 'Usługi finansowe', day: 15, gross: () => 1599, aktywny: ZAWSZE, kanal: 'ksef' },
   { nip: '0000000033', name: 'Biuro Rachunkowe Przykład sp. z o.o.', category: 'Usługi obce', day: 10, gross: () => 738, aktywny: ZAWSZE, kanal: 'ksef' },
   { nip: '0000000044', name: 'Chmura Przykład sp. z o.o.', category: 'Oprogramowanie', day: 1, gross: () => 615, aktywny: ZAWSZE, kanal: 'ksef' },

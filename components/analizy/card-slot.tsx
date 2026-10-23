@@ -1,23 +1,18 @@
-import { Fragment, Suspense, type ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 import { PulpitCardError } from '@/components/dashboard/pulpit/card-states';
 import { PULPIT_GENERIC_ERROR, pulpitErrorMessage } from '@/components/dashboard/pulpit/pulpit-grid';
 import { SectionErrorBoundary } from '@/components/dashboard/section-error-boundary';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
 import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import type { PageContext } from '@/lib/supabase/page-context';
-import { cn } from '@/lib/utils';
 
 /**
  * Oprawa kart `/analizy/*` (plan Finora §2.4 pkt 15, wzór: siatka Pulpitu).
- * Każda karta to osobny asynchroniczny Server Component w `<Suspense>`
- * i `SectionErrorBoundary`: strażnik, który rzuci (faktura w EUR, przyjęta
- * faktura bez środowiska, niepełna strona), zabiera JEDNĄ kartę z treścią
- * wyjątku (`pulpitErrorMessage` — bez angielskiego ogona PostgREST-a),
- * a reszta strony działa. Strona nie woła na swoim poziomie żadnej funkcji
- * z §2.4.
+ * Każda karta to osobny asynchroniczny loader w `SectionErrorBoundary`:
+ * strażnik, który rzuci (faktura w EUR, przyjęta faktura bez środowiska,
+ * niepełna strona), zabiera JEDNĄ kartę z treścią wyjątku
+ * (`pulpitErrorMessage` — bez angielskiego ogona PostgREST-a), a reszta
+ * strony działa. Strona nie woła na swoim poziomie żadnej funkcji z §2.4.
  */
 
 export interface AnalizyCardProps {
@@ -49,154 +44,53 @@ export async function loadAnalizyCard(
 }
 
 /**
- * Kształt szkieletu = kształt karty Finory, którą zastępuje (poprawka Bartosza
- * 21.10.2026: Analizy 1:1 z Finory, „nie zmieniaj rozmiarów” — także w czasie
- * ładowania, żeby strona nie skakała, gdy karty dochodzą po kolei):
- * `stats` — Monthly Stats, `bar` — Spend Trend, `pie` — Category Breakdown,
- * `list` — listy z kółkiem ikony do 6 wierszy (ranking z „Pozostałe”, stałe
- * koszty / stali klienci), `feed` — ta sama lista z 5 wierszami (Recent
- * Expenses: `recentCosts` / `recentSales` mają w lib `limit = 5`, jak Finora;
- * 6 wierszy szkieletu dawało na telefonie skok o wiersz + odstęp), `rows` —
- * trzy wiersze `bg-muted` (Spending Streaks, Income vs Expense), `heatmap` —
- * Daily Spend.
+ * Slot karty `/analizy/*`: dane albo karta błędu (`loadAnalizyCard`) w granicy
+ * błędu renderu (komponent kliencki karty).
+ *
+ * Bez `Suspense` i szkieletu w każdej karcie (poprawka Bartosza 23.10.2026:
+ * „przejścia pomiędzy zakładkami nie są już takie clean”, jak Pulpit
+ * i Przepływy): siatka pobiera dane wszystkich kart RÓWNOLEGLE i renderuje się
+ * raz, w całości, jak Monthly Analytics Finory (`Promise.all` w `AnalizySiatka`).
+ * Karta nigdy nie odrzuca — błąd loadera to karta błędu — więc `Promise.all`
+ * siatki działa jak `Promise.allSettled`. Trasa ma własny, pusty
+ * `loading.tsx` zamiast ogólnego szkieletu segmentu, a wejście treści animuje
+ * `ff-route-content`.
  */
-export type AnalizySkeletonVariant = 'stats' | 'bar' | 'pie' | 'list' | 'feed' | 'rows' | 'heatmap';
-
-/** Liczba wierszy szkieletu listy = najwięcej pozycji, które pokaże karta. */
-const LIST_SKELETON_ROWS = { list: 6, feed: 5 } as const;
-
-/**
- * Linia szkieletu o wysokości linii tekstu, który zastąpi: `h-lh` (1lh)
- * w klasie tekstu z karty daje dokładnie tę wysokość wiersza, a pasek
- * szkieletu siedzi w nim pośrodku.
- */
-function SkeletonLine({ textClassName, barClassName }: { textClassName?: string; barClassName: string }) {
-  return (
-    <div className={cn('flex h-lh items-center', textClassName)}>
-      <Skeleton className={barClassName} />
-    </div>
-  );
-}
-
-/** Kafel Monthly Stats: kwadrat ikony, wartość `text-2xl`, etykieta `text-sm` (jak `stats-cards.tsx`). */
-function StatTileSkeleton() {
-  return (
-    <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
-      <Skeleton className="size-10 shrink-0" />
-      <div className="min-w-0">
-        <SkeletonLine textClassName="text-2xl" barClassName="h-8 w-24" />
-        <SkeletonLine textClassName="text-sm" barClassName="h-4 w-20" />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Szkielet karty `/analizy/*` w pudełkach prawdziwej karty Finory. Nie ruszamy
- * `PulpitCardSkeleton` (wspólny z Pulpitem) — tu wymiary są Finory.
- */
-function AnalizyCardSkeleton({ variant, className }: { variant: AnalizySkeletonVariant; className?: string }) {
-  if (variant === 'stats') {
-    // Ta sama siatka co `components/dashboard/stats-cards.tsx`: dwie pary kafli
-    // z separatorami, więc 1440 → 1 rząd, 1024 → 2×2, telefon → kolumna.
-    return (
-      <Card className={cn('shadow-none', className)} aria-busy="true">
-        <CardContent>
-          <div className="flex gap-5 max-xl:flex-col">
-            {[0, 1].map((group) => (
-              <Fragment key={group}>
-                {group > 0 ? (
-                  <>
-                    <Separator className="xl:hidden" />
-                    <Separator orientation="vertical" className="hidden xl:block" />
-                  </>
-                ) : null}
-                <div className="flex flex-1 gap-5 max-sm:flex-col">
-                  <StatTileSkeleton />
-                  <Separator className="sm:hidden" />
-                  <Separator orientation="vertical" className="hidden sm:block" />
-                  <StatTileSkeleton />
-                </div>
-              </Fragment>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className={className} aria-busy="true">
-      {/* `CardTitle` / `CardDescription` dają wysokości linii tytułu i podpisu. */}
-      <CardHeader>
-        <CardTitle className="flex h-lh items-center">
-          <Skeleton className="h-4 w-32" />
-        </CardTitle>
-        <CardDescription className="flex h-lh items-center">
-          <Skeleton className="h-3 w-48" />
-        </CardDescription>
-      </CardHeader>
-      {variant === 'bar' ? (
-        <CardContent>
-          <Skeleton className="aspect-video max-h-70 w-full" />
-        </CardContent>
-      ) : null}
-      {variant === 'pie' ? (
-        <CardContent>
-          {/* Bez `w-full`: `max-h-70` przenosi się przez proporcję na szerokość (koło 249 px w SM). */}
-          <Skeleton className="mx-auto aspect-square max-h-70 rounded-full" />
-        </CardContent>
-      ) : null}
-      {variant === 'list' || variant === 'feed' ? (
-        <CardContent className="space-y-4">
-          {Array.from({ length: LIST_SKELETON_ROWS[variant] }, (_, i) => (
-            <div key={i} className="flex items-center gap-4">
-              <Skeleton className="size-10 shrink-0 rounded-full" />
-              <Skeleton className="h-4 flex-1" />
-            </div>
-          ))}
-        </CardContent>
-      ) : null}
-      {variant === 'rows' ? (
-        <CardContent className="space-y-2">
-          {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="bg-muted flex items-center gap-3 p-3">
-              {/* Na tle `bg-muted` szkielet `bg-muted` byłby niewidoczny. */}
-              <Skeleton className="bg-foreground/10 size-6 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <SkeletonLine textClassName="text-sm" barClassName="bg-foreground/10 h-4 w-28" />
-                <SkeletonLine textClassName="text-sm" barClassName="bg-foreground/10 h-4 w-20" />
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      ) : null}
-      {variant === 'heatmap' ? (
-        <CardContent>
-          {/* 7 pól `size-3.75` + 6 odstępów `gap-3.5` + `pb-1` przewijanego kontenera. */}
-          <Skeleton className="h-48.25 w-full" />
-        </CardContent>
-      ) : null}
-    </Card>
-  );
-}
-
-export function AnalizySlot({
-  title,
-  className,
-  variant,
-  children,
-}: {
-  title: string;
-  className?: string;
-  variant: AnalizySkeletonVariant;
-  children: ReactNode;
-}) {
+export async function analizySlot(
+  title: string,
+  className: string | undefined,
+  karta: () => Promise<ReactNode>,
+): Promise<ReactNode> {
+  const tresc = await karta();
   return (
     <SectionErrorBoundary
       fallback={<PulpitCardError title={title} message="Nie udało się wyświetlić karty." className={className} />}
     >
-      <Suspense fallback={<AnalizyCardSkeleton variant={variant} className={className} />}>{children}</Suspense>
+      {tresc}
     </SectionErrorBoundary>
+  );
+}
+
+/** Pozycja siatki: tytuł karty błędu, rozpiętość Finory i karta (`*Slot` z `loadAnalizyCard`). */
+export type AnalizyKarta = readonly [
+  title: string,
+  className: string,
+  karta: (props: AnalizyCardProps & { className?: string }) => Promise<ReactNode>,
+];
+
+/**
+ * Siatka `grid gap-6 md:grid-cols-4` z kartami w kolejności Finory — wszystkie
+ * naraz, bez szkieletów (`analizySlot`).
+ */
+export async function AnalizySiatka({ karty, ...props }: AnalizyCardProps & { karty: readonly AnalizyKarta[] }) {
+  const tresc = await Promise.all(
+    karty.map(([title, className, karta]) => analizySlot(title, className, () => karta({ ...props, className }))),
+  );
+  return (
+    <div className="grid gap-6 md:grid-cols-4">
+      {tresc.map((karta, i) => (
+        <Fragment key={karty[i]![0]}>{karta}</Fragment>
+      ))}
+    </div>
   );
 }

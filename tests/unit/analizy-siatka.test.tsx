@@ -1,5 +1,6 @@
-import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { prerenderToNodeStream } from 'react-dom/static';
 import { describe, expect, it, vi } from 'vitest';
 
 import { fakePostgrest, type Row } from '../helpers/fake-postgrest';
@@ -16,7 +17,7 @@ vi.mock('next/navigation', () => ({
 
 const koszty = await import('@/components/analizy/koszty-grid');
 const sprzedaz = await import('@/components/analizy/sprzedaz-grid');
-const { AnalizySlot } = await import('@/components/analizy/card-slot');
+const { AnalizySiatka } = await import('@/components/analizy/card-slot');
 const { ANALIZY_EMPTY } = await import('@/components/analizy/finora/empty');
 
 /**
@@ -98,47 +99,39 @@ async function withoutKsef<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Finora `monthly-analytics/index.tsx`: rozpiętości i kształt szkieletu dziewięciu kart. */
+/** Finora `monthly-analytics/index.tsx`: rozpiętości dziewięciu kart. */
 const FINORA_GRID = [
-  ['md:col-span-4', 'stats'],
-  ['md:col-span-2 2xl:col-span-3', 'bar'],
-  ['md:max-2xl:col-span-2', 'pie'],
-  ['md:col-span-2', 'list'],
-  // „Ostatnie wydatki / faktury”: szkielet z 5 wierszami jak lista (limit 5, jak Finora) — bez skoku po wczytaniu.
-  ['md:col-span-2', 'feed'],
-  ['md:col-span-2', 'rows'],
-  ['md:col-span-2', 'rows'],
-  ['md:col-span-2', 'list'],
-  ['md:col-span-2', 'heatmap'],
+  'md:col-span-4',
+  'md:col-span-2 2xl:col-span-3',
+  'md:max-2xl:col-span-2',
+  'md:col-span-2',
+  'md:col-span-2',
+  'md:col-span-2',
+  'md:col-span-2',
+  'md:col-span-2',
+  'md:col-span-2',
 ] as const;
 
-function gridShape(grid: ReactElement) {
-  const root = grid as ReactElement<{ className?: string; children?: ReactNode }>;
-  const slots = Children.toArray(root.props.children).filter(isValidElement) as ReactElement<{
-    className?: string;
-    variant?: string;
-    children?: ReactNode;
-  }>[];
-  return {
-    type: root.type,
-    className: root.props.className,
-    slots: slots.map((slot) => {
-      const card = slot.props.children as ReactElement<{ className?: string }>;
-      return { type: slot.type, className: slot.props.className, variant: slot.props.variant, card: card.type, cardClassName: card.props.className };
-    }),
-  };
+async function prerender(node: ReactNode): Promise<string> {
+  const { prelude } = await prerenderToNodeStream(<>{node}</>);
+  let out = '';
+  for await (const chunk of prelude) out += String(chunk);
+  return out;
 }
 
 describe('siatka 1:1 z Finory', () => {
   const p = props({});
 
+  // Poprawka Bartosza 23.10.2026 („przejścia nie są już takie clean”): karty
+  // bez `Suspense` i szkieletów — siatka (`AnalizySiatka`) czeka na wszystkie
+  // naraz, jak Pulpit i Przepływy. Dawniej test sprawdzał tu warianty
+  // szkieletów `AnalizySlot`; kolejność i rozpiętości kart zostają te same.
   it('koszty: jedna siatka `grid gap-6 md:grid-cols-4`, 9 kart w kolejności i rozpiętościach Finory', () => {
-    const shape = gridShape(koszty.KosztyGrid(p));
-    expect(shape.type).toBe('div');
-    expect(shape.className).toBe('grid gap-6 md:grid-cols-4');
-    expect(shape.slots.map((s) => [s.className, s.variant])).toEqual(FINORA_GRID);
-    expect(shape.slots.every((s) => s.type === AnalizySlot && s.cardClassName === s.className)).toBe(true);
-    expect(shape.slots.map((s) => s.card)).toEqual([
+    const grid = koszty.KosztyGrid(p);
+    expect(grid.type).toBe(AnalizySiatka);
+    expect(grid.props.karty).toBe(koszty.SIATKA_KOSZTOW);
+    expect(koszty.SIATKA_KOSZTOW.map(([, className]) => className)).toEqual(FINORA_GRID);
+    expect(koszty.SIATKA_KOSZTOW.map(([, , karta]) => karta)).toEqual([
       koszty.CostStatsSlot,
       koszty.CostTrendSlot,
       koszty.CostCategoriesChartSlot,
@@ -153,12 +146,11 @@ describe('siatka 1:1 z Finory', () => {
 
   it('sprzedaż: ta sama siatka, bez rzędu „Udział klientów” / „Klienci: rośnie / spada”', () => {
     const grid = sprzedaz.SprzedazGrid(p);
-    const shape = gridShape(grid);
-    expect(shape.type).toBe('div');
-    expect(shape.className).toBe('grid gap-6 md:grid-cols-4');
-    expect(shape.slots.map((s) => [s.className, s.variant])).toEqual(FINORA_GRID);
-    expect(shape.slots.every((s) => s.type === AnalizySlot && s.cardClassName === s.className)).toBe(true);
-    expect(shape.slots.map((s) => s.card)).toEqual([
+    expect(grid.type).toBe(AnalizySiatka);
+    expect(grid.props.karty).toBe(sprzedaz.SIATKA_SPRZEDAZY);
+    expect(sprzedaz.SIATKA_SPRZEDAZY.map(([, className]) => className)).toEqual(FINORA_GRID);
+    const karty = sprzedaz.SIATKA_SPRZEDAZY.map(([, , karta]) => karta);
+    expect(karty).toEqual([
       sprzedaz.SalesStatsSlot,
       sprzedaz.SalesTrendSlot,
       sprzedaz.ProductsChartSlot,
@@ -172,8 +164,20 @@ describe('siatka 1:1 z Finory', () => {
     // Karty spoza siatki zostają w kodzie (wrócimy do nich), ale nie są renderowane.
     expect(typeof sprzedaz.ClientSharesSlot).toBe('function');
     expect(typeof sprzedaz.ClientMoversSlot).toBe('function');
-    expect(shape.slots.map((s) => s.card)).not.toContain(sprzedaz.ClientSharesSlot);
-    expect(shape.slots.map((s) => s.card)).not.toContain(sprzedaz.ClientMoversSlot);
+    expect(karty).not.toContain(sprzedaz.ClientSharesSlot);
+    expect(karty).not.toContain(sprzedaz.ClientMoversSlot);
+  });
+
+  it.each([
+    ['koszty', () => koszty.KosztyGrid(p)],
+    ['sprzedaż', () => sprzedaz.SprzedazGrid(p)],
+  ] as const)('%s: HTML w całości — 9 kart z klasami siatki, bez szkieletów i granic Suspense', async (_name, grid) => {
+    const markup = await prerender(grid());
+    expect(markup.startsWith('<div class="grid gap-6 md:grid-cols-4">')).toBe(true);
+    for (const span of new Set(FINORA_GRID)) expect(markup, span).toContain(span);
+    for (const slad of ['data-slot="skeleton"', 'animate-pulse', 'aria-busy', '<!--$?-->', '<template id="B:']) {
+      expect(markup, slad).not.toContain(slad);
+    }
   });
 });
 

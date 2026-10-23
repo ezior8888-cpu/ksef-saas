@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { use } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -18,7 +17,8 @@ vi.mock('next/navigation', () => ({
 }));
 
 const { AnalizyHeader, ANALIZY_MODES } = await import('@/components/analizy/analizy-header');
-const { AnalizySlot } = await import('@/components/analizy/card-slot');
+const { analizySlot } = await import('@/components/analizy/card-slot');
+const { default: AnalizyLoading } = await import('@/app/(dashboard)/analizy/loading');
 const { analyticsMonthOptions, currentMonthKey } = await import('@/lib/analytics-finance/months');
 const { default: AnalizyRedirect } = await import('@/app/(dashboard)/analizy/page');
 
@@ -27,7 +27,7 @@ const { default: AnalizyRedirect } = await import('@/app/(dashboard)/analizy/pag
  * z Finory, jedna pozycja menu): tytuł według rodzaju analizy, przełącznik
  * „Sprzedaż | Koszty” jako nawigacja z `aria-current`, wybrany miesiąc
  * przechodzi na drugą analizę tylko, gdy nie jest bieżącym; `/analizy`
- * przekierowuje na sprzedaż; szkielety kart mają pudełka kart Finory.
+ * przekierowuje na sprzedaż; karty bez szkieletów (strona wchodzi w całości).
  */
 
 /** SSR wstawia <!-- --> między sąsiednie węzły tekstowe — usuwamy je. */
@@ -128,7 +128,8 @@ describe('strony /analizy/*', () => {
   it('korzeń strony nadpisuje --muted w ciemnym motywie i podaje rodzaj analizy', () => {
     for (const page of ['sprzedaz', 'koszty']) {
       const src = source(page);
-      expect(src, page).toContain('className="space-y-6 dark:[--muted:var(--background)]"');
+      // `ff-route-content` (poprawka 23.10.2026): strona wchodzi w całości z animacją, jak Pulpit.
+      expect(src, page).toContain('className="ff-route-content space-y-6 dark:[--muted:var(--background)]"');
       expect(src, page).toContain(`mode="${page}"`);
       expect(src, page).toContain('currentMonth={currentMonthKey(now)}');
     }
@@ -149,61 +150,31 @@ describe('strony /analizy/*', () => {
   });
 });
 
-describe('AnalizySlot — szkielety w pudełkach kart Finory', () => {
-  /** Karta, która nigdy nie dociera — Suspense pokazuje szkielet. */
-  function Pending(): React.ReactNode {
-    use(new Promise<never>(() => {}));
-    return null;
-  }
+// Poprawka Bartosza 23.10.2026 („przejścia pomiędzy zakładkami nie są już
+// takie clean”): Analizy ładują się jak Pulpit i Przepływy — wszystkie karty
+// naraz, bez `Suspense` i szkieletu w każdej karcie, a trasa ma pusty
+// `loading.tsx` zamiast ogólnego szkieletu segmentu. Dawne testy wariantów
+// szkieletu `AnalizySlot` (stats, bar, pie, list, feed, rows, heatmap)
+// odpadły razem ze szkieletami.
+describe('ładowanie Analiz: bez szkieletów kart', () => {
+  it('slot karty: treść karty w granicy błędu, bez szkieletu i `aria-busy`', async () => {
+    const out = html(<>{await analizySlot('Karta', 'md:col-span-2', async () => <div className="md:col-span-2">Treść karty</div>)}</>);
+    expect(out).toBe('<div class="md:col-span-2">Treść karty</div>');
+  });
 
-  const skeleton = (variant: Parameters<typeof AnalizySlot>[0]['variant']) =>
-    html(
-      <AnalizySlot title="Karta" variant={variant} className="md:col-span-2">
-        <Pending />
-      </AnalizySlot>,
-    );
+  it('`loading.tsx` Analiz: puste miejsce bez szkieletu (dawny ogólny szkielet segmentu migał przed siatką Finory)', () => {
+    const out = html(<AnalizyLoading />);
+    expect(out).not.toContain('data-slot="skeleton"');
+    expect(out).not.toContain('animate-pulse');
+    expect(out).toContain('aria-label="Ładowanie"');
+  });
 
-  const count = (out: string, needle: string) => out.split(needle).length - 1;
-
-  it('każdy wariant: karta aria-busy z klasą slotu', () => {
-    for (const variant of ['stats', 'bar', 'pie', 'list', 'feed', 'rows', 'heatmap'] as const) {
-      const out = skeleton(variant);
-      expect(out, variant).toContain('aria-busy="true"');
-      expect(out, variant).toContain('md:col-span-2');
+  it('strony Analiz wchodzą w całości z animacją `ff-route-content`', () => {
+    for (const page of ['sprzedaz', 'koszty']) {
+      const src = readFileSync(join(process.cwd(), 'app', '(dashboard)', 'analizy', page, 'page.tsx'), 'utf8');
+      expect(src, page).toContain('className="ff-route-content space-y-6');
     }
-  });
-
-  it('bar i pie: pudełka wykresów Finory (max-h-70), koło bez w-full', () => {
-    expect(skeleton('bar')).toContain('aspect-video max-h-70 w-full');
-    const pie = skeleton('pie');
-    expect(pie).toMatch(/class="[^"]*mx-auto aspect-square max-h-70 rounded-full"/);
-    expect(pie).not.toMatch(/aspect-square[^"]*w-full/);
-  });
-
-  it('list: 6 wierszy z kółkiem size-10; rows: 3 wiersze bg-muted p-3; heatmap: h-48.25', () => {
-    const list = skeleton('list');
-    expect(count(list, 'size-10 shrink-0 rounded-full')).toBe(6);
-    expect(list).toContain('space-y-4');
-    const rows = skeleton('rows');
-    expect(count(rows, 'class="bg-muted flex items-center gap-3 p-3"')).toBe(3);
-    expect(rows).toContain('space-y-2');
-    expect(skeleton('heatmap')).toContain('h-48.25 w-full');
-  });
-
-  it('feed: 5 wierszy jak „Ostatnie wydatki / faktury” (limit 5 w lib, jak Finora)', () => {
-    // Szkielet z 6 wierszami był o wiersz + odstęp wyższy od karty z 5 pozycjami
-    // i na telefonie (jedna kolumna) strona skakała o ~50 px przy dojściu danych.
-    const feed = skeleton('feed');
-    expect(count(feed, 'size-10 shrink-0 rounded-full')).toBe(5);
-    expect(feed).toContain('space-y-4');
-    expect(feed).toContain('data-slot="card-header"');
-  });
-
-  it('stats: 4 kafle jak Monthly Stats, bez nagłówka karty', () => {
-    const out = skeleton('stats');
-    expect(count(out, 'flex min-w-0 flex-1 items-center justify-between gap-4')).toBe(4);
-    expect(out).toContain('flex gap-5 max-xl:flex-col');
-    expect(out).not.toContain('data-slot="card-header"');
-    expect(skeleton('bar')).toContain('data-slot="card-header"');
+    const slot = readFileSync(join(process.cwd(), 'components', 'analizy', 'card-slot.tsx'), 'utf8');
+    expect(slot).not.toMatch(/<Suspense|from '@\/components\/ui\/skeleton'/);
   });
 });
