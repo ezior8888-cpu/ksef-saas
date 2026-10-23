@@ -1,21 +1,39 @@
 import Link from 'next/link';
-import { Check, FileCheck2, Receipt, Users } from 'lucide-react';
+import {
+  BellRing,
+  Check,
+  CloudOff,
+  FileCheck2,
+  FileInput,
+  Receipt,
+  Users,
+} from 'lucide-react';
 
 import { PRICE_GROSS, TRIAL_DAYS } from '@/lib/billing/pricing';
 
 import { BandGlow, ButtonLink, Container, SectionHeading } from './ui';
 
 /*
- * Teksty o tym, co działa dziś, pochodzą z poprzedniej strony głównej,
- * sprawdzonej w przeglądzie prawnym 15.10.2026 (tests/unit/marketing-bez-fikcji).
+ * Opisy funkcji pochodzą z poprzedniej strony głównej, cennika i pytań,
+ * sprawdzonych w przeglądzie prawnym 15.10.2026 (tests/unit/marketing-bez-fikcji).
  * Nowych obietnic o produkcie tu nie dopisujemy.
  */
 
-const TODAY = [
+const FEATURES = [
   {
     icon: FileCheck2,
-    title: 'Faktury do KSeF',
-    text: 'Wystawiasz fakturę, my wysyłamy ją do KSeF i pilnujemy potwierdzenia.',
+    title: 'Wysyłka do KSeF',
+    text: 'Wystawiasz fakturę, my wysyłamy ją do KSeF i pobieramy UPO.',
+  },
+  {
+    icon: CloudOff,
+    title: 'Kolejka, gdy KSeF nie działa',
+    text: 'Faktura czeka w kolejce i wychodzi sama, gdy system wróci. Dostajesz wtedy powiadomienie.',
+  },
+  {
+    icon: BellRing,
+    title: 'Płatności pod kontrolą',
+    text: 'Faktury po terminie masz w jednym miejscu, a FLO przygotowuje przypomnienia dla klientów.',
   },
   {
     icon: Receipt,
@@ -27,21 +45,26 @@ const TODAY = [
     title: 'Dostęp dla księgowej',
     text: 'Zapraszasz ją na konto, a ona sama pobiera komplet dokumentów za wybrany okres.',
   },
+  {
+    icon: FileInput,
+    title: 'Import z innego programu',
+    text: 'Wgrywasz plik z Fakturowni albo inFaktu, resztę robimy my.',
+  },
 ] as const;
 
-export function Today() {
+export function Features() {
   return (
-    <section aria-labelledby="dzis-title" className="py-20 sm:py-28">
+    <section id="funkcje" aria-labelledby="funkcje-title" className="py-20 sm:py-28">
       <Container>
         <SectionHeading
-          id="dzis-title"
-          title="Co działa już dziś"
-          lead="Zanim FLO dołączy, FaktWay to prosty program do faktur."
+          id="funkcje-title"
+          title="Od faktury do księgowej, bez przepisywania"
+          lead="FaktWay prowadzi fakturę przez KSeF aż do Twojej księgowej. Ty wystawiasz, my pilnujemy reszty."
         />
-        <ul className="mx-auto mt-14 grid max-w-5xl gap-10 sm:grid-cols-3 sm:gap-8">
-          {TODAY.map(({ icon: Icon, title, text }) => (
-            <li key={title} className="text-center sm:text-left">
-              <span className="mx-auto flex size-11 items-center justify-center rounded-xl bg-accent text-accent-foreground sm:mx-0">
+        <ul className="mx-auto mt-16 grid max-w-5xl gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map(({ icon: Icon, title, text }) => (
+            <li key={title}>
+              <span className="flex size-11 items-center justify-center rounded-xl bg-accent text-accent-foreground">
                 <Icon aria-hidden className="size-5" />
               </span>
               <h3 className="mt-5 text-lg font-semibold">{title}</h3>
@@ -49,31 +72,6 @@ export function Today() {
             </li>
           ))}
         </ul>
-      </Container>
-    </section>
-  );
-}
-
-export function CallToAction() {
-  return (
-    <section
-      aria-labelledby="start-title"
-      className="relative overflow-hidden bg-primary py-20 text-primary-foreground sm:py-28"
-    >
-      <BandGlow className="rotate-180" />
-      <Container className="relative">
-        <div className="mx-auto max-w-xl text-center">
-          <h2 id="start-title" className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Zacznij od faktur
-          </h2>
-          <p className="mt-4 text-lg text-pretty text-primary-foreground/80">
-            Agent FLO pojawi się w FaktWay, gdy będzie gotowy. {TRIAL_DAYS} dni za darmo,
-            rezygnujesz, kiedy chcesz.
-          </p>
-          <ButtonLink href="/register" variant="inverse" className="mt-10">
-            Wypróbuj za darmo
-          </ButtonLink>
-        </div>
       </Container>
     </section>
   );
@@ -126,8 +124,8 @@ export function Pricing() {
 const QUESTIONS = [
   [
     {
-      q: 'Kiedy FLO będzie dostępny?',
-      a: 'Jeszcze nad nim pracujemy i nie podajemy daty. Do tego czasu FaktWay działa jak program do faktur z wysyłką do KSeF.',
+      q: 'Co dokładnie robi FLO?',
+      a: 'Zauważa sprawy, które czekają na ruch: fakturę po terminie, fakturę odrzuconą przez KSeF, koniec miesiąca dla księgowej. Przygotowuje rozwiązanie, a Ty je zatwierdzasz.',
     },
     {
       q: 'Czy muszę mieć podpis elektroniczny?',
@@ -183,6 +181,30 @@ export function Faq() {
               ))}
             </dl>
           ))}
+        </div>
+      </Container>
+    </section>
+  );
+}
+
+export function CallToAction() {
+  return (
+    <section
+      aria-labelledby="start-title"
+      className="relative overflow-hidden bg-primary py-20 text-primary-foreground sm:py-28"
+    >
+      <BandGlow className="rotate-180" />
+      <Container className="relative">
+        <div className="mx-auto max-w-xl text-center">
+          <h2 id="start-title" className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+            Wystaw pierwszą fakturę jeszcze dziś
+          </h2>
+          <p className="mt-4 text-lg text-pretty text-primary-foreground/80">
+            {TRIAL_DAYS} dni za darmo. Rezygnujesz, kiedy chcesz.
+          </p>
+          <ButtonLink href="/register" variant="inverse" className="mt-10">
+            Wypróbuj za darmo
+          </ButtonLink>
         </div>
       </Container>
     </section>

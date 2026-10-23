@@ -6,6 +6,7 @@ const COLUMNS = [
   {
     title: 'Produkt',
     links: [
+      { label: 'Funkcje', href: '#funkcje' },
       { label: 'Agent FLO', href: '#flo' },
       { label: 'Cennik', href: '#pricing' },
       { label: 'Pytania', href: '#faq' },

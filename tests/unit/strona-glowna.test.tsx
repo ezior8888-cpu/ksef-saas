@@ -10,11 +10,12 @@ import { PRICE_GROSS, TRIAL_DAYS } from '@/lib/billing/pricing';
 /**
  * Strona główna od 23.10.2026: prosty układ w duchu Salient/TaxPal, pisany
  * od zera na naszych tokenach. Zasady od Bartosza:
- *  - bez opinii klientów (nie mamy prawdziwych, art. 7 pkt 23b-23c u.p.n.p.r.),
- *  - mało o produkcie, główny temat to agent FLO,
- *  - bez długich myślników w tekstach.
- * Agent FLO nie jest jeszcze dostępny dla klientów, więc strona musi to
- * mówić wprost (art. 5 u.p.n.p.r.).
+ *  - strona jest o FaktWay (fakturowanie z automatyzacją), agent FLO to
+ *    dodatek i powód, żeby zostać;
+ *  - FLO opisany jako dostępny, bo strona wychodzi razem z nim
+ *    (PR scalany dopiero w dniu udostępnienia FLO klientom);
+ *  - bez opinii klientów (nie mamy prawdziwych, art. 7 pkt 23b-23c u.p.n.p.r.);
+ *  - bez plakietek nad nagłówkami i bez długich myślników w tekstach.
  */
 
 const html = renderToStaticMarkup(<HomePage />);
@@ -31,12 +32,17 @@ describe('strona główna', () => {
     expect(text).not.toMatch(/opini|ocen[ay]|zaufali|★/i);
   });
 
-  it('FLO jako główny temat, ale wprost oznaczony jako niedostępny', () => {
-    expect(text).toMatch(/agent AI/);
-    expect(text).toContain('Wkrótce');
-    expect(text).toContain('FLO jest w przygotowaniu');
-    // Przykładowa wiadomość FLO podpisana jako przykład.
-    expect(html).toMatch(/<figcaption[^>]*>[^<]*Przykład/);
+  it('nagłówek mówi o fakturach, FLO dopiero dalej', () => {
+    const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? '';
+    expect(h1).toContain('KSeF');
+    expect(h1).not.toContain('FLO');
+    expect(html.indexOf('id="funkcje"')).toBeLessThan(html.indexOf('id="flo"'));
+    expect(text).toContain('agent AI');
+  });
+
+  it('bez plakietki nad nagłówkiem strony', () => {
+    const beforeH1 = html.slice(0, html.indexOf('<h1'));
+    expect(beforeH1).not.toMatch(/rounded-full[^"]*bg-accent/);
   });
 
   it('cena i okres próbny z lib/billing/pricing', () => {
@@ -44,8 +50,8 @@ describe('strona główna', () => {
     expect(text).toContain(`${TRIAL_DAYS} dni za darmo`);
   });
 
-  it('kotwice, do których prowadzą O nas, Blog i stopka', () => {
-    for (const id of ['flo', 'pricing', 'faq']) expect(html).toContain(`id="${id}"`);
+  it('kotwice, do których prowadzą nawigacja, O nas, Blog i stopka', () => {
+    for (const id of ['funkcje', 'flo', 'pricing', 'faq']) expect(html).toContain(`id="${id}"`);
     expect(html).toContain('href="/register"');
     expect(html).toContain('href="/login"');
   });

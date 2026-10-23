@@ -1,5 +1,3 @@
-import { Sparkles } from 'lucide-react';
-
 import { PRICE_PER_MONTH, TRIAL_DAYS } from '@/lib/billing/pricing';
 
 import { ButtonLink, Container } from './ui';
@@ -21,38 +19,33 @@ function MarkerStroke({ className }: { className?: string }) {
   );
 }
 
+// Hasło to samo co na ekranie logowania (AUTH_SLOGAN_TITLE).
 export function Hero() {
   return (
-    <Container className="pt-14 pb-20 text-center sm:pt-20 lg:pt-28 lg:pb-28">
-      <p className="inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-sm font-medium text-accent-foreground">
-        <Sparkles aria-hidden className="size-4" />
-        Wkrótce: agent FLO
-      </p>
-
-      <h1 className="mx-auto mt-6 max-w-4xl text-5xl font-semibold tracking-tight text-balance text-foreground sm:text-7xl">
-        Twój{' '}
+    <Container className="pt-16 pb-20 text-center sm:pt-24 lg:pt-32 lg:pb-28">
+      <h1 className="mx-auto max-w-4xl text-5xl font-semibold tracking-tight text-balance text-foreground sm:text-7xl">
+        {/* Twarda spacja: „w” nie może zostać samo na końcu linii. */}
+        Faktury w{' '}KSeF{' '}
         <span className="relative whitespace-nowrap text-primary">
           <MarkerStroke className="absolute -bottom-[0.06em] left-[-3%] h-[0.42em] w-[106%] text-primary/20" />
-          <span className="relative">agent AI</span>
-        </span>{' '}
-        od faktur
+          <span className="relative">bez stresu</span>
+        </span>
       </h1>
 
       <p className="mx-auto mt-6 max-w-2xl text-lg text-pretty text-muted-foreground">
-        FLO będzie pilnował płatności, poprawiał faktury odrzucone przez KSeF i szykował paczkę
-        dla księgowej. Ciebie zapyta tylko o decyzję.
+        Wystawiasz fakturę, a FaktWay wysyła ją do KSeF, pilnuje potwierdzenia i płatności.
+        Resztę przygotowuje FLO, nasz agent AI.
       </p>
 
       <div className="mt-10 flex flex-wrap justify-center gap-3">
         <ButtonLink href="/register">Wypróbuj za darmo</ButtonLink>
-        <ButtonLink href="#flo" variant="outline">
-          Zobacz, jak działa FLO
+        <ButtonLink href="#funkcje" variant="outline">
+          Zobacz, jak to działa
         </ButtonLink>
       </div>
 
-      <p className="mx-auto mt-8 max-w-xl text-sm text-pretty text-muted-foreground">
-        FLO jest w przygotowaniu. Już dziś wystawisz w FaktWay faktury i wyślesz je do KSeF:{' '}
-        {TRIAL_DAYS} dni za darmo, potem {PRICE_PER_MONTH}.
+      <p className="mt-6 text-sm text-muted-foreground">
+        {TRIAL_DAYS} dni za darmo, potem {PRICE_PER_MONTH}. Rezygnujesz, kiedy chcesz.
       </p>
     </Container>
   );
