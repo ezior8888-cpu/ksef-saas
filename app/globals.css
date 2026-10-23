@@ -1009,6 +1009,7 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
 }
 
 
+
 /* ─── Telefon: bezpieczne obszary i wysokości szkieletu ─────────────────────
  * `app/layout.tsx` ustawia `viewportFit: 'cover'` i `black-translucent`, czyli
  * treść ROZLEWA SIĘ pod wcięciem i pod paskiem domowym iOS. Do września 2026
@@ -1088,6 +1089,32 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
  * więc reguła nie robi nic na komputerze. */
 .ff-shell-scroll {
   padding-bottom: calc(var(--ff-bottom-nav-h) + var(--ff-safe-b));
+  /* Dojście do krawędzi listy nie przewija dalej dokumentu („gumka” iOS
+   * ciągnęła wtedy cały ekran razem z paskiem górnym). */
+  overscroll-behavior-y: contain;
+}
+
+/* ─── Pasek górny stoi w miejscu (zgłoszenie Bartosza 23.10.2026) ────────────
+ * W panelu przewija się WYŁĄCZNIE `.ff-shell-scroll`; dokument ma się nie
+ * przewijać wcale. A przewijał się: `<body>` ma `min-h-screen` (100vh), a na
+ * telefonie 100vh to wysokość okna BEZ pasków przeglądarki, czyli więcej niż
+ * widać. Szkielet (`100dvh`) był niższy od `<body>`, więc dokument dawał się
+ * przesunąć o wysokość paska Safari. Przy każdej zmianie zakładki Next woła
+ * `scrollIntoView()` na nowej stronie — to przewija też dokument, aż góra
+ * strony stanie przy górnej krawędzi ekranu, i pasek górny wyjeżdżał poza
+ * ekran. To samo robiła „gumka” iOS przy przeciąganiu za pasek.
+ *
+ * Tylko na ekranie: wydruk (podgląd faktury ma style `print:`) zostaje bez
+ * zmian. Klasa `ff-app-shell` stoi wyłącznie na korzeniu `(dashboard)/layout`,
+ * więc landing i strony logowania przewijają się po staremu. */
+@media screen {
+  html:has(.ff-app-shell),
+  html:has(.ff-app-shell) body {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
 }
 
 /* ─── Przyklejone paski akcji ────────────────────────────────────────────────
