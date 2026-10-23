@@ -1,27 +1,22 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Landing page (Faza 19)', () => {
-  test('hero z głównym CTA i nagłówkiem', async ({ page }) => {
+test.describe('Strona główna i strony marketingowe', () => {
+  // Strona główna od 23.10.2026 (app/(home)): agent FLO jako główny temat,
+  // wprost oznaczony jako niedostępny. Wcześniejsze testy szukały sekcji
+  // („Problem/Solution”, kalkulator), których nie było już na stronie Zova.
+  test('hero: agent AI, oznaczenie „wkrótce” i główne CTA', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText(/ksef 2\.0/i).first()).toBeVisible();
-    await expect(
-      page.getByRole('heading', {
-        name: /wystawiaj faktury w ksef/i,
-      }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('link', { name: /wypróbuj za darmo/i }).first(),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: /agent AI od faktur/i })).toBeVisible();
+    await expect(page.getByText('Wkrótce: agent FLO')).toBeVisible();
+    await expect(page.getByRole('link', { name: /wypróbuj za darmo/i }).first()).toBeVisible();
   });
 
-  test('sekcja porównawcza Problem/Solution', async ({ page }) => {
-    await page.goto('/');
-    await expect(
-      page.getByRole('heading', { name: /stare apki to formularze/i }),
-    ).toBeVisible();
-    await expect(
-      page.getByText(/zdjęcie paragonu.*automatycznie kpir/i),
-    ).toBeVisible();
+  test('sekcja FLO: zakładki przełączają przykład', async ({ page }) => {
+    await page.goto('/#flo');
+    const tabs = page.getByRole('tablist', { name: 'Co zrobi FLO' });
+    await tabs.getByRole('tab', { name: /odrzucone faktury/i }).click();
+    await expect(page.getByRole('tabpanel')).toContainText('KSeF odrzucił fakturę');
+    await expect(page.getByText(/przykład z wymyślonymi danymi/i)).toBeVisible();
   });
 
   // Strony porównawcze wyłączone 15.10.2026 do weryfikacji treści
@@ -40,15 +35,6 @@ test.describe('Landing page (Faza 19)', () => {
   test('/vs/fakturownia przekierowuje na /vs/inni', async ({ page }) => {
     await page.goto('/vs/fakturownia');
     await expect(page).toHaveURL(/\/vs\/inni/);
-  });
-
-  test('savings calculator preview renderuje się', async ({ page }) => {
-    await page.goto('/');
-    await expect(
-      page.getByRole('heading', {
-        name: /ile zaoszczędzisz/i,
-      }),
-    ).toBeVisible();
   });
 
   test('legal pages dostępne z footera', async ({ page }) => {
