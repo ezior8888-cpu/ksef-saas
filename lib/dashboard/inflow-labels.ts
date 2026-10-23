@@ -9,12 +9,14 @@
 export const INFLOW_NOTE = 'według terminów płatności';
 
 /**
- * Pusty stan okresu bez żadnego wpływu (żadna faktura sprzedaży nie ma
- * w nim terminu, zapłaty ani — bez terminu — dnia wystawienia); nigdy
- * „0 zł”. Mieści się w miejscu „wobec poprzedniego miesiąca”.
+ * Pusty stan okresu bez żadnego wpływu, który już był (żadna faktura
+ * sprzedaży nie ma w nim prawdziwej zapłaty, minionego terminu ani — bez
+ * terminu — dnia wystawienia); nigdy „0 zł”. Nie „brak faktur z terminem”:
+ * termin dziś jest jeszcze spodziewany (recenzja 2), więc faktura z terminem
+ * w tym okresie może być. Mieści się w miejscu „wobec poprzedniego miesiąca”.
  */
-export const INFLOW_EMPTY = 'Brak faktur z terminem';
+export const INFLOW_EMPTY = 'Brak wpływów wg terminów';
 
 /** To samo w dymku, pełnym zdaniem. */
 export const INFLOW_EMPTY_TITLE =
-  'Brak faktur sprzedaży z terminem płatności w tym okresie. Wpływy liczymy według terminów płatności.';
+  'W tym okresie nie ma wpływów według terminów płatności. Termin dziś pokazujemy w Spodziewanych wpływach, na wykresie liczy się od jutra.';

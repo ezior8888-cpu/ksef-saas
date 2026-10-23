@@ -246,14 +246,22 @@ async function PierscienKarta({ supabase, tenantId, nowIso, tryb, className }: S
   });
 }
 
+/**
+ * Tytuł kafla wpływów (recenzja 2): nie „Wpłynęło” — klient nic nie oznacza
+ * (D-W), więc kwota to wpływy według terminów płatności, nie potwierdzone
+ * pieniądze. Założenie w nawiasie jak „(brutto)” w kaflu kosztów obok;
+ * mieści się w szerokości podpisu „wobec poprzedniego miesiąca” (ta sama linia).
+ */
+const TYTUL_WPLYWOW = 'Wpływy w tym miesiącu (wg terminów)';
+
 async function WplywyKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
-  return zaladujKarte('Wpłynęło w tym miesiącu', className, async () => {
+  return zaladujKarte(TYTUL_WPLYWOW, className, async () => {
     const inflows = await loadInflows(supabase, tenantId, nowIso, 'recent');
     const flow = monthFlows(inflows, [], todayInWarsaw(new Date(nowIso))).inflow;
     return (
       <StatisticsAreaStatCard
         chartKey="income"
-        title="Wpłynęło w tym miesiącu"
+        title={TYTUL_WPLYWOW}
         {...wplywyMiesiacaProps(flow, tryb)}
         color="var(--chart-4)"
         badgeClassName="bg-chart-4/10 text-chart-4"
@@ -370,7 +378,7 @@ export function PierscienSlot(props: SlotProps) {
 
 export function WplywySlot(props: SlotProps) {
   return (
-    <Slot title="Wpłynęło w tym miesiącu" wariant="kafel" className={props.className}>
+    <Slot title={TYTUL_WPLYWOW} wariant="kafel" className={props.className}>
       <WplywyKarta {...props} />
     </Slot>
   );

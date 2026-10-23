@@ -145,6 +145,23 @@ describe('E12 (D-P): plakietka „Dane przykładowe” na Pulpicie i Przepływac
     expect(markup).not.toContain('Dane przykładowe');
   });
 
+  it.each(OBA)('%s — zweryfikowana, historia się pobiera (synchronizacja): bez plakietki', async (_path, page) => {
+    state.ctx.supabase = memoryClient({
+      ksef_history_sync: [{
+        tenant_id: 'firma-a',
+        environment: 'test',
+        direction: 'outgoing',
+        created_at: new Date().toISOString(),
+        backfill_completed_at: null,
+        client_paused_at: null,
+        last_error_code: null,
+      }],
+    });
+    const markup = await html(await page());
+    expect(markup).toContain('Pobieramy faktury z KSeF');
+    expect(markup).not.toContain('Dane przykładowe');
+  });
+
   it.each(OBA)("%s — G'' (brak KSEF_ENV): bez plakietki", async (_path, page) => {
     vi.stubEnv('KSEF_ENV', '');
     state.ctx.supabase = fakePostgrest({});

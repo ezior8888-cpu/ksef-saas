@@ -67,6 +67,9 @@ const KLASY_DODANE = [
   'text-amber-800',
   'dark:bg-amber-400/15',
   'dark:text-amber-300',
+  // Recenzja 2: plakietka obok tytułu zwęża się na wąskim ekranie (`DemoBadge skracana`: `shrink`
+  // zamiast `shrink-0`, napis z `truncate`), żeby tytuł karty nie łamał się w drugą linię przy 320–360 px.
+  'shrink',
 ];
 
 const NOW = new Date('2026-10-23T08:00:00Z');
@@ -78,8 +81,10 @@ const NOW = new Date('2026-10-23T08:00:00Z');
  * i numerze (+1) i zwolnienie z VAT (+1).
  * E11 (D-W) świadomie −2: Należności czytają wpływy od dziś (`getInflows`,
  * jeden odczyt) zamiast `getReceivables` (faktury, korekty i ROZ).
+ * Recenzja 2 świadomie +1: korekty wystawione przed dziś do faktur z terminem
+ * od dziś (zmieniają kwotę spodziewaną; `correctionsBefore` w `inflows.ts`).
  */
-const READS_PULPITU = 27;
+const READS_PULPITU = 28;
 const ZWERYFIKOWANA: Proof = { verifiedAt: '2026-10-12T08:00:00Z', verifiedEnvironment: 'test' };
 
 async function html(node: ReactNode): Promise<string> {

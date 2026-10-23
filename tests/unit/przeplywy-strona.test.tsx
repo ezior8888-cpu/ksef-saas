@@ -60,8 +60,12 @@ const ZWERYFIKOWANA: Proof = { verifiedAt: '2026-10-12T08:00:00Z', verifiedEnvir
  * z VAT (+1).
  * E11 (D-W) świadomie −2: „Spodziewane wpływy” czytają wpływy (`getInflows`,
  * jeden odczyt) zamiast należności (`getReceivables`: faktury, korekty i ROZ).
+ * Recenzja 2 świadomie +5: odczyt wpływów okna 12 miesięcy (pięć odczytów
+ * bez RSC `cache()`, na produkcji jeden) czyta też korekty wystawione przed
+ * oknem do faktur z dniem wpływu w oknie (`correctionsBefore` w
+ * `inflows.ts`); okno 5 lat w demo takich faktur nie ma, więc bez odczytu.
  */
-const READS_PRZEPLYWOW = 46;
+const READS_PRZEPLYWOW = 51;
 
 /** Klasy dzisiejszych (sprzed E6) Przepływów Finory — zrzut z renderu 23.10.2026. */
 const KLASY_FINORY: string[] = JSON.parse(
@@ -81,6 +85,9 @@ const KLASY_DODANE = [
   'text-amber-800',
   'dark:bg-amber-400/15',
   'dark:text-amber-300',
+  // Recenzja 2: plakietka obok tytułu zwęża się na wąskim ekranie (`DemoBadge skracana`: `shrink`
+  // zamiast `shrink-0`, napis z `truncate`), żeby tytuł karty nie łamał się w drugą linię przy 320–360 px.
+  'shrink',
 ];
 /**
  * Klasy usunięte z konieczności danych: `capitalize` dawała wielką literę
@@ -152,7 +159,8 @@ describe('Przepływy przed weryfikacją KSeF: dane przykładowe przez te same lo
     for (const text of [
       'Przepływy pieniężne', 'Suma wpływów', 'Suma kosztów', 'Tygodniowo', 'Miesięcznie', 'Rocznie',
       'Odłóż na podatek', 'Szacunek PIT od 1 stycznia', 'Szacunek: liniowy, bez ZUS',
-      'Wpłynęło w tym miesiącu', 'Koszty w tym miesiącu (brutto)', 'wobec poprzedniego miesiąca',
+      // Recenzja 2: kafel nie twierdzi, że pieniądze wpłynęły — założenie D-W w tytule, jak „(brutto)” obok.
+      'Wpływy w tym miesiącu (wg terminów)', 'Koszty w tym miesiącu (brutto)', 'wobec poprzedniego miesiąca',
       'Największe źródła przepływów', 'Spodziewane wpływy', 'Następne 30 dni', 'Termin ',
       'Ostatnia aktywność', 'Termin · ', 'Kontrahent', 'Kategoria', 'Status', 'Przykład',
       'Terminy płatności, koszty brutto', 'Wg terminu',
@@ -164,7 +172,7 @@ describe('Przepływy przed weryfikacją KSeF: dane przykładowe przez te same lo
       'Nadchodzące rachunki', 'Czynsz za biuro', 'Wynagrodzenia', 'Rachunek firmowy', 'Rachunek oszczędnościowy',
       'Internet i media', 'Netflix', 'Allegro', 'Jakub Adamski', 'zrealizowana', 'nieudana', 'subskrypcja',
       'Suma wydatków', 'Wpływy i wydatki w czasie', 'Udostępnij', 'Aktualizuj',
-      'Wpłata · ', 'Suma wpłat', 'oznacz', 'zaległ', 'nie potwierdzamy',
+      'Wpłata · ', 'Suma wpłat', 'oznacz', 'zaległ', 'nie potwierdzamy', 'Wpłynęło',
     ]) {
       expect(markup).not.toContain(text);
     }
@@ -225,7 +233,7 @@ describe('Przepływy po weryfikacji KSeF: prawdziwe dane', () => {
   it('pusta firma: bez znaczników przykładu, pusty stan wpływów bez „oznaczania” (E11)', async () => {
     const markup = await przeplywy(memoryClient({ ksef_history_sync: [] }));
     expect(ZNACZNIKI_PRZYKLADU.filter((z) => markup.includes(z))).toEqual([]);
-    expect(markup).toContain('Brak faktur z terminem');
+    expect(markup).toContain('Brak wpływów wg terminów');
     expect(markup).not.toContain('Wpłat jeszcze nie oznaczono');
     expect(markup).not.toContain('Pobieramy faktury z KSeF');
   });
@@ -313,7 +321,7 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
     const dane = adaptery.wplywyMiesiacaProps(flow, 'prawdziwe');
     expect(dane.amount).toBe('—');
     expect(dane.changePercentage).toBe('—');
-    expect(dane.comparison).toBe('Brak faktur z terminem');
+    expect(dane.comparison).toBe('Brak wpływów wg terminów');
     expect(dane.chartData).toHaveLength(2);
     expect(dane.chartData[0]!.value).toBe(0);
 

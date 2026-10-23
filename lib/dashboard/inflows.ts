@@ -1,7 +1,7 @@
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { OutgoingInvoiceCurrencyNotSupportedError } from '@/lib/exports/currency-guard';
 import { addDaysToIsoDate, todayInWarsaw } from '@/lib/format/warsaw-date';
-import { amountDueOf, outstandingOf } from '@/lib/invoices/amount-due';
+import { amountDueOf } from '@/lib/invoices/amount-due';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import type { PageContext } from '@/lib/supabase/page-context';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
@@ -20,7 +20,7 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
  * 3. termin płatności (`payment_due_date`) — zakładamy zapłatę w terminie;
  * 4. bez terminu — dzień wystawienia.
  * Przy 3–4 kwota to brutto do zapłaty (`amountDueOf`: ROZ — reszta po
- * zaliczkach), a `outstanding` to reszta po potwierdzonych wpłatach
+ * zaliczkach; z korektami — niżej), a `outstanding` to reszta po potwierdzonych wpłatach
  * częściowych — tę kwotę pokazują Spodziewane wpływy i Należności. Wpłaty
  * częściowej nie dzielimy na osobny dzień: bez `payments` (plan Finora §2.4
  * pkt 14) jej dnia nie znamy, więc liczy się w dniu terminu razem z resztą.
@@ -33,6 +33,16 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
  * typ co strażnik przychodu, z numerem dokumentu) zatrzymują kartę.
  * Przypomnienia i `/payments/overdue` zostają na `getReceivables`
  * i `paid_at` — tu nic o zaległościach.
+ *
+ * Korekta (`parent_invoice_id`) wystawiona najpóźniej w dniu wpływu faktury
+ * pierwotnej bez prawdziwej zapłaty zmienia kwotę TEGO wpływu: nabywca
+ * zapłaci w terminie kwotę po korekcie (w KSeF nie ma anulowania — korekta
+ * do zera zdejmuje fakturę z wpływów i ze spodziewanych). Taka korekta nie
+ * jest osobnym wpływem. Korekta późniejsza (zwrot, dopłata po zakładanej
+ * zapłacie) albo do faktury opłaconej naprawdę to osobny ruch w swoim dniu.
+ * Korekty wystawione przed `from` do faktur z dniem wpływu w zakresie
+ * czytamy osobnym zapytaniem (`correctionsBefore`) — tylko gdy takie
+ * faktury są.
  */
 
 const ENVIRONMENT_ERROR = 'Przyjęte faktury wymagają uzgodnienia środowiska KSeF';
@@ -41,7 +51,7 @@ const KNOWN_ENVIRONMENTS: ReadonlySet<string> = new Set(['test', 'demo', 'produc
 /** Data zapłaty z FA(3) zapisana przy imporcie (`ParsedInvoice.paidDate`). */
 const FA3_PAID_DATE = 'fa3_data->parsed->>paidDate';
 
-const INFLOW_COLUMNS = `id, direction, ksef_status, ksef_environment, invoice_kind, currency, gross_total, paid_amount, payment_data, payment_due_date, paid_at, issue_date, internal_number, buyer_nip, buyer_data, is_b2c, fa3_paid_date:${FA3_PAID_DATE}` as const;
+const INFLOW_COLUMNS = `id, direction, ksef_status, ksef_environment, invoice_kind, parent_invoice_id, currency, gross_total, paid_amount, payment_data, payment_due_date, paid_at, issue_date, internal_number, buyer_nip, buyer_data, is_b2c, fa3_paid_date:${FA3_PAID_DATE}` as const;
 
 /**
  * Faktura sprzedaży spoza PLN z dniem wpływu w zakresie karty: bez kursu nie
@@ -69,9 +79,12 @@ export interface InflowEntry {
   /** Dzień wpływu w Europe/Warsaw, RRRR-MM-DD (`inflowDay`). */
   date: string;
   basis: InflowBasis;
-  /** PLN ze znakiem dokumentu: wpłata, brutto do zapłaty albo różnica korekty. */
+  /**
+   * PLN ze znakiem dokumentu: wpłata, brutto do zapłaty (z korektami
+   * wystawionymi do dnia wpływu) albo różnica korekty późniejszej.
+   */
   amount: number;
-  /** Reszta do zapłaty po wpłatach częściowych; 0 przy prawdziwej zapłacie i korekcie in minus. */
+  /** Reszta do zapłaty po korektach i wpłatach częściowych; 0 przy prawdziwej zapłacie i korekcie in minus. */
   outstanding: number;
   /** Termin płatności faktury, RRRR-MM-DD; `null` bez terminu. */
   dueDate: string | null;
@@ -100,6 +113,8 @@ interface InflowRow extends InflowDayRow {
   ksef_status: string | null;
   ksef_environment: string | null;
   invoice_kind: string | null;
+  /** Faktura korygowana — tylko korekta ma tu wartość. */
+  parent_invoice_id: string | null;
   currency: string | null;
   gross_total: number | string | null;
   paid_amount: number | string | null;
@@ -151,6 +166,41 @@ function buyerIdentity(row: InflowRow): { key: string; nip: string | null; consu
 }
 
 /**
+ * Korekty wystawione przed `from` do faktur pierwotnych z dniem wpływu
+ * w zakresie — tych główne zapytanie nie ma (żadna ich data nie sięga
+ * `from`). Korekta jest wystawiana nie wcześniej niż faktura, więc wystarczy
+ * okno od najwcześniejszego wystawienia takiej faktury do `from`. Bez takich
+ * faktur — bez zapytania.
+ */
+async function correctionsBefore(
+  supabase: PageContext['supabase'],
+  tenantId: string,
+  from: string,
+  fetched: readonly InflowRow[],
+  parents: ReadonlyArray<{ row: InflowRow }>,
+): Promise<InflowRow[]> {
+  const issued = parents
+    .map(({ row }) => row.issue_date?.slice(0, 10))
+    .filter((date): date is string => isIsoDate(date) && date < from);
+  if (issued.length === 0) return [];
+  const earliest = issued.reduce((min, date) => (date < min ? date : min));
+  const parentIds = new Set(parents.map(({ row }) => row.id));
+  const fetchedIds = new Set(fetched.map((row) => row.id));
+  const rows = await readCompletePages<InflowRow>('Nie można odczytać korekt faktur', (start, end) => supabase
+    .from('invoices')
+    .select(INFLOW_COLUMNS, { count: 'exact' })
+    .eq('tenant_id', tenantId)
+    .eq('direction', 'outgoing')
+    .eq('ksef_status', 'accepted')
+    .not('parent_invoice_id', 'is', null)
+    .gte('issue_date', earliest)
+    .lt('issue_date', from)
+    .order('id', { ascending: true })
+    .range(start, end));
+  return rows.filter((row) => parentIds.has(row.parent_invoice_id ?? '') && !fetchedIds.has(row.id));
+}
+
+/**
  * Wpływy z dniem w `[from, toExclusive)` (RRRR-MM-DD, kalendarz
  * Europe/Warsaw); bez `toExclusive` — także wszystkie przyszłe terminy.
  * Posortowane po dniu wpływu, potem po id faktury.
@@ -183,37 +233,66 @@ export async function getInflows(
     .order('id', { ascending: true })
     .range(from, to));
 
-  const inRange: Array<{ row: InflowRow; date: string; basis: InflowBasis }> = [];
+  const inWindow = (date: string) =>
+    date >= range.from && (range.toExclusive === undefined || date < range.toExclusive);
+
+  // Faktury pierwotne bez prawdziwej zapłaty — korekta wystawiona do ich dnia wpływu zmienia ten wpływ.
+  const parents = new Map<string, { row: InflowRow; date: string; basis: InflowBasis }>();
   for (const row of rows) {
     const day = inflowDay(row);
-    if (!day || day.date < range.from) continue;
-    if (range.toExclusive !== undefined && day.date >= range.toExclusive) continue;
-    inRange.push({ row, ...day });
+    if (row.parent_invoice_id === null && day && day.basis !== 'paid') parents.set(row.id, { row, ...day });
   }
-  if (inRange.some(({ row }) => row.ksef_environment === null || !KNOWN_ENVIRONMENTS.has(row.ksef_environment))) {
+  const corrections = [
+    ...rows.filter((row) => row.parent_invoice_id !== null),
+    ...await correctionsBefore(supabase, tenantId, range.from, rows, [...parents.values()].filter((p) => inWindow(p.date))),
+  ];
+  const folded = new Map<string, InflowRow[]>();
+  const foldedIds = new Set<string>();
+  for (const correction of corrections) {
+    const parent = parents.get(correction.parent_invoice_id ?? '');
+    const issued = correction.issue_date?.slice(0, 10);
+    if (!parent || !isIsoDate(issued) || issued > parent.date) continue;
+    if (correction.ksef_environment !== parent.row.ksef_environment) continue;
+    folded.set(parent.row.id, [...(folded.get(parent.row.id) ?? []), correction]);
+    foldedIds.add(correction.id);
+  }
+
+  const inRange: Array<{ row: InflowRow; date: string; basis: InflowBasis }> = [];
+  for (const row of rows) {
+    if (foldedIds.has(row.id)) continue;
+    const day = inflowDay(row);
+    if (day && inWindow(day.date)) inRange.push({ row, ...day });
+  }
+  // Strażniki obejmują też korekty, które zmieniają kwotę wpływu z zakresu.
+  const guarded = inRange.flatMap(({ row }) => [row, ...(folded.get(row.id) ?? [])]);
+  if (guarded.some((row) => row.ksef_environment === null || !KNOWN_ENVIRONMENTS.has(row.ksef_environment))) {
     throw new Error(ENVIRONMENT_ERROR);
   }
   const active = inRange.filter(({ row }) => row.ksef_environment === environment);
   // Jak przychód (`assertOutgoingInvoicesInPln`): brak waluty też nie potwierdza złotówek.
-  const foreign = active.find(({ row }) => row.currency?.trim().toUpperCase() !== 'PLN');
+  const foreign = active
+    .flatMap(({ row }) => [row, ...(folded.get(row.id) ?? [])])
+    .find((row) => row.currency?.trim().toUpperCase() !== 'PLN');
   if (foreign) {
-    throw new InflowCurrencyError(foreign.row.internal_number ?? foreign.row.id, foreign.row.currency?.trim().toUpperCase() ?? '');
+    throw new InflowCurrencyError(foreign.internal_number ?? foreign.id, foreign.currency?.trim().toUpperCase() ?? '');
   }
 
   const entries: InflowEntry[] = [];
   for (const { row, date, basis } of active) {
     const paidByPayments = basis === 'paid' && Boolean(row.paid_at);
-    const amount = roundToCents(paidByPayments ? finiteNumber(row.paid_amount) : amountDueOf(row)) || 0;
+    // Brutto do zapłaty po korektach wystawionych do dnia wpływu (różnice ze znakiem).
+    const due = (folded.get(row.id) ?? []).reduce((sum, correction) => sum + amountDueOf(correction), amountDueOf(row));
+    const amount = roundToCents(paidByPayments ? finiteNumber(row.paid_amount) : due) || 0;
     if (amount === 0) continue;
     const identity = buyerIdentity(row);
-    const due = row.payment_due_date?.slice(0, 10);
+    const dueDate = row.payment_due_date?.slice(0, 10);
     entries.push({
       id: row.id,
       date,
       basis,
       amount,
-      outstanding: basis === 'paid' ? 0 : outstandingOf(row),
-      dueDate: isIsoDate(due) ? due : null,
+      outstanding: basis === 'paid' ? 0 : Math.max(0, roundToCents(due - finiteNumber(row.paid_amount)) || 0),
+      dueDate: isIsoDate(dueDate) ? dueDate : null,
       invoiceKind: row.invoice_kind,
       internalNumber: row.internal_number,
       buyerKey: identity.key,

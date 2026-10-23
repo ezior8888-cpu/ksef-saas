@@ -15,8 +15,9 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
  *
  * Wpływ = faktura sprzedaży w dniu `InflowEntry.date` (prawdziwa zapłata,
  * termin płatności albo dzień wystawienia). Wykres, kafel, źródła i operacje
- * liczą tylko wpływy z dniem ≤ dziś (`receivedInflows`) — późniejszy termin
- * to jeszcze nie wpływ, tylko „Spodziewane wpływy” (`upcomingInflows`).
+ * liczą tylko wpływy, które już były (`receivedInflows`: dzień ≤ dziś, bez
+ * terminu dziś) — termin od dziś to jeszcze nie wpływ, tylko „Spodziewane
+ * wpływy” (`upcomingInflows`).
  * Wydatek = brutto dokumentu kosztowego (`CostEntry.outflow`) w dniu jego
  * wystawienia — koszty nie mają w bazie dnia zapłaty (N7).
  *
@@ -119,11 +120,14 @@ interface Movement {
 }
 
 /**
- * Wpływy, które już były: dzień wpływu ≤ dziś (D-W). Późniejsze terminy to
- * Spodziewane wpływy, nie pieniądze w kasie.
+ * Wpływy, które już były: dzień wpływu ≤ dziś (D-W), poza wpływami
+ * spodziewanymi (`isExpectedInflow` — termin od dziś bez prawdziwej
+ * zapłaty). Termin dziś jest jeszcze w Spodziewanych wpływach i Należnościach,
+ * na wykres i do kafla trafia od jutra — jedna faktura nigdy nie jest
+ * jednocześnie wpływem, który był, i spodziewanym.
  */
 export function receivedInflows(inflows: readonly InflowEntry[], today: string): InflowEntry[] {
-  return inflows.filter((i) => i.date <= today);
+  return inflows.filter((i) => i.date <= today && !isExpectedInflow(i, today));
 }
 
 function movementsOf(inflows: readonly InflowEntry[], costs: readonly CostEntry[]): Movement[] {

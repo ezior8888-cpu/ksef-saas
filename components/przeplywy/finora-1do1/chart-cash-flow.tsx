@@ -102,7 +102,7 @@ const CashFlowCard = ({ tabs, subTitle, subTitleHint, menuItems, demo, className
 
   return (
     <Card className={cn(className)}>
-      <CardHeaderWithMenu title='Przepływy pieniężne' subTitle={subTitle} subTitleHint={subTitleHint} menuItems={menuItems} badge={demo ? <DemoBadge /> : undefined} />
+      <CardHeaderWithMenu title='Przepływy pieniężne' subTitle={subTitle} subTitleHint={subTitleHint} menuItems={menuItems} badge={demo ? <DemoBadge skracana /> : undefined} />
 
       <Tabs value={tab} onValueChange={value => setTab(value as TabValue)} className='gap-6'>
         <CardContent className='flex flex-wrap items-center justify-between gap-4'>

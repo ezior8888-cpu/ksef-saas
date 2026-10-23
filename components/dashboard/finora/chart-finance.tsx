@@ -120,7 +120,7 @@ const FinanceCard = ({ subTitle, costsLabel, months, report, financeMenu, report
   return (
     <Card className={cn('grid grid-cols-1 gap-x-2 gap-y-4 lg:grid-cols-5', className)}>
       <div className='flex flex-col gap-10 max-lg:border-b max-lg:pb-6 lg:col-span-3 lg:border-r lg:pr-2'>
-        <CardHeaderWithMenu title='Finanse' subTitle={subTitle} menuItems={financeMenu} badge={demo ? <DemoBadge /> : undefined} className='flex justify-between' />
+        <CardHeaderWithMenu title='Finanse' subTitle={subTitle} menuItems={financeMenu} badge={demo ? <DemoBadge skracana /> : undefined} className='flex justify-between' />
         <CardContent className='flex-1'>
           <ChartContainer config={config} className='h-full min-h-65 w-full'>
             <BarChart accessibilityLayer data={months} barSize={12} margin={{ left: 0, bottom: -5 }}>

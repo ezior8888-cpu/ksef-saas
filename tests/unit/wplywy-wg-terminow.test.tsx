@@ -256,7 +256,9 @@ describe('Spodziewane wpływy i Należności: przyszłe terminy bez prawdziwej z
 describe('Przepływy: wpływy do dziś, sumy zakładek = suma serii', () => {
   const entries = [
     wpis('a', '2026-10-05'),
-    wpis('b', '2026-10-23', { amount: 250 }),
+    // Recenzja 2: termin dziś jest jeszcze spodziewany (`receivedInflows`), więc „dziś” na wykresie
+    // to prawdziwa zapłata z dzisiejszym dniem (wcześniej: termin dziś — liczył się dwa razy).
+    wpis('b', '2026-10-23', { amount: 250, basis: 'paid', outstanding: 0 }),
     wpis('przyszly', '2026-10-28', { amount: 9999 }),
     wpis('sierpien', '2026-08-20', { amount: 400, basis: 'paid', outstanding: 0 }),
   ];
@@ -286,7 +288,7 @@ describe('Przepływy: wpływy do dziś, sumy zakładek = suma serii', () => {
       TODAY,
     );
     expect(ops.map((o) => [o.id, o.status])).toEqual([
-      ['in:b', 'due'],
+      ['in:b', 'paid'],
       ['in:a', 'due'],
       ['in:wyst', 'issued'],
       ['in:sierpien', 'paid'],
@@ -379,7 +381,7 @@ describe('Przepływy: napisy kart', () => {
     expect(out).not.toMatch(/zaległ|Termin minął/i);
   });
 
-  it('kafel „Wpłynęło”: podpis „według terminów płatności”, pusty stan bez „oznaczania”', () => {
+  it('kafel wpływów miesiąca: podpis „według terminów płatności”, pusty stan bez „oznaczania”', () => {
     const flow = movements.monthFlows([wpis('a', '2026-10-05')], [], TODAY).inflow;
     expect(przeplywyAdaptery.wplywyMiesiacaProps(flow, 'prawdziwe').amountTitle).toContain('według terminów płatności');
     const pusty = przeplywyAdaptery.wplywyMiesiacaProps(movements.monthFlows([], [], TODAY).inflow, 'prawdziwe');

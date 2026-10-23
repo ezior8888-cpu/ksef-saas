@@ -36,7 +36,11 @@ type CardHeaderWithMenuProps = {
    */
   subTitleHint?: string
   menuItems?: CardMenuItem[]
-  /** Plakietka obok tytułu (D-P: „Dane przykładowe”); mieści się w wysokości wiersza tytułu. */
+  /**
+   * Plakietka obok tytułu (D-P: „Dane przykładowe”); mieści się w wysokości
+   * wiersza tytułu. Na wąskim ekranie zwęża się ona, nie tytuł — podawać
+   * `<DemoBadge skracana />`.
+   */
   badge?: ReactNode
   className?: string
 }
@@ -60,8 +64,9 @@ const CardHeaderWithMenu = ({
     <CardHeader className={className ?? 'flex items-center justify-between'}>
       <div className='flex flex-col gap-1'>
         {badge ? (
+          // Tytuł się nie zwęża — na wąskim ekranie ustępuje plakietka (`DemoBadge skracana`), nie łamie się nagłówek.
           <div className='flex items-center gap-2'>
-            <span className='text-lg font-semibold'>{title}</span>
+            <span className='shrink-0 text-lg font-semibold'>{title}</span>
             {badge}
           </div>
         ) : (

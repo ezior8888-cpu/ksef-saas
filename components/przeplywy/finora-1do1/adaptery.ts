@@ -112,8 +112,9 @@ function krzywa(flow: MonthFlow): KafelMiesiacaDane['chartData'] {
 }
 
 /**
- * „Wpłynęło w tym miesiącu”: wpływy od 1. dnia miesiąca do dziś według
- * terminów płatności (E11, D-W); bez żadnego wpływu — „—” i pusty stan, nie „0 zł”.
+ * „Wpływy w tym miesiącu (wg terminów)”: wpływy od 1. dnia miesiąca do dziś
+ * według terminów płatności (E11, D-W; termin dziś — jeszcze spodziewany);
+ * bez żadnego wpływu — „—” i pusty stan, nie „0 zł”.
  */
 export function wplywyMiesiacaProps(flow: MonthFlow, tryb: TrybDanych): KafelMiesiacaDane {
   const brak = flow.count === 0;
