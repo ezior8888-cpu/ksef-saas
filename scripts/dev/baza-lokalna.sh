@@ -125,7 +125,8 @@ BEGIN
 END
 \$\$;
 SQL
-  ok "Konto dev: $DEV_EMAIL / $DEV_PASSWORD (firma „$DEV_COMPANY”)"
+  # Klamry: przy UTF-8 w terminalu bash dokleja „”” do nazwy zmiennej.
+  ok "Konto dev: ${DEV_EMAIL} / ${DEV_PASSWORD} (firma „${DEV_COMPANY}”)"
 }
 
 set_env_var() {
