@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { FilePenLine } from 'lucide-react';
 
 import {
   entryChildren,
@@ -15,6 +16,10 @@ import { isLegalEntityComplete, missingLegalEntityFields } from '@/lib/legal/ent
 /**
  * Renderer dokumentów prawnych (`lib/legal/documents/*`). Server Component —
  * treść jest statyczna, a ta sama treść idzie mailem jako plik tekstowy.
+ *
+ * Plik importują też formularze klienckie (`LegalInline`), więc nie ładuje
+ * listy dokumentów ani nagłówka strony. Stronę dokumentu (nagłówek,
+ * nawigacja, treść) składa `components/legal/legal-page.tsx`.
  */
 
 function Inline({
@@ -67,7 +72,7 @@ function List({ items, ordered, depth }: { items: ListEntry[]; ordered: boolean;
         const children = entryChildren(entry);
         return (
           <li key={i} className="my-0 flex gap-2 pl-0">
-            <span className="w-7 shrink-0 text-right tabular-nums text-[var(--marketing-muted,inherit)]">
+            <span className="w-7 shrink-0 text-right tabular-nums text-muted-foreground">
               {ordered ? listLabel(depth, i) : '•'}
             </span>
             <div className="min-w-0 flex-1">
@@ -91,8 +96,8 @@ function BlockView({ block }: { block: Block }): ReactNode {
       );
     case 'note':
       return (
-        <div className="not-prose my-4 rounded-xl border border-emerald-600/30 bg-emerald-600/5 px-4 py-3 text-[0.95rem] leading-relaxed">
-          <Inline text={block.text} />
+        <div className="not-prose my-6 rounded-2xl bg-accent px-5 py-4 text-[0.95rem] leading-relaxed text-accent-foreground">
+          <Inline text={block.text} linkClassName="font-medium underline underline-offset-2" />
         </div>
       );
     case 'ol':
@@ -101,7 +106,7 @@ function BlockView({ block }: { block: Block }): ReactNode {
       return <List items={block.items} ordered={false} depth={0} />;
     case 'table':
       return (
-        <div className="my-4 overflow-x-auto">
+        <div className="my-6 overflow-x-auto">
           <table className="my-0 min-w-[640px] text-sm">
             <thead>
               <tr>
@@ -135,88 +140,82 @@ export function LegalDraftBanner() {
   return (
     <div
       role="note"
-      className="not-prose mb-8 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed"
+      className="not-prose mb-10 flex gap-4 rounded-2xl bg-card p-5 text-sm leading-relaxed ring-1 ring-border"
     >
-      <p className="font-semibold">Wersja robocza dokumentu</p>
-      <p className="mt-1">
-        Dokument czeka na uzupełnienie danych usługodawcy i weryfikację prawną. Brakuje:{' '}
-        {missingLegalEntityFields().join(', ')}.
-      </p>
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+        <FilePenLine aria-hidden className="size-4" />
+      </span>
+      <div>
+        <p className="font-semibold text-foreground">Wersja robocza dokumentu</p>
+        <p className="mt-1 text-muted-foreground">
+          Dokument czeka na uzupełnienie danych usługodawcy i weryfikację prawną. Brakuje:{' '}
+          {missingLegalEntityFields().join(', ')}.
+        </p>
+      </div>
     </div>
   );
 }
 
-export function LegalDocumentView({
+/**
+ * Treść dokumentu: streszczenie, wstawka strony (np. ustawienia cookies),
+ * spis treści i paragrafy. Tytuł i wersję pokazuje nagłówek strony
+ * (`LegalDocumentView` w `legal-page.tsx`).
+ */
+export function LegalDocumentBody({
   doc,
-  downloadable = true,
   children,
 }: {
   doc: LegalDocument;
-  /** Link do wersji tekstowej (utrwalenie treści — art. 8 ust. 1 pkt 2 u.ś.u.d.e.). */
-  downloadable?: boolean;
   /** Dodatkowa treść między streszczeniem a dokumentem (np. ustawienia cookies). */
   children?: ReactNode;
 }) {
   return (
-    <article className="pb-16 lg:pb-24">
-      <div className="prose prose-neutral mx-auto max-w-3xl px-6 dark:prose-invert">
-        <LegalDraftBanner />
-        <h1 className="mb-2">{doc.title}</h1>
-        <p className="mt-0 text-sm text-[var(--marketing-muted,inherit)]">
-          Wersja z dnia {doc.version}
-          {downloadable ? (
-            <>
-              {' · '}
-              <a href={`/legal/pobierz/${doc.slug}`} download>
-                Pobierz jako plik tekstowy
+    <>
+      {doc.summary && doc.summary.length > 0 ? (
+        <section
+          aria-labelledby="w-skrocie"
+          className="not-prose my-10 rounded-2xl bg-muted/50 p-6 ring-1 ring-border sm:p-8"
+        >
+          <h2 id="w-skrocie" className="text-lg font-semibold tracking-tight">
+            W skrócie
+          </h2>
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-[0.95rem] leading-relaxed marker:text-primary">
+            {doc.summary.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+          <p className="mt-4 text-xs text-muted-foreground">
+            Streszczenie ułatwia lekturę, ale wiąże wyłącznie pełna treść poniżej.
+          </p>
+        </section>
+      ) : null}
+
+      {children}
+
+      <nav aria-label="Spis treści" className="not-prose my-10 rounded-2xl p-6 ring-1 ring-border sm:p-8">
+        <p className="text-sm font-semibold">Spis treści</p>
+        <ol className="mt-3 columns-1 gap-8 space-y-1.5 text-sm sm:columns-2">
+          {doc.sections.map((s) => (
+            <li key={s.id} className="break-inside-avoid">
+              <a
+                href={`#${s.id}`}
+                className="text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+              >
+                {s.title}
               </a>
-            </>
-          ) : null}
-        </p>
+            </li>
+          ))}
+        </ol>
+      </nav>
 
-        {doc.summary && doc.summary.length > 0 ? (
-          <section
-            aria-labelledby="w-skrocie"
-            className="not-prose my-8 rounded-2xl border border-[var(--z-300,#e5e5e5)] bg-[var(--z-50,#fafafa)] px-5 py-4"
-          >
-            <h2 id="w-skrocie" className="text-base font-semibold">
-              W skrócie
-            </h2>
-            <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[0.95rem] leading-relaxed">
-              {doc.summary.map((s, i) => (
-                <li key={i}>{s}</li>
-              ))}
-            </ul>
-            <p className="mt-3 text-xs text-[var(--marketing-muted,inherit)]">
-              Streszczenie ułatwia lekturę, ale wiąże wyłącznie pełna treść poniżej.
-            </p>
-          </section>
-        ) : null}
-
-        {children}
-
-        <nav aria-label="Spis treści" className="not-prose my-8">
-          <p className="text-sm font-semibold">Spis treści</p>
-          <ol className="mt-2 columns-1 gap-6 space-y-1 text-sm sm:columns-2">
-            {doc.sections.map((s) => (
-              <li key={s.id} className="break-inside-avoid">
-                <a href={`#${s.id}`} className="underline-offset-2 hover:underline">
-                  {s.title}
-                </a>
-              </li>
-            ))}
-          </ol>
-        </nav>
-
-        {doc.sections.map((s) => (
-          <section key={s.id} id={s.id} className="scroll-mt-32">
-            <h2>{s.title}</h2>
-            {s.blocks.map((b, i) => (
-              <BlockView key={i} block={b} />
-            ))}
-          </section>
-        ))}
-      </div>
-    </article>
+      {doc.sections.map((s) => (
+        <section key={s.id} id={s.id} className="scroll-mt-8">
+          <h2>{s.title}</h2>
+          {s.blocks.map((b, i) => (
+            <BlockView key={i} block={b} />
+          ))}
+        </section>
+      ))}
+    </>
   );
 }

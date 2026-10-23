@@ -38,7 +38,7 @@ function stripComments(source: string): string {
 const read = (p: string) => stripComments(readFileSync(p, 'utf8'));
 
 const FORBIDDEN: Array<[file: string, phrases: string[]]> = [
-  ['app/(landing)/about/page.tsx', ['<Metrics />', '<TeamGrid />', 'linkedin.com']],
+  ['app/(marketing)/about/page.tsx', ['<Metrics />', '<TeamGrid />', 'linkedin.com']],
   // Strona główna od 23.10.2026 (app/(home)): te same zakazy, co na
   // poprzedniej (Zova). Treść pilnuje też tests/unit/strona-glowna.test.tsx.
   ['app/(home)/page.tsx', ['Testimonial', 'clientLogos']],
@@ -47,13 +47,16 @@ const FORBIDDEN: Array<[file: string, phrases: string[]]> = [
   ['app/(home)/_components/flo-section.tsx', ['sam pilnuje terminów i przepisów']],
   ['lib/jobs/runners/email-sequence.ts', ['Bez karty kredytowej', '[screenshot OCR]', 'beta-test', 'Fakturownią', 'KSeF SaaS', 'Już teraz się zwróciła']],
   ['content/help/okres-probny-trial.mdx', ['Bez karty na starcie', 'stan ograniczony']],
-  ['components/marketing/landing-calculator-emerald.tsx', ['pomiarów beta-testerów']],
   ['components/marketing/savings-calculator-preview.tsx', ['pomiarów beta-testerów']],
+  // 23.10.2026: kalkulator liczył abonament po 49 zł i doliczał różnicę do
+  // założonej ceny konkurencji (79 zł) jako „Przewaga rynkowa: Wysoka”;
+  // strona kalkulatora miała kafle „80% mniej czasu” i „11 dni DSO”.
+  ['components/marketing/savings-calculator-preview.tsx', ['49 * 12', '79 * 12', 'competitorAvg', 'Przewaga rynkowa']],
+  ['app/(marketing)/kalkulator-oszczednosci/page.tsx', ["'80%'", "'11 dni'", 'z Wkurzaczem']],
   // Rewizja 15.10.2026: „zrzuty produktu” z szablonu (panel inwestycyjny
   // „Zova AI” z Apple/Google/Meta), znak Zova AI jako nasze logo, zdjęcia
   // obcych osób jako nasz zespół i założyciel, obietnice „10 lat”.
-  ['app/(landing)/about/page.tsx', ['asset.about.gallery', 'asset.about.founder', 'asset.hero.dashboard', 'bez podawania karty']],
-  ['app/(landing)/_assets.ts', ['licencja darmowa', 'logo: `${IMG}/oKmGzYlWFu13ruJRasum68wrh5Y.png`']],
+  ['app/(marketing)/about/page.tsx', ['asset.about.gallery', 'asset.about.founder', 'asset.hero.dashboard', 'bez podawania karty']],
   // Ekrany logowania od planu Finora (E10b): auth-page-shell usunięty, znak
   // marki rysuje components/auth/finora/auth-logo.tsx.
   ['components/auth/finora/auth-logo.tsx', ['oKmGzYlWFu13ruJRasum68wrh5Y']],
@@ -107,10 +110,12 @@ describe('marketing bez fikcyjnych dowodów i obietnic', () => {
 
   // Formularz kontaktowy ze strony głównej Zova (composeMail) zniknął razem
   // z nią 23.10.2026; kontakt prowadzi na /kontakt (adres e-mail, bez formularza).
-  it('stopki i nawigacja prowadzą do kontaktu na /kontakt', () => {
-    expect(read('app/(home)/_components/site-footer.tsx')).toContain("href: '/kontakt'");
-    expect(read('app/(landing)/_components/closing.tsx')).toContain("href: '/kontakt'");
-    expect(read('app/(landing)/_components/site-nav.tsx')).toContain("href: '/kontakt'");
+  it('stopka wszystkich stron prowadzi do kontaktu na /kontakt', () => {
+    expect(read('components/site/site-footer.tsx')).toContain("href: '/kontakt'");
+  });
+
+  it('kalkulator liczy abonament z cennika', () => {
+    expect(read('components/marketing/savings-calculator-preview.tsx')).toContain('MONTHLY_PRICE_GROSS_GROSZE');
   });
 });
 

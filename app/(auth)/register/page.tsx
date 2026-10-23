@@ -35,7 +35,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   weak_password:
     'Hasło musi mieć min. 12 znaków, zawierać małą i dużą literę, cyfrę oraz znak specjalny.',
   password_breached:
-    'To hasło pojawiło się w znanych wyciekach danych. Wybierz inne — najlepiej passphrase z 4-5 losowych słów.',
+    'To hasło pojawiło się w znanych wyciekach danych. Wybierz inne, najlepiej passphrase z 4-5 losowych słów.',
   rate_limited:
     'Zbyt wiele prób rejestracji z tego urządzenia. Poczekaj kilka minut i spróbuj ponownie.',
   bot_check_failed:
@@ -57,7 +57,7 @@ function LoginLink() {
   return (
     <p className='text-muted-foreground'>
       Masz już konto?{' '}
-      <Link href='/login' className='text-foreground hover:underline'>
+      <Link href='/login' className='text-foreground underline underline-offset-4 hover:text-primary'>
         Zaloguj się
       </Link>
     </p>

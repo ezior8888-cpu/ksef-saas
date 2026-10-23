@@ -24,9 +24,9 @@ function subscribe(onChange: () => void): () => void {
 }
 
 const LABELS: Record<ConsentState, string> = {
-  granted: 'Analityka jest włączona — wyraziłeś zgodę.',
-  denied: 'Analityka jest wyłączona — nie wyraziłeś zgody albo ją wycofałeś.',
-  unset: 'Nie podjąłeś jeszcze decyzji — analityka jest wyłączona.',
+  granted: 'Analityka jest włączona: wyraziłeś zgodę.',
+  denied: 'Analityka jest wyłączona: nie wyraziłeś zgody albo ją wycofałeś.',
+  unset: 'Nie podjąłeś jeszcze decyzji, więc analityka jest wyłączona.',
 };
 
 /**
@@ -43,15 +43,15 @@ export function CookieSettings() {
 
   if (!isAnalyticsConfigured()) {
     return (
-      <p className="text-sm">
-        W tej wersji serwisu analityka jest wyłączona — nie zapisujemy niczego poza cookies niezbędnymi.
+      <p className="text-sm text-muted-foreground">
+        W tej wersji serwisu analityka jest wyłączona: nie zapisujemy niczego poza cookies niezbędnymi.
       </p>
     );
   }
 
   return (
     <div className="space-y-3">
-      <p className="text-sm" aria-live="polite">
+      <p className="text-sm text-muted-foreground" aria-live="polite">
         {state === 'server' ? 'Sprawdzam ustawienia…' : LABELS[state]}
       </p>
       <div className="flex flex-wrap gap-2">
@@ -59,7 +59,7 @@ export function CookieSettings() {
           type="button"
           onClick={() => setAnalyticsConsent(true)}
           disabled={state === 'granted'}
-          className="rounded-xl bg-[var(--z-black,#111)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
         >
           Włącz analitykę
         </button>
@@ -67,7 +67,7 @@ export function CookieSettings() {
           type="button"
           onClick={() => setAnalyticsConsent(false)}
           disabled={state === 'denied'}
-          className="rounded-xl border border-[var(--z-300,#d4d4d4)] px-4 py-2 text-sm font-medium disabled:opacity-50"
+          className="rounded-full px-5 py-2.5 text-sm font-semibold text-foreground ring-1 ring-border transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
         >
           Wyłącz analitykę (tylko niezbędne)
         </button>

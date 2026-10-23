@@ -39,7 +39,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 }
 
 const SUCCESS_MESSAGES: Record<string, string> = {
-  check_email: 'Konto utworzone! Sprawdź swoją skrzynkę pocztową — wysłaliśmy link aktywacyjny.',
+  check_email: 'Konto utworzone! Sprawdź swoją skrzynkę pocztową, wysłaliśmy link aktywacyjny.',
   // Bez `account_deleted` od 15.10.2026: usuwanie firmy z aplikacji jest
   // wstrzymane (idzie przez pomoc — components/settings/company-deletion.tsx),
   // a komunikat obiecywał trwałe usunięcie po 30 dniach, którego nic nie
@@ -139,7 +139,7 @@ export default async function LoginPage({
         </form>
         <p className='text-center text-muted-foreground'>
           Nie masz konta?{' '}
-          <Link href='/register' className='text-foreground hover:underline'>
+          <Link href='/register' className='text-foreground underline underline-offset-4 hover:text-primary'>
             Utwórz konto
           </Link>
         </p>

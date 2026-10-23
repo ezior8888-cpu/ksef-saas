@@ -3,21 +3,16 @@ import path from 'path';
 
 import matter from 'gray-matter';
 import type { Metadata } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
 
-import { DrawnVideo } from '@/components/ui/drawn-video';
+import { RevealGroup, RevealItem } from '@/components/site/motion';
+import { PageHero } from '@/components/site/page-hero';
+import { Container } from '@/components/site/ui';
 
-import { asset } from '../_assets';
-import { Rise } from '../_components/anim';
-import { SiteFooter } from '../_components/closing';
-import { IconSprite } from '../_components/icon-sprite';
-import { MaskRevealWords } from '../_components/mask-reveal';
-import { SiteNav } from '../_components/site-nav';
-import { Container } from '../_components/ui';
-
+// Sam „Blog”: końcówkę „| FaktWay” dopisuje szablon tytułu z layoutu.
 export const metadata: Metadata = {
-  title: 'Blog | FaktWay',
+  title: 'Blog',
   description:
     'Poradniki o KSeF, fakturach i prowadzeniu małej firmy. Konkretnie, bez urzędowego żargonu.',
 };
@@ -54,9 +49,6 @@ function getPosts(): Post[] {
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
-/** Obrazki z szablonu krążą po kolei, bo wpisy nie mają własnych okładek. */
-const OKLADKI = asset.blog;
-
 const MIESIACE = [
   'stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca',
   'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia',
@@ -68,82 +60,60 @@ function dataPl(iso: string): string {
   return `${d.getDate()} ${MIESIACE[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/*
+ * Od 23.10.2026 w wyglądzie strony głównej (components/site). Karty bez
+ * okładek: obrazki z szablonu Zova miały niepotwierdzoną licencję.
+ */
 export default function BlogPage() {
   const posts = getPosts();
 
   return (
     <>
-      <IconSprite />
-      <SiteNav />
+      <PageHero
+        // Twarda spacja: „z” nie może zostać samo na końcu linii.
+        title={'Poradniki dla tych, którzy wolą mieć to z głowy'}
+        lead="Poradniki o KSeF, fakturach i prowadzeniu małej firmy. Konkretnie, bez urzędowego żargonu."
+      />
 
-      {/* ── nagłówek ─────────────────────────────────────────────────
-          Zmierzone na oryginale: blok 752 wyśrodkowany, kolumna z odstępem
-          40, tytuł w 700 px i POD nim film 400×325. Bez akapitu wstępnego —
-          oryginał go nie ma, sam tytuł i ilustracja. */}
-      <header className="pb-10 pt-[128px]">
+      <section aria-label="Wpisy" className="pb-20 sm:pb-28">
         <Container>
-          <div className="mx-auto flex max-w-[752px] flex-col items-center gap-10 text-center">
-            <h1 className="z-h1 max-w-[700px]">
-              <MaskRevealWords text="Poradniki dla tych, którzy wolą mieć to z głowy" />
-            </h1>
-            <Rise delay={0.25}>
-              <DrawnVideo
-            src={asset.blogHero}
-            width={400}
-            height={325}
-            className="h-[325px] w-[400px] max-w-full object-contain"
-          />
-            </Rise>
-          </div>
-        </Container>
-      </header>
-
-      {/* ── siatka wpisów: karty 372 szerokości, przerwa 12 ─────────── */}
-      <section className="pb-20">
-        <Container>
-          <div className="grid grid-cols-1 gap-x-3 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
-            {posts.map((p, i) => (
-              // Oryginał animuje karty samym zanikiem, bez przesunięcia.
-              <Rise key={p.slug} delay={i * 0.06}>
-                <Link
-                  href={`/blog/${encodeURIComponent(p.slug)}`}
-                  className="group flex h-full flex-col gap-5"
-                >
-                  <div className="overflow-hidden rounded-[14px] bg-[var(--z-50)]">
-                    <Image
-                      src={OKLADKI[i % OKLADKI.length]}
-                      alt=""
-                      width={372}
-                      height={274}
-                      className="h-auto w-full transition-transform duration-500 group-hover:scale-[1.04]"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <div className="z-small flex items-center gap-2 text-[var(--z-muted)]">
-                      <span>{dataPl(p.date)}</span>
+          {posts.length === 0 ? (
+            <p className="text-center text-muted-foreground">Wpisy są w przygotowaniu.</p>
+          ) : (
+            <RevealGroup as="ul" className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {posts.map((p) => (
+                <RevealItem as="li" key={p.slug} className="flex">
+                  {/* Cała karta klikalna przez rozciągnięty link w tytule,
+                      więc czytnik ekranu czyta jako link sam tytuł. */}
+                  <article className="group relative flex w-full flex-col rounded-3xl bg-card p-8 text-card-foreground ring-1 ring-border transition hover:shadow-lg hover:shadow-primary/5 hover:ring-primary/40 focus-within:ring-2 focus-within:ring-ring">
+                    <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+                      <time dateTime={p.date}>{dataPl(p.date)}</time>
                       <span aria-hidden>·</span>
                       <span>{p.readTime} min czytania</span>
-                    </div>
-                    <h2 className="z-lead font-medium transition-opacity group-hover:opacity-70">
-                      {p.title}
-                    </h2>
-                    <p className="z-body text-[var(--z-muted)]">
-                      {p.description}
                     </p>
-                  </div>
-
-                  <span className="z-body mt-auto w-fit font-medium underline underline-offset-4">
-                    Czytaj dalej
-                  </span>
-                </Link>
-              </Rise>
-            ))}
-          </div>
+                    <h2 className="mt-4 text-xl font-semibold tracking-tight text-balance text-foreground transition-colors group-hover:text-primary">
+                      <Link
+                        href={`/blog/${encodeURIComponent(p.slug)}`}
+                        className="outline-none after:absolute after:inset-0 after:rounded-3xl"
+                      >
+                        {p.title}
+                      </Link>
+                    </h2>
+                    <p className="mt-3 text-pretty text-muted-foreground">{p.description}</p>
+                    <span
+                      aria-hidden
+                      className="mt-auto inline-flex items-center gap-1.5 pt-8 text-sm font-semibold text-primary"
+                    >
+                      Czytaj
+                      <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </article>
+                </RevealItem>
+              ))}
+            </RevealGroup>
+          )}
         </Container>
       </section>
-
-      <SiteFooter />
     </>
   );
 }
