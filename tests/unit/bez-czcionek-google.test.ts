@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -16,7 +16,9 @@ import { buildContentSecurityPolicy } from '@/lib/security/csp';
  */
 
 const GOOGLE_FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
-const SCANNED_DIRS = ['app', 'components', 'lib', 'styles', 'hooks', 'content'];
+// `styles/` zniknął 23.10.2026 razem z arkuszem szablonu Zova; zostaje na
+// liście, gdyby wrócił, a nieistniejące katalogi są pomijane.
+const SCANNED_DIRS = ['app', 'components', 'lib', 'styles', 'hooks', 'content'].filter((d) => existsSync(d));
 const EXTENSIONS = /\.(tsx?|css|mdx?|html)$/;
 
 /** Wiersze z adresem serwera czcionek Google (pomija komentarze `//` i `*`). */

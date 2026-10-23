@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { LegalDocumentView } from '@/components/legal/legal-document';
+import { LegalDocumentView } from '@/components/legal/legal-page';
 import { POLITYKA_PRYWATNOSCI } from '@/lib/legal/documents';
 
 export const revalidate = 86400;
