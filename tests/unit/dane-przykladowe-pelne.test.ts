@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const { analizyDemoSupabase, DEMO_TENANT } = await import('@/lib/demo/analizy-przykladowe');
 const { fakePostgrest } = await import('@/lib/demo/fake-postgrest');
 const { getSalesSeries, getMonthlyFigures } = await import('@/lib/dashboard/monthly-figures');
-const { getCosts, sumCostsByMonth } = await import('@/lib/dashboard/costs');
+const { getCosts, getCostsWithKsefPurchases, KSEF_INVOICE_COST_SOURCE, sumCostsByMonth } = await import('@/lib/dashboard/costs');
 const { buildMonthReport } = await import('@/lib/dashboard/pulpit-report');
 const { getReceivables } = await import('@/lib/dashboard/receivables');
 const { receivablesAging } = await import('@/lib/dashboard/receivables-aging');
@@ -85,8 +85,9 @@ describe('T4 Pulpit: loadery kart na atrapie dają pełne wyniki', () => {
     const sb = demo();
     const series = await getSalesSeries(sb, T, NOW, { months: 7, withPrevYear: false });
     const keys = series.months.map((m) => m.key);
+    // E10: karty liczą koszty `getCostsWithKsefPurchases` (faktury zakupu z KSeF + wydatki).
     const costs = sumCostsByMonth(
-      await getCosts(sb, T, { from: `${keys[0]}-01`, toExclusive: nextMonthStart(todayInWarsaw(NOW)) }),
+      await getCostsWithKsefPurchases(sb, T, { from: `${keys[0]}-01`, toExclusive: nextMonthStart(todayInWarsaw(NOW)) }),
       keys,
     );
     expect(series.netSeries).toHaveLength(7);
@@ -190,7 +191,7 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
 
   it('wykres: 7 tygodni, 7 miesięcy z wpłatami i kosztami, lata od pierwszego z danymi', async () => {
     const sb = demo();
-    const chart = buildCashFlowChart(await getInflows(sb, T, years), await getCosts(sb, T, years), today);
+    const chart = buildCashFlowChart(await getInflows(sb, T, years), await getCostsWithKsefPurchases(sb, T, years), today);
     expect(chart.week).toHaveLength(7);
     expect(chart.week.some((b) => b.inflow > 0)).toBe(true);
     expect(chart.week.some((b) => b.outflow > 0)).toBe(true);
@@ -201,7 +202,7 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
 
   it('kafle miesiąca: „Wpłynęło” ma krzywą z kilku dni, ostatni punkt = kwota kafla; koszty miesiąca', async () => {
     const sb = demo();
-    const { inflow, outflow } = monthFlows(await getInflows(sb, T, recent), await getCosts(sb, T, recent), today);
+    const { inflow, outflow } = monthFlows(await getInflows(sb, T, recent), await getCostsWithKsefPurchases(sb, T, recent), today);
     expect(inflow.amount).toBeGreaterThan(0);
     expect(inflow.changePct).not.toBeNull();
     expect(new Set(inflow.daily.map((p) => p.value)).size).toBeGreaterThanOrEqual(3);
@@ -213,7 +214,7 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
   it('źródła: co najmniej 5 po każdej stronie, malejąco', async () => {
     const sb = demo();
     const inflows = await getInflows(sb, T, recent);
-    const costs = await getCosts(sb, T, recent);
+    const costs = await getCostsWithKsefPurchases(sb, T, recent);
     const wplywy = topCashFlowSources(inflows, []);
     const wydatki = topCashFlowSources([], costs);
     expect(wplywy).toHaveLength(5);
@@ -233,7 +234,7 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
 
   it('operacje: co najmniej 8 w 12 miesiącach (dwie strony tabeli), od najnowszej', async () => {
     const sb = demo();
-    const ops = cashFlowOperations(await getInflows(sb, T, recent), await getCosts(sb, T, recent));
+    const ops = cashFlowOperations(await getInflows(sb, T, recent), await getCostsWithKsefPurchases(sb, T, recent));
     expect(ops.length).toBeGreaterThanOrEqual(8);
     expect(ops.some((o) => o.direction === 'in')).toBe(true);
     expect(ops.some((o) => o.direction === 'out' && o.status === 'pending')).toBe(true);
@@ -254,7 +255,8 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
     const sb = demo();
     expect(await countPendingReview(sb, T)).toBeGreaterThanOrEqual(1);
     expect(await countExpensesToReview(sb, T)).toBeGreaterThanOrEqual(1);
-    expect(await getLastInboxFetchAt(sb, T)).toBeNull();
+    // E10: demo ma faktury ze Skrzynki — „ostatnie pobranie” sprawdza osobny test niżej.
+    expect(await getLastInboxFetchAt(sb, T)).not.toBeNull();
   });
 });
 
@@ -265,8 +267,9 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
     const sb = demo();
     const series = await getSalesSeries(sb, T, NOW, { months: 13, withPrevYear: false });
     const keys = series.months.map((m) => m.key);
+    // E10: karty liczą koszty `getCostsWithKsefPurchases` (faktury zakupu z KSeF + wydatki).
     const costs = sumCostsByMonth(
-      await getCosts(sb, T, { from: `${keys[0]}-01`, toExclusive: nextMonthStart(todayInWarsaw(NOW)) }),
+      await getCostsWithKsefPurchases(sb, T, { from: `${keys[0]}-01`, toExclusive: nextMonthStart(todayInWarsaw(NOW)) }),
       keys,
     );
     for (let i = 0; i < 12; i++) {
@@ -334,7 +337,7 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
       expect(series.vatSeries.every((v) => v > 0)).toBe(true);
 
       const recent = warsawMonthWindow(now, 12);
-      const costs = await getCosts(sb, T, recent);
+      const costs = await getCostsWithKsefPurchases(sb, T, recent);
       expect(costs.some((c) => c.issueDate.startsWith(today.slice(0, 7)))).toBe(true);
       expect(costs.every((c) => c.issueDate <= today)).toBe(true);
 
@@ -351,6 +354,48 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
       expect(topCashFlowSources(inflows, []).length).toBe(5);
       await expect(getCashFlowData(sb, T, now)).resolves.toBeDefined();
     });
+  });
+});
+
+// ─── E10: koszty z KSeF w demo tą samą definicją co kartach ──────────────────
+
+describe('E10 (D-K): demo ma faktury zakupu z KSeF i liczy je jak prawdziwa firma', () => {
+  const recent = warsawMonthWindow(NOW, 12);
+
+  it('faktury zakupu: ze Skrzynki (z wydatkiem) i z historii KSeF (bez wydatku), w aktywnym środowisku', async () => {
+    const sb = demo();
+    const invoices = await wszystkie(sb, 'invoices');
+    const expenses = await wszystkie(sb, 'expenses');
+    const zakupy = invoices.filter((i) => i.direction === 'incoming');
+    const skrzynka = zakupy.filter((i) => i.origin === 'ksef_inbox');
+    const historia = zakupy.filter((i) => i.origin === 'ksef_import');
+    expect(skrzynka.length).toBeGreaterThan(0);
+    expect(historia.length).toBeGreaterThan(0);
+    expect(zakupy.every((i) => i.ksef_status === 'accepted' && i.ksef_environment === 'test' && i.currency === 'PLN')).toBe(true);
+    // Skrzynka: dokładnie jeden wydatek na fakturę (00121); historia: archiwum bez wydatków.
+    for (const inv of skrzynka) expect(expenses.filter((e) => e.ksef_invoice_id === inv.id)).toHaveLength(1);
+    for (const inv of historia) expect(expenses.filter((e) => e.ksef_invoice_id === inv.id)).toHaveLength(0);
+    // Wydatki spoza KSeF zostają (OCR i ręczne, w tym paragony).
+    expect(expenses.some((e) => e.source === 'ocr_photo' && e.ksef_invoice_id === null)).toBe(true);
+    expect(expenses.some((e) => e.source === 'manual' && e.ksef_invoice_id === null)).toBe(true);
+  });
+
+  it('karty liczą każdą fakturę raz: wydatki + faktury z historii; KPiR (getCosts) — same wydatki', async () => {
+    const sb = demo();
+    const pelne = await getCostsWithKsefPurchases(sb, T, recent);
+    const wydatki = await getCosts(sb, T, recent);
+    const historia = pelne.filter((e) => e.source === KSEF_INVOICE_COST_SOURCE);
+    expect(historia.length).toBeGreaterThan(0);
+    expect(pelne).toHaveLength(wydatki.length + historia.length);
+    expect(new Set(pelne.map((e) => e.id)).size).toBe(pelne.length);
+    expect(historia.every((e) => e.categoryLabel === 'Faktury z KSeF' && e.sellerName?.includes('Przykład'))).toBe(true);
+  });
+
+  it('ostatnie pobranie ze Skrzynki: najnowsza faktura ze Skrzynki (historia się nie liczy)', async () => {
+    const sb = demo();
+    const skrzynka = (await wszystkie(sb, 'invoices')).filter((i) => i.direction === 'incoming' && i.origin === 'ksef_inbox');
+    const najnowsza = skrzynka.map((i) => String(i.created_at)).sort().at(-1);
+    expect(await getLastInboxFetchAt(sb, T)).toBe(najnowsza);
   });
 });
 

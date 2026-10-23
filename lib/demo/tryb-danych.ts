@@ -118,8 +118,17 @@ export type KontekstStrony = Pick<PageContext, 'supabase' | 'tenantId'> & {
 };
 
 export interface TrybFirmy extends WynikTrybu {
-  /** `ksef_verified_at` zgodny z bieżącym środowiskiem (np. „Faktury kosztowe z KSeF od DD.MM”, Z9); inaczej `null`. */
+  /** `ksef_verified_at` zgodny z bieżącym środowiskiem; inaczej `null`. */
   verifiedAt: string | null;
+  /**
+   * Od kiedy koszty z KSeF są pełne — podpis „KSeF od DD.MM” przy kosztach
+   * (Z9). Karty liczą też faktury zakupu z historii KSeF (E10, D-K), więc
+   * zastrzeżenie trwa tylko, dopóki strumień zakupów nie skończy zaległości:
+   * wtedy `verifiedAt` (Skrzynka ma komplet od weryfikacji), po zaległości
+   * i przed weryfikacją — `null`. Błąd odczytu strumieni (G') zostawia
+   * zastrzeżenie — nie wiemy, że historia jest pełna.
+   */
+  kosztyKsefOd: string | null;
 }
 
 export interface KontekstDanych extends TrybFirmy {
@@ -162,6 +171,12 @@ async function odczytajStrumienie(
   }
 }
 
+/** Czy strumień zakupów skończył zaległość — faktury zakupu z KSeF są w bazie od `history_floor`. */
+function historiaZakupowPelna(strumienie: readonly StrumienHistorii[] | 'blad' | null): boolean {
+  return Array.isArray(strumienie)
+    && strumienie.some((s) => s.direction === 'incoming' && s.backfill_completed_at !== null);
+}
+
 /**
  * Tryb danych firmy `ctx.tenantId` bez podmiany klienta — dla miejsc, które
  * potrzebują tylko decyzji (KPiR, kafel Skrzynki). Strumieni historii nie
@@ -169,14 +184,18 @@ async function odczytajStrumienie(
  */
 export async function trybDanych(ctx: KontekstStrony, now: Date): Promise<TrybFirmy> {
   const srodowisko = configuredKsefEnvironment();
-  if (!srodowisko) return { ...rozstrzygnijTryb({ srodowisko, dowod: 'blad', strumienie: null, now }), verifiedAt: null };
+  if (!srodowisko) {
+    return { ...rozstrzygnijTryb({ srodowisko, dowod: 'blad', strumienie: null, now }), verifiedAt: null, kosztyKsefOd: null };
+  }
 
   const dowod = await odczytajDowod(ctx);
   const zweryfikowana = dowod !== 'blad' && dowodZgodny(dowod, srodowisko);
   const strumienie = zweryfikowana ? await odczytajStrumienie(ctx, srodowisko) : null;
+  const verifiedAt = zweryfikowana ? dowod.verifiedAt : null;
   return {
     ...rozstrzygnijTryb({ srodowisko, dowod, strumienie, now }),
-    verifiedAt: zweryfikowana ? dowod.verifiedAt : null,
+    verifiedAt,
+    kosztyKsefOd: verifiedAt && !historiaZakupowPelna(strumienie) ? verifiedAt : null,
   };
 }
 

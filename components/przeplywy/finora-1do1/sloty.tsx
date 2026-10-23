@@ -17,7 +17,7 @@ import {
   upcomingInflows,
   yearsWindowStart,
 } from '@/lib/dashboard/cash-movements';
-import { getCosts } from '@/lib/dashboard/costs';
+import { getCostsWithKsefPurchases } from '@/lib/dashboard/costs';
 import { getInflows } from '@/lib/dashboard/inflows';
 import { warsawMonthWindow } from '@/lib/dashboard/rankings';
 import { getReceivables } from '@/lib/dashboard/receivables';
@@ -71,8 +71,8 @@ export interface PrzeplywySlotProps {
   /** Chwila żądania jako ISO — jeden „teraz” dla wszystkich kart. */
   nowIso: string;
   tryb: TrybDanych;
-  /** Data weryfikacji KSeF (Z9: koszty z KSeF „od DD.MM”); `null` przed weryfikacją. */
-  verifiedAt: string | null;
+  /** Od kiedy koszty z KSeF są pełne (`trybDanych().kosztyKsefOd`, Z9/E10: „KSeF od DD.MM”); `null` — bez zastrzeżenia. */
+  kosztyKsefOd: string | null;
 }
 
 type SlotProps = PrzeplywySlotProps & { className?: string };
@@ -93,8 +93,9 @@ function movementsRange(nowIso: string, span: Span) {
 const loadInflows = cache((supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span) =>
   getInflows(supabase, tenantId, movementsRange(nowIso, span)));
 
+/** E10 (D-K): koszty = faktury zakupu z KSeF + wydatki spoza KSeF (KPiR bez zmian). */
 const loadCosts = cache((supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span) =>
-  getCosts(supabase, tenantId, movementsRange(nowIso, span)));
+  getCostsWithKsefPurchases(supabase, tenantId, movementsRange(nowIso, span)));
 
 async function loadMovements(supabase: PageContext['supabase'], tenantId: string, nowIso: string, span: Span) {
   const [inflows, costs] = await Promise.all([
@@ -257,7 +258,7 @@ async function WplywyKarta({ supabase, tenantId, nowIso, tryb, className }: Slot
   });
 }
 
-async function KosztyKarta({ supabase, tenantId, nowIso, tryb, verifiedAt, className }: SlotProps) {
+async function KosztyKarta({ supabase, tenantId, nowIso, tryb, kosztyKsefOd, className }: SlotProps) {
   return zaladujKarte('Koszty w tym miesiącu (brutto)', className, async () => {
     const costs = await loadCosts(supabase, tenantId, nowIso, 'recent');
     const today = todayInWarsaw(new Date(nowIso));
@@ -266,7 +267,7 @@ async function KosztyKarta({ supabase, tenantId, nowIso, tryb, verifiedAt, class
       <StatisticsAreaStatCard
         chartKey="expense"
         title="Koszty w tym miesiącu (brutto)"
-        {...kosztyMiesiacaProps(flow, tryb, notaKosztowKsef(tryb, verifiedAt, today.slice(0, 7)))}
+        {...kosztyMiesiacaProps(flow, tryb, notaKosztowKsef(tryb, kosztyKsefOd, today.slice(0, 7)))}
         color="var(--chart-4)"
         badgeClassName="bg-chart-4/10 text-chart-4"
         className={className}

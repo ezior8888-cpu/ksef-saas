@@ -50,8 +50,16 @@ const { fakePostgrest } = await import('@/lib/demo/fake-postgrest');
 
 const NOW = new Date('2026-10-23T08:00:00Z');
 const ZWERYFIKOWANA: Proof = { verifiedAt: '2026-10-12T08:00:00Z', verifiedEnvironment: 'test' };
-/** T9 (PLAN-PRAWDZIWE-DANE §9): odczyty całych Przepływów na atrapie, zmierzone 23.10.2026. */
-const READS_PRZEPLYWOW = 18;
+/**
+ * T9 (PLAN-PRAWDZIWE-DANE §9): odczyty całych Przepływów na atrapie, zmierzone 23.10.2026.
+ * E10 (D-K) świadomie +30: sześć odczytów kosztów (bez RSC `cache()` każda
+ * karta czyta osobno; na produkcji trzy — okno 12 miesięcy, 5 lat i rok
+ * podatku) po +5: demo ma wydatki ze Skrzynki KSeF (`getCosts` sprawdza ich
+ * środowisko i walutę: +2), a pełne koszty czytają faktury zakupu z wydatkami
+ * osadzonymi (+1), wydatki o tym samym NIP-ie i numerze (+1) i zwolnienie
+ * z VAT (+1).
+ */
+const READS_PRZEPLYWOW = 48;
 
 /** Klasy dzisiejszych (sprzed E6) Przepływów Finory — zrzut z renderu 23.10.2026. */
 const KLASY_FINORY: string[] = JSON.parse(

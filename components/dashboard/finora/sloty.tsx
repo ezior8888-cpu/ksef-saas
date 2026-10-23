@@ -14,7 +14,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { shiftMonthKey } from '@/lib/analytics-finance/months';
 import { getSalesInvoices, salesMonthStats } from '@/lib/analytics-finance/sales';
-import { getCosts, sumCostsByMonth } from '@/lib/dashboard/costs';
+import { getCostsWithKsefPurchases, sumCostsByMonth } from '@/lib/dashboard/costs';
 import { getMonthlyFigures, getSalesSeries } from '@/lib/dashboard/monthly-figures';
 import { getTopClients, getTopProducts, warsawMonthWindow } from '@/lib/dashboard/rankings';
 import { getReceivables } from '@/lib/dashboard/receivables';
@@ -63,8 +63,8 @@ export interface PulpitSlotProps {
   /** Chwila żądania jako ISO — jeden „teraz” dla wszystkich kart. */
   nowIso: string;
   tryb: TrybDanych;
-  /** Data weryfikacji KSeF (Z9: koszty z KSeF „od DD.MM”); `null` przed weryfikacją. */
-  verifiedAt: string | null;
+  /** Od kiedy koszty z KSeF są pełne (`trybDanych().kosztyKsefOd`, Z9/E10: „KSeF od DD.MM”); `null` — bez zastrzeżenia. */
+  kosztyKsefOd: string | null;
 }
 
 type SlotProps = PulpitSlotProps & { className?: string };
@@ -161,12 +161,13 @@ function Slot({ title, wariant, className, children }: { title: string; wariant:
 
 // ─── Karty ────────────────────────────────────────────────────────────────
 
-async function FinanseKarta({ supabase, tenantId, nowIso, tryb, verifiedAt, className }: SlotProps) {
+async function FinanseKarta({ supabase, tenantId, nowIso, tryb, kosztyKsefOd, className }: SlotProps) {
   return zaladujKarte('Finanse', className, async () => {
     const series = await serieSprzedazy(supabase, tenantId, nowIso, SERIA_MIESIACE, false);
     const months = series.months.slice(-FINANSE_MIESIACE);
+    // E10 (D-K): koszty = faktury zakupu z KSeF + wydatki spoza KSeF (KPiR bez zmian).
     const costs = sumCostsByMonth(
-      await getCosts(supabase, tenantId, warsawMonthWindow(new Date(nowIso), FINANSE_MIESIACE)),
+      await getCostsWithKsefPurchases(supabase, tenantId, warsawMonthWindow(new Date(nowIso), FINANSE_MIESIACE)),
       months.map((m) => m.key),
     );
     const dane = finanseProps({
@@ -175,7 +176,7 @@ async function FinanseKarta({ supabase, tenantId, nowIso, tryb, verifiedAt, clas
       vat: series.vatSeries.slice(-FINANSE_MIESIACE),
       costs,
       tryb,
-      verifiedAt,
+      kosztyKsefOd,
     });
     return (
       <FinanceCard

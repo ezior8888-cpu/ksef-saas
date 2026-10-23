@@ -5,7 +5,12 @@ import type { PageContext } from '@/lib/supabase/page-context';
  * kształt co atrapa w `tests/unit/pulpit-rankingi.test.ts`: filtry używane
  * przez moduły, `count: 'exact'`, `head`, sortowanie, `range`, `limit`,
  * `maybeSingle` i limit 1000 wierszy serwera (PostgREST ucina odpowiedź).
- * Zwraca TYLKO wybrane kolumny. Operator, którego tu nie ma, rzuca (nie ma
+ * Zwraca TYLKO wybrane kolumny; ścieżka JSON jak w PostgREST
+ * (`alias:kolumna->klucz->>pole`, bez aliasu klucz = ostatni człon) daje
+ * wartość spod ścieżki, a osadzenie po kluczu obcym jednej kolumny
+ * (`tabela!tabela_kolumna_fkey(kolumny)`) — wiersze tabeli podrzędnej, których
+ * `kolumna` = `id` wiersza (bez filtrów, jak PostgREST bez `!inner`).
+ * Operator, którego tu nie ma, rzuca (nie ma
  * metody albo `not(...)` z nieznanym operatorem) — loader z nowym filtrem
  * nie dostanie po cichu pustego wyniku (PLAN-PRAWDZIWE-DANE §7 E2).
  */
@@ -21,6 +26,79 @@ export interface Read {
   range: [number, number] | null;
 }
 
+/** Kolumna z listy select: klucz w wyniku i ścieżka do wartości w wierszu albo osadzenie. */
+interface Column {
+  key: string;
+  path: string[];
+  /** Osadzenie: tabela podrzędna, jej kolumna klucza obcego i kolumny wyniku. */
+  embed?: { table: string; foreignKey: string; columns: Column[] };
+}
+
+/** Lista select z podziałem po przecinkach poza nawiasami osadzeń. */
+function selectParts(selection: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of selection) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  parts.push(current);
+  return parts.map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * `kolumna`, `alias:kolumna`, `alias:kolumna->klucz->>pole` albo
+ * `[alias:]tabela!tabela_kolumna_fkey(kolumny)` (PostgREST).
+ */
+function column(part: string): Column {
+  const embed = /^(?:(\w+):)?(\w+)!(\w+)\(([\s\S]*)\)$/.exec(part);
+  if (embed) {
+    const alias = embed[1];
+    const table = embed[2]!;
+    const fk = embed[3]!;
+    const inner = embed[4]!;
+    const prefix = `${table}_`;
+    if (!fk.startsWith(prefix) || !fk.endsWith('_fkey')) {
+      throw new Error(`fakePostgrest: nieobsługiwane osadzenie ${part}`);
+    }
+    return {
+      key: alias ?? table,
+      path: [],
+      embed: { table, foreignKey: fk.slice(prefix.length, -'_fkey'.length), columns: selectParts(inner).map(column) },
+    };
+  }
+  if (part.includes('(')) throw new Error(`fakePostgrest: nieobsługiwane osadzenie ${part}`);
+  const [alias, source] = part.includes(':') ? part.split(':', 2) as [string, string] : [null, part];
+  const path = source.split(/->>?/).map((s) => s.trim());
+  return { key: (alias ?? path.at(-1)!).trim(), path };
+}
+
+/** Kolumna jak w wierszu; brak wartości pod ścieżką JSON = `null` (jak PostgREST). */
+function valueAt(row: Row, path: readonly string[]): unknown {
+  let value: unknown = row[path[0]!];
+  if (path.length === 1) return value;
+  for (const part of path.slice(1)) {
+    value = value && typeof value === 'object' && !Array.isArray(value) ? (value as Row)[part] : undefined;
+  }
+  return value ?? null;
+}
+
+function project(tables: Tables, row: Row, columns: readonly Column[]): Row {
+  return Object.fromEntries(columns.map((c) => {
+    if (!c.embed) return [c.key, valueAt(row, c.path)];
+    const { table, foreignKey, columns: inner } = c.embed;
+    const children = (tables[table] ?? []).filter((child) => child[foreignKey] === row.id);
+    return [c.key, children.map((child) => project(tables, child, inner))];
+  }));
+}
+
 export function fakePostgrest(tables: Tables, reads: Read[] = []): PageContext['supabase'] {
   return {
     from(table: string) {
@@ -28,7 +106,7 @@ export function fakePostgrest(tables: Tables, reads: Read[] = []): PageContext['
       reads.push(read);
       const predicates: Array<(row: Row) => boolean> = [];
       const ordering: Array<{ column: string; ascending: boolean }> = [];
-      let columns: string[] | null = null;
+      let columns: Column[] | null = null;
       let head = false;
       let counted = false;
       let window: [number, number] | null = null;
@@ -46,13 +124,13 @@ export function fakePostgrest(tables: Tables, reads: Read[] = []): PageContext['
         const start = window?.[0] ?? 0;
         const wanted = window ? window[1] - window[0] + 1 : matching.length;
         const page = matching.slice(start, start + Math.min(wanted, limit ?? wanted, SERVER_CAP));
-        const data = page.map((r) => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : r));
+        const data = page.map((r) => (columns ? project(tables, r, columns) : r));
         return { data, count: matching.length };
       };
       const builder = {
         select(selection = '*', options?: { count?: string; head?: boolean }) {
-          const parts = selection.split(',').map((s) => s.trim()).filter(Boolean);
-          columns = parts.includes('*') ? null : parts;
+          const parts = selectParts(selection);
+          columns = parts.includes('*') ? null : parts.map(column);
           head = options?.head === true;
           counted = options?.count === 'exact';
           return builder;

@@ -69,20 +69,22 @@ export type Item = {
   direction: 'in' | 'out'
   /** Kwota bez znaku; znak i kolor z `direction`. */
   amount: number
-  status: 'paid' | 'reviewed' | 'pending'
+  status: 'paid' | 'reviewed' | 'pending' | 'ksef'
   /** „Otwórz fakturę” / „Otwórz wydatek”. */
   openLabel: string
   /** `null` w danych przykładowych — demo nie ma prawdziwych dokumentów. */
   href: string | null
 }
 
-// Statusy po polsku: wpłata „Opłacona”, koszt „Zatwierdzony” albo „Do akceptacji” (opisanie, nie zapłata).
+// Statusy po polsku: wpłata „Opłacona”, koszt „Zatwierdzony” albo „Do akceptacji” (opisanie, nie zapłata),
+// faktura zakupu z KSeF bez wydatku „Z KSeF” (E10 — nie ma jej w Wydatkach, więc nie ma czego akceptować).
 // Bez `capitalize` z Finory: wielowyrazowe etykiety („Do akceptacji”, „Bez kategorii”) dostałyby
 // wielką literę w każdym słowie; wielką literę na początku daje adapter.
 const STATUS_LABELS: Record<Item['status'], string> = {
   paid: 'Opłacona',
   reviewed: 'Zatwierdzony',
-  pending: 'Do akceptacji'
+  pending: 'Do akceptacji',
+  ksef: 'Z KSeF'
 }
 
 const valueLabel = (value: string) => STATUS_LABELS[value as Item['status']] ?? value
@@ -143,6 +145,9 @@ const columns: ColumnDef<Item>[] = [
         paid:
           'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
         reviewed:
+          'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
+        // Ten sam wygląd co „Zatwierdzony” — bez nowego koloru (zasada Bartosza 23.10.2026).
+        ksef:
           'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
         pending:
           'bg-amber-600/10 text-amber-600 focus-visible:ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:focus-visible:ring-amber-400/40 [a&]:hover:bg-amber-600/5 dark:[a&]:hover:bg-amber-400/5'

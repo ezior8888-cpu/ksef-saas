@@ -27,8 +27,8 @@ export const dynamic = 'force-dynamic'
 
 const CashFlowDashboard = async () => {
   const pageCtx = await getPageContext()
-  const { supabase, tenantId, nowIso, tryb, verifiedAt } = await kontekstDanych(pageCtx, new Date())
-  const props: PrzeplywySlotProps = { supabase, tenantId, nowIso, tryb, verifiedAt }
+  const { supabase, tenantId, nowIso, tryb, kosztyKsefOd } = await kontekstDanych(pageCtx, new Date())
+  const props: PrzeplywySlotProps = { supabase, tenantId, nowIso, tryb, kosztyKsefOd }
 
   return (
     <>

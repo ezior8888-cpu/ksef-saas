@@ -1,4 +1,5 @@
 import type { CostEntry } from '@/lib/dashboard/costs';
+import { costHref, isKsefInvoiceCost } from '@/lib/dashboard/ksef-invoice-cost';
 import type { InflowEntry } from '@/lib/dashboard/inflows';
 import type { Receivables } from '@/lib/dashboard/receivables';
 import { shortCompanyName } from '@/lib/format/company-name';
@@ -7,12 +8,13 @@ import { roundToCents } from '@/lib/xml/invoice-calculator';
 
 /**
  * Czyste agregaty kart `/przeplywy` (plan Finora §5 P2) na wynikach
- * `getInflows` (wpływy, §2.4 pkt 14) i `getCosts` (wydatki brutto, §2.4
- * pkt 12) oraz `getReceivables` (§2.4 pkt 11). Bez własnego odczytu bazy:
- * każda karta liczy z tych samych zbiorów, więc liczby się nie rozjeżdżają.
+ * `getInflows` (wpływy, §2.4 pkt 14) i `getCostsWithKsefPurchases` (koszty
+ * brutto: wydatki i faktury zakupu z KSeF bez wydatku, E10) oraz
+ * `getReceivables` (§2.4 pkt 11). Bez własnego odczytu bazy: każda karta
+ * liczy z tych samych zbiorów, więc liczby się nie rozjeżdżają.
  *
- * Wpływ = `paid_amount` faktury w dniu oznaczenia wpłaty. Wydatek =
- * `gross_amount` kosztu (`CostEntry.outflow`) w dniu wystawienia dokumentu —
+ * Wpływ = `paid_amount` faktury w dniu oznaczenia wpłaty. Wydatek = brutto
+ * dokumentu kosztowego (`CostEntry.outflow`) w dniu jego wystawienia —
  * koszty nie mają w bazie dnia zapłaty (N7).
  *
  * Wszystkie daty to RRRR-MM-DD w Europe/Warsaw; „dziś” przychodzi z
@@ -409,10 +411,15 @@ export function upcomingInflows(
 
 // ─── „Ostatnie operacje” i „Wszystkie operacje” ───────────────────────────
 
-export type OperationStatus = 'paid' | 'reviewed' | 'pending';
+/**
+ * Wpłata „paid”; wydatek „reviewed” / „pending” (opisany albo do akceptacji);
+ * faktura zakupu z KSeF bez wydatku „ksef” — nie ma jej w Wydatkach, więc nie
+ * jest ani zatwierdzona, ani do akceptacji (E10).
+ */
+export type OperationStatus = 'paid' | 'reviewed' | 'pending' | 'ksef';
 
 export interface CashFlowOperation {
-  /** Unikalny w liście: `in:<id faktury>` albo `out:<id wydatku>`. */
+  /** Unikalny w liście: `in:<id faktury>` albo `out:<id wydatku lub faktury zakupu>`. */
   id: string;
   direction: 'in' | 'out';
   /** RRRR-MM-DD: dzień wpłaty albo dzień wystawienia dokumentu kosztowego. */
@@ -462,9 +469,9 @@ export function cashFlowOperations(
         nip: c.sellerNip,
         reference: c.documentNumber,
         category: c.categoryLabel ?? 'Bez kategorii',
-        status: c.isReviewed ? 'reviewed' : 'pending',
+        status: isKsefInvoiceCost(c) ? 'ksef' : c.isReviewed ? 'reviewed' : 'pending',
         amount: c.outflow,
-        href: `/expenses/${c.id}`,
+        href: costHref(c),
       })),
   ];
   return rows.sort((a, b) =>

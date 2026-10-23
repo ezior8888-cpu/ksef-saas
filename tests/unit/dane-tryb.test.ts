@@ -156,6 +156,8 @@ describe('kontekstDanych', () => {
       tenantId: 'firma-a',
       nowIso: NOW.toISOString(),
       verifiedAt: DAWNO,
+      // E10: strumienia zakupów jeszcze nie ma — koszty z KSeF pełne od weryfikacji.
+      kosztyKsefOd: DAWNO,
     });
     // Jedno lekkie zapytanie sesją (RLS), tylko kolumny z GRANT dla `authenticated` (00155).
     expect(reads).toEqual([{
@@ -206,16 +208,16 @@ describe('kontekstDanych', () => {
   it('G: firmy nie ma w wierszach członkostwa → prawdziwe dane', async () => {
     proofs.byTenant = {};
     const { supabase } = sesja([]);
-    expect(await trybDanych({ supabase, tenantId: 'firma-x', user: USER }, NOW)).toEqual({ tryb: 'prawdziwe', stan: 'G', verifiedAt: null });
+    expect(await trybDanych({ supabase, tenantId: 'firma-x', user: USER }, NOW)).toEqual({ tryb: 'prawdziwe', stan: 'G', verifiedAt: null, kosztyKsefOd: null });
   });
 
   it("G': błąd PostgREST-a albo wyjątek przy odczycie strumieni → prawdziwe dane jak C", async () => {
     const zBledem = sesja({ message: 'PGRST205' });
     expect(await trybDanych({ supabase: zBledem.supabase, tenantId: 'firma-a', user: USER }, NOW))
-      .toEqual({ tryb: 'prawdziwe', stan: "G'", verifiedAt: DAWNO });
+      .toEqual({ tryb: 'prawdziwe', stan: "G'", verifiedAt: DAWNO, kosztyKsefOd: DAWNO });
     const zWyjatkiem = sesja(new Error('sieć'));
     expect(await trybDanych({ supabase: zWyjatkiem.supabase, tenantId: 'firma-a', user: USER }, NOW))
-      .toEqual({ tryb: 'prawdziwe', stan: "G'", verifiedAt: DAWNO });
+      .toEqual({ tryb: 'prawdziwe', stan: "G'", verifiedAt: DAWNO, kosztyKsefOd: DAWNO });
   });
 
   it("G'': brak KSEF_ENV → prawdziwe dane u każdej firmy (dziś przykład)", async () => {
@@ -234,6 +236,23 @@ describe('kontekstDanych', () => {
     const ctx = await kontekstDanych({ supabase, tenantId: 'firma-a', user: USER }, NOW);
     expect(ctx).toMatchObject({ tryb: 'przyklad', stan: 'H', demo: true, tenantId: DEMO_TENANT, verifiedAt: null });
     expect(reads).toEqual([]);
+  });
+
+  it('E10: „KSeF od DD.MM” przy kosztach tylko, dopóki historia zakupów z KSeF się pobiera', async () => {
+    const trybZ = async (strumienie: StrumienHistorii[] | { message: string }) =>
+      (await trybDanych({ supabase: sesja(strumienie).supabase, tenantId: 'firma-a', user: USER }, NOW)).kosztyKsefOd;
+    // Strumień zakupów skończył zaległość — koszty z KSeF są pełne, nota znika.
+    expect(await trybZ([gotowy(), gotowy({ direction: 'incoming' })])).toBeNull();
+    // Zakupy jeszcze się pobierają albo strumienia zakupów jeszcze nie ma — od weryfikacji.
+    expect(await trybZ([gotowy(), strumien({ direction: 'incoming' })])).toBe(DAWNO);
+    expect(await trybZ([gotowy()])).toBe(DAWNO);
+    // Gotowa jest tylko sprzedaż — to nie przesądza o zakupach.
+    expect(await trybZ([gotowy({ direction: 'outgoing' })])).toBe(DAWNO);
+    // Błąd odczytu strumieni (G') — nie wiemy, więc zastrzeżenie zostaje.
+    expect(await trybZ({ message: 'PGRST205' })).toBe(DAWNO);
+    // Przed weryfikacją (przykład) — bez noty.
+    proofs.byTenant['firma-a'] = { verifiedAt: null, verifiedEnvironment: null };
+    expect(await trybZ([gotowy({ direction: 'incoming' })])).toBeNull();
   });
 
   it("B' i E z odczytu strumieni", async () => {

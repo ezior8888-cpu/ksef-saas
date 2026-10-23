@@ -60,8 +60,14 @@ const KLASY_USUNIETE = ['h-[17%]', 'h-[18%]', 'h-[65%]'];
 const KLASY_DODANE = ['truncate', 'min-w-0'];
 
 const NOW = new Date('2026-10-23T08:00:00Z');
-/** T9 (PLAN-PRAWDZIWE-DANE §9): odczyty całego Pulpitu na atrapie, zmierzone 23.10.2026. */
-const READS_PULPITU = 24;
+/**
+ * T9 (PLAN-PRAWDZIWE-DANE §9): odczyty całego Pulpitu na atrapie, zmierzone 23.10.2026.
+ * E10 (D-K) świadomie +5 w karcie Finanse: demo ma wydatki ze Skrzynki KSeF
+ * (`getCosts` sprawdza ich środowisko i walutę: +2), a pełne koszty czytają
+ * faktury zakupu z wydatkami osadzonymi (+1), wydatki o tym samym NIP-ie
+ * i numerze (+1) i zwolnienie z VAT (+1).
+ */
+const READS_PULPITU = 29;
 const ZWERYFIKOWANA: Proof = { verifiedAt: '2026-10-12T08:00:00Z', verifiedEnvironment: 'test' };
 
 async function html(node: ReactNode): Promise<string> {
@@ -127,7 +133,7 @@ describe('Finanse (Z17 po zmianie Bartosza): stos Koszty + Zysk + VAT', () => {
     vat: [6900, 1840],
     costs: [11000, 9500.5],
     tryb: 'prawdziwe',
-    verifiedAt: null,
+    kosztyKsefOd: null,
   });
 
   it('zysk = przychód − koszty w każdym miesiącu; słupek = sprzedaż brutto', () => {
@@ -157,13 +163,18 @@ describe('Finanse (Z17 po zmianie Bartosza): stos Koszty + Zysk + VAT', () => {
     expect(props.report.subTitle.replace(/\u00a0/g, ' ')).toBe('Ten miesiąc · średnio 30 tys. zł');
   });
 
-  it('koszty z KSeF dopiero od weryfikacji (Z9): podpis „od DD.MM” w Raporcie i dymku', () => {
-    const p = adaptery.finanseProps({
+  it('koszty z KSeF pełne dopiero od weryfikacji, dopóki historia zakupów się pobiera (Z9, E10): „od DD.MM” w Raporcie i dymku', () => {
+    const wejscie = {
       months: [{ key: '2026-09', label: 'Wrz' }, { key: '2026-10', label: 'Paź' }],
-      net: [1, 2], vat: [0, 0], costs: [0, 0], tryb: 'prawdziwe', verifiedAt: '2026-10-12T08:00:00Z',
-    });
+      net: [1, 2], vat: [0, 0], costs: [0, 0], tryb: 'prawdziwe' as const,
+    };
+    const p = adaptery.finanseProps({ ...wejscie, kosztyKsefOd: '2026-10-12T08:00:00Z' });
     expect(p.costsLabel).toBe('Koszty (KSeF od 12.10)');
     expect(p.report.rows[2]!.title).toBe('Koszty (KSeF od 12.10)');
+    // Historia zakupów pełna (`kosztyKsefOd = null`) — bez zastrzeżenia.
+    const pelna = adaptery.finanseProps({ ...wejscie, kosztyKsefOd: null });
+    expect(pelna.costsLabel).toBe('Koszty');
+    expect(pelna.report.rows[2]!.title).toBe('Koszty');
   });
 });
 
@@ -345,7 +356,9 @@ describe('Odporność i koszt: karty czytają osobno', () => {
 
   it('faktura w EUR sprzed 10 miesięcy zabiera tylko karty, których okno ją obejmuje', async () => {
     const tables = danePrzykladowe(NOW, 'test');
-    const wzor = tables.invoices!.find((f) => f.issue_date === '2025-12-15') ?? tables.invoices![0]!;
+    // Wzorem jest faktura SPRZEDAŻY (od E10 demo ma też faktury zakupu z KSeF).
+    const sprzedaz = tables.invoices!.filter((f) => f.direction === 'outgoing');
+    const wzor = sprzedaz.find((f) => f.issue_date === '2025-12-15') ?? sprzedaz[0]!;
     tables.invoices!.push({ ...wzor, id: 'eur-1', currency: 'EUR', issue_date: '2025-12-15', sale_date: '2025-12-15' });
 
     const markup = await zweryfikowanaZDanymi(tables);

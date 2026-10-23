@@ -23,11 +23,14 @@ export function oknoKalendarzaOd(nowIso: string): string {
 }
 
 /**
- * Podpis karty kosztów: koszty to dokumenty z FaktWay (wydatki + faktury
- * zakupu z KSeF), nie wypłaty z konta.
+ * Podpis karty kosztów (E10, D-K): koszty to faktury zakupu z KSeF i wydatki
+ * spoza KSeF, nie wypłaty z konta. Dopóki historia zakupów z KSeF się pobiera
+ * (`od` = „KSeF od DD.MM”), faktury z KSeF są pełne dopiero od tej daty.
+ * Oba napisy krótsze od dawnych („Z dokumentów w FaktWay”, „Z dokumentów,
+ * KSeF od DD.MM”) — ta sama liczba linii na 375 px.
  */
 export function podpisKosztow(tail: string, od: string): string {
-  return od ? `Z dokumentów, ${od} · ${tail}` : `Z dokumentów w FaktWay · ${tail}`;
+  return od ? `Z wydatków, ${od} · ${tail}` : `Z KSeF i wydatków · ${tail}`;
 }
 
 /** Pusty stan sprzedaży bez żadnej faktury: w stanie B historia się pobiera, więc nie wzywamy do wystawiania. */

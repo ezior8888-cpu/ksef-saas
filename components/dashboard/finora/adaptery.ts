@@ -54,16 +54,17 @@ export function zmianaProcentowa(current: number | null | undefined, previous: n
 const synchronizacja = (tryb: TrybDanych) => tryb === 'synchronizacja';
 
 /**
- * Z9: faktury kosztowe z KSeF dochodzą od weryfikacji (skrzynka nie sięga
- * wstecz), więc koszty okna karty od `from` dostają „KSeF od DD.MM”, jeśli
- * weryfikacja wypadła w tym oknie. `from` to miesiąc „RRRR-MM” (karty
- * miesięczne) albo dzień „RRRR-MM-DD” (kalendarz 180 dni) — porównanie
- * z tą samą dokładnością. Przykład i firmy zweryfikowane wcześniej — nic.
+ * Z9 / E10: koszty z KSeF są pełne od `kosztyKsefOd` (`trybDanych`: data
+ * weryfikacji, dopóki historia zakupów z KSeF się pobiera; potem `null`),
+ * więc koszty okna karty od `from` dostają „KSeF od DD.MM”, jeśli ta data
+ * wypadła w tym oknie. `from` to miesiąc „RRRR-MM” (karty miesięczne) albo
+ * dzień „RRRR-MM-DD” (kalendarz 180 dni) — porównanie z tą samą
+ * dokładnością. Przykład, pełna historia zakupów i okno po dacie — nic.
  * Jedno źródło dla Pulpitu, Przepływów i Analiz (`components/analizy/podpisy.ts`).
  */
-export function ksefOd(tryb: TrybDanych, verifiedAt: string | null | undefined, from: string): string {
-  if (tryb === 'przyklad' || !verifiedAt) return '';
-  const date = formatTimestampDatePl(verifiedAt);
+export function ksefOd(tryb: TrybDanych, kosztyKsefOd: string | null | undefined, from: string): string {
+  if (tryb === 'przyklad' || !kosztyKsefOd) return '';
+  const date = formatTimestampDatePl(kosztyKsefOd);
   if (date === '—') return '';
   const [dd, mm, yyyy] = date.split('.');
   if (`${yyyy}-${mm}-${dd}`.slice(0, from.length) < from) return '';
@@ -71,8 +72,8 @@ export function ksefOd(tryb: TrybDanych, verifiedAt: string | null | undefined, 
 }
 
 /** `ksefOd` jako dopisek w nawiasie: „Koszty (KSeF od 12.10)”. */
-export function notaKosztowKsef(tryb: TrybDanych, verifiedAt: string | null, fromMonthKey: string): string {
-  const od = ksefOd(tryb, verifiedAt, fromMonthKey);
+export function notaKosztowKsef(tryb: TrybDanych, kosztyKsefOd: string | null, fromMonthKey: string): string {
+  const od = ksefOd(tryb, kosztyKsefOd, fromMonthKey);
   return od ? ` (${od})` : '';
 }
 
@@ -85,10 +86,11 @@ export interface FinanseWejscie {
   net: readonly number[];
   /** VAT należny miesięcy (`vatSeries`). */
   vat: readonly number[];
-  /** Koszty miesięcy (`sumCostsByMonth(getCosts())`). */
+  /** Koszty miesięcy (`sumCostsByMonth(getCostsWithKsefPurchases())`, E10). */
   costs: readonly number[];
   tryb: TrybDanych;
-  verifiedAt: string | null;
+  /** Od kiedy koszty z KSeF są pełne (`trybDanych().kosztyKsefOd`); `null` — bez zastrzeżenia. */
+  kosztyKsefOd: string | null;
 }
 
 export type FinanseDane = Omit<FinanceCardProps, 'financeMenu' | 'reportMenu' | 'className'>;
@@ -124,7 +126,7 @@ export function finanseProps(w: FinanseWejscie): FinanseDane {
     subTitle: empty && synchronizacja(w.tryb)
       ? POBIERAMY
       : `Ostatnie ${count} ${plural(count, ['miesiąc', 'miesiące', 'miesięcy'])}`,
-    costsLabel: `Koszty${notaKosztowKsef(w.tryb, w.verifiedAt, firstKey)}`,
+    costsLabel: `Koszty${notaKosztowKsef(w.tryb, w.kosztyKsefOd, firstKey)}`,
     months,
     report: {
       subTitle: report.monthlyAverageNet === null
@@ -133,7 +135,7 @@ export function finanseProps(w: FinanseWejscie): FinanseDane {
       rows: [
         { kind: 'profit', title: loss ? 'Strata' : 'Zysk', amount: zl(Math.abs(report.profit)) },
         { kind: 'revenue', title: 'Przychody netto', amount: zl(report.revenue) },
-        { kind: 'costs', title: `Koszty${notaKosztowKsef(w.tryb, w.verifiedAt, currentKey)}`, amount: zl(report.costs) },
+        { kind: 'costs', title: `Koszty${notaKosztowKsef(w.tryb, w.kosztyKsefOd, currentKey)}`, amount: zl(report.costs) },
       ],
     },
   };

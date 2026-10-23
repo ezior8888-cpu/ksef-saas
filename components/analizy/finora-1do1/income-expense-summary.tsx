@@ -34,7 +34,8 @@ const IncomeExpenseSummary = ({ data, className }: IncomeExpenseSummaryProps) =>
     <Card className={className}>
       <CardHeader>
         <CardTitle>Przychody a koszty</CardTitle>
-        <CardDescription>Netto · koszty jak w KPiR, bez VAT do odliczenia</CardDescription>
+        {/* E10 (D-K): koszty z faktur zakupu z KSeF i wydatków — nie tylko KPiR; napis tej samej długości. */}
+        <CardDescription>Netto · z KSeF i wydatków, bez VAT do odliczenia</CardDescription>
       </CardHeader>
       <CardContent className='space-y-2'>
         {rows.map(row => (

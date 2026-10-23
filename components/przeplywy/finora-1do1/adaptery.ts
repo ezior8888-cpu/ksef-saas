@@ -25,8 +25,9 @@ import { PAID_EMPTY_STATE, PAID_NOTE } from '@/lib/invoices/paid-labels';
  * Zasada Bartosza 23.10.2026: karty IDENTYCZNE rozmiarowo i designowo, więc
  * adaptery dają tylko napisy w istniejących miejscach i o długości dawnych
  * napisów szablonu. Liczba jest prawdziwa albo jej nie ma („—”), a dana
- * częściowa (wpłaty bez potwierdzania, koszty tylko z FaktWay) dostaje
- * zastrzeżenie w istniejącym miejscu na tekst albo w dymku (`title`).
+ * częściowa (wpłaty bez potwierdzania, koszty z KSeF przed końcem historii
+ * zakupów) dostaje zastrzeżenie w istniejącym miejscu na tekst albo w dymku
+ * (`title`).
  * Formatowanie robi serwer; do kart klienckich idą napisy i liczby.
  */
 
@@ -342,7 +343,8 @@ export function tabelaProps(
       direction: wplywa(op) ? 'in' : 'out',
       amount: Math.abs(op.amount),
       status: op.status,
-      openLabel: op.direction === 'in' ? 'Otwórz fakturę' : 'Otwórz wydatek',
+      // Koszt z faktury zakupu z KSeF bez wydatku (E10) otwiera fakturę.
+      openLabel: op.direction === 'in' || op.status === 'ksef' ? 'Otwórz fakturę' : 'Otwórz wydatek',
       href: prawdziwe(tryb) ? op.href : null,
     })),
     empty: synchronizacja(tryb) ? POBIERAMY : 'Brak wyników.',

@@ -18,7 +18,7 @@ const sprzedaz = await import('@/components/analizy/sprzedaz-grid');
 /**
  * E4 (PLAN-PRAWDZIWE-DANE §6.3) + zasada Bartosza 23.10.2026: tylko napisy
  * w istniejących miejscach. Podpisy kart mówią prawdę o źródle liczby
- * (koszty z dokumentów w FaktWay, należności bez potwierdzonych wpłat),
+ * (koszty z KSeF i wydatków — E10, należności bez potwierdzonych wpłat),
  * demo nie linkuje do nieistniejącej faktury-wzoru, a stan „synchronizacja”
  * (B) mówi „Pobieramy faktury z KSeF…” zamiast „Wystaw fakturę”.
  */
@@ -80,8 +80,9 @@ function expense(id: string, fields: Row = {}): Row {
 
 type Tryb = 'przyklad' | 'synchronizacja' | 'prawdziwe';
 
-function props(tables: Record<string, Row[]>, tryb: Tryb = 'prawdziwe', verifiedAt: string | null = null) {
-  return { supabase: fakePostgrest(tables), tenantId: TENANT, nowIso: NOW_ISO, month: '2026-10', tryb, verifiedAt };
+/** `kosztyKsefOd` — od kiedy koszty z KSeF są pełne (E10: data weryfikacji, dopóki historia zakupów się pobiera). */
+function props(tables: Record<string, Row[]>, tryb: Tryb = 'prawdziwe', kosztyKsefOd: string | null = null) {
+  return { supabase: fakePostgrest(tables), tenantId: TENANT, nowIso: NOW_ISO, month: '2026-10', tryb, kosztyKsefOd };
 }
 
 /** Karta Finory: opis to `CardDescription` (`data-slot="card-description"`). */
@@ -89,7 +90,7 @@ function description(out: string): string {
   return out.match(/data-slot="card-description"[^>]*>([^<]*)</)?.[1] ?? '';
 }
 
-describe('E4: podpisy kart kosztów mówią, że to dokumenty z FaktWay', () => {
+describe('E4, E10: podpisy kart kosztów mówią, że to faktury z KSeF i wydatki', () => {
   const p = props({ expenses: [expense('e')], invoices: [] });
 
   it('Wydatki miesiąca: etykieta kafla nie udaje wypłaty', async () => {
@@ -98,42 +99,42 @@ describe('E4: podpisy kart kosztów mówią, że to dokumenty z FaktWay', () => 
     expect(out).not.toContain('Wydano (brutto)');
   });
 
-  it('Trend, Koło i Kalendarz: „Z dokumentów w FaktWay”', async () => {
-    expect(description(html(await koszty.CostTrendSlot(p)))).toBe('Z dokumentów w FaktWay · brutto, 6 mies.');
-    expect(description(html(await koszty.CostCategoriesChartSlot(p)))).toBe('Z dokumentów w FaktWay · wybrany miesiąc');
-    expect(description(html(await koszty.CostHeatmapSlot(p)))).toBe('Z dokumentów w FaktWay · ostatnie 180 dni');
+  it('Trend, Koło i Kalendarz: „Z KSeF i wydatków” (E10: krótsze od dawnego „Z dokumentów w FaktWay”)', async () => {
+    expect(description(html(await koszty.CostTrendSlot(p)))).toBe('Z KSeF i wydatków · brutto, 6 mies.');
+    expect(description(html(await koszty.CostCategoriesChartSlot(p)))).toBe('Z KSeF i wydatków · wybrany miesiąc');
+    expect(description(html(await koszty.CostHeatmapSlot(p)))).toBe('Z KSeF i wydatków · ostatnie 180 dni');
   });
 
-  it('weryfikacja KSeF w oknie karty: „KSeF od DD.MM” zamiast „w FaktWay” (jedna linia, bez nowego tekstu)', async () => {
+  it('historia zakupów z KSeF niepełna, data w oknie karty: „KSeF od DD.MM” (jedna linia, krótsza od dawnej)', async () => {
     const withProof = props({ expenses: [expense('e')], invoices: [] }, 'prawdziwe', '2026-10-09T08:00:00.000Z');
-    expect(description(html(await koszty.CostTrendSlot(withProof)))).toBe('Z dokumentów, KSeF od 09.10 · brutto, 6 mies.');
-    expect(description(html(await koszty.CostCategoriesChartSlot(withProof)))).toBe('Z dokumentów, KSeF od 09.10 · wybrany miesiąc');
-    expect(description(html(await koszty.CostHeatmapSlot(withProof)))).toBe('Z dokumentów, KSeF od 09.10 · ostatnie 180 dni');
+    expect(description(html(await koszty.CostTrendSlot(withProof)))).toBe('Z wydatków, KSeF od 09.10 · brutto, 6 mies.');
+    expect(description(html(await koszty.CostCategoriesChartSlot(withProof)))).toBe('Z wydatków, KSeF od 09.10 · wybrany miesiąc');
+    expect(description(html(await koszty.CostHeatmapSlot(withProof)))).toBe('Z wydatków, KSeF od 09.10 · ostatnie 180 dni');
   });
 
   it('Kalendarz: okno to 180 dni, nie 6 miesięcy kalendarzowych (dzień, nie miesiąc)', async () => {
     // NOW 17.10.2026: kalendarz od 21.04.2026, trend (6 miesięcy) od 01.05.2026.
     const wOknie = props({ expenses: [expense('e')], invoices: [] }, 'prawdziwe', '2026-04-25T08:00:00.000Z');
-    expect(description(html(await koszty.CostHeatmapSlot(wOknie)))).toBe('Z dokumentów, KSeF od 25.04 · ostatnie 180 dni');
-    expect(description(html(await koszty.CostTrendSlot(wOknie)))).toBe('Z dokumentów w FaktWay · brutto, 6 mies.');
+    expect(description(html(await koszty.CostHeatmapSlot(wOknie)))).toBe('Z wydatków, KSeF od 25.04 · ostatnie 180 dni');
+    expect(description(html(await koszty.CostTrendSlot(wOknie)))).toBe('Z KSeF i wydatków · brutto, 6 mies.');
     // Ten sam miesiąc, ale przed pierwszym dniem kalendarza — wszystkie dni okna mają już KSeF.
     const przedOknem = props({ expenses: [expense('e')], invoices: [] }, 'prawdziwe', '2026-04-10T08:00:00.000Z');
-    expect(description(html(await koszty.CostHeatmapSlot(przedOknem)))).toBe('Z dokumentów w FaktWay · ostatnie 180 dni');
+    expect(description(html(await koszty.CostHeatmapSlot(przedOknem)))).toBe('Z KSeF i wydatków · ostatnie 180 dni');
   });
 
   it('weryfikacja sprzed okna karty: bez dopisku', async () => {
     const old = props({ expenses: [expense('e')], invoices: [] }, 'prawdziwe', '2025-01-09T08:00:00.000Z');
-    expect(description(html(await koszty.CostCategoriesChartSlot(old)))).toBe('Z dokumentów w FaktWay · wybrany miesiąc');
+    expect(description(html(await koszty.CostCategoriesChartSlot(old)))).toBe('Z KSeF i wydatków · wybrany miesiąc');
   });
 
   it('przykład: podpis bez „KSeF od” nawet z datą', async () => {
     const demo = props({ expenses: [expense('e')], invoices: [] }, 'przyklad', '2026-10-09T08:00:00.000Z');
-    expect(description(html(await koszty.CostCategoriesChartSlot(demo)))).toBe('Z dokumentów w FaktWay · wybrany miesiąc');
+    expect(description(html(await koszty.CostCategoriesChartSlot(demo)))).toBe('Z KSeF i wydatków · wybrany miesiąc');
   });
 
-  it('Przychody a koszty: koszty jak w KPiR, „Wynik (netto)”', async () => {
+  it('Przychody a koszty: koszty z KSeF i wydatków (E10, nie tylko KPiR), „Wynik (netto)”', async () => {
     const out = html(await koszty.CostIncomeExpenseSlot(p));
-    expect(description(out)).toBe('Netto · koszty jak w KPiR, bez VAT do odliczenia');
+    expect(description(out)).toBe('Netto · z KSeF i wydatków, bez VAT do odliczenia');
     expect(out).toContain('Wynik (netto)');
   });
 });
@@ -149,7 +150,7 @@ describe('E4: podpisy kart sprzedaży', () => {
 
   it('Przychody a koszty po stronie sprzedaży: ten sam podpis', async () => {
     const out = html(await sprzedaz.SalesIncomeExpenseSlot(p));
-    expect(description(out)).toBe('Netto · koszty jak w KPiR, bez VAT do odliczenia');
+    expect(description(out)).toBe('Netto · z KSeF i wydatków, bez VAT do odliczenia');
     expect(out).toContain('Wynik (netto)');
   });
 });

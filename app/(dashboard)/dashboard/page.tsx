@@ -27,8 +27,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function DashboardHomePage() {
   const pageCtx = await getPageContext();
-  const { supabase, tenantId, nowIso, tryb, verifiedAt } = await kontekstDanych(pageCtx, new Date());
-  const props: PulpitSlotProps = { supabase, tenantId, nowIso, tryb, verifiedAt };
+  const { supabase, tenantId, nowIso, tryb, kosztyKsefOd } = await kontekstDanych(pageCtx, new Date());
+  const props: PulpitSlotProps = { supabase, tenantId, nowIso, tryb, kosztyKsefOd };
 
   return (
     <div className="grid grid-cols-6 gap-6">

@@ -40,8 +40,9 @@ import { ksefOd, oknoKalendarzaOd, oknoKosztowOd, podpisKosztow, pobieramy } fro
  * samej kolejności i z tymi samymi rozpiętościami; karty to kopie
  * z `finora-1do1/`, a dane — prawdziwe, przez czyste adaptery
  * (`./adapters`). Każda karta osobno w `Suspense` + `SectionErrorBoundary`
- * (§2.4 pkt 15); koszty jedną drogą `getCosts` (§2.4 pkt 12), czytane raz na
- * żądanie (`loadCostsWindow`).
+ * (§2.4 pkt 15); koszty jedną drogą `getCostsWithKsefPurchases` (faktury
+ * zakupu z KSeF + wydatki spoza KSeF, E10), czytane raz na żądanie
+ * (`loadCostsWindow`).
  */
 
 type CardProps = AnalizyCardProps & { className?: string };
@@ -97,7 +98,7 @@ export async function CostStatsSlot({ supabase, tenantId, nowIso, month, classNa
   });
 }
 
-export async function CostTrendSlot({ supabase, tenantId, nowIso, tryb, verifiedAt, className }: CardProps) {
+export async function CostTrendSlot({ supabase, tenantId, nowIso, tryb, kosztyKsefOd, className }: CardProps) {
   return loadAnalizyCard('Trend wydatków', className, async () => {
     const entries = await loadCostsWindow(supabase, tenantId, nowIso);
     const data = toTrendData(costTrend(entries, monthKeysEnding(currentMonthKey(new Date(nowIso)), TREND_MONTHS)));
@@ -108,7 +109,7 @@ export async function CostTrendSlot({ supabase, tenantId, nowIso, tryb, verified
     return (
       <SpendTrendChart
         title="Trend wydatków"
-        description={podpisKosztow('brutto, 6 mies.', ksefOd(tryb, verifiedAt, oknoKosztowOd(nowIso)))}
+        description={podpisKosztow('brutto, 6 mies.', ksefOd(tryb, kosztyKsefOd, oknoKosztowOd(nowIso)))}
         seriesLabel="Wydatki"
         data={data}
         empty={empty}
@@ -118,13 +119,13 @@ export async function CostTrendSlot({ supabase, tenantId, nowIso, tryb, verified
   });
 }
 
-export async function CostCategoriesChartSlot({ supabase, tenantId, nowIso, month, tryb, verifiedAt, className }: CardProps) {
+export async function CostCategoriesChartSlot({ supabase, tenantId, nowIso, month, tryb, kosztyKsefOd, className }: CardProps) {
   return loadAnalizyCard('Wydatki według kategorii', className, async () => {
     const entries = await loadCostsWindow(supabase, tenantId, nowIso);
     return (
       <CategoryBreakdownChart
         title="Wydatki według kategorii"
-        description={podpisKosztow('wybrany miesiąc', ksefOd(tryb, verifiedAt, month))}
+        description={podpisKosztow('wybrany miesiąc', ksefOd(tryb, kosztyKsefOd, month))}
         data={toCategorySlices(costCategoryBreakdown(entries, month))}
         empty={costsEmpty(entries, tryb)}
         className={className}
@@ -208,7 +209,7 @@ export async function RecurringCostsSlot({ supabase, tenantId, nowIso, className
   });
 }
 
-export async function CostHeatmapSlot({ supabase, tenantId, nowIso, tryb, verifiedAt, className }: CardProps) {
+export async function CostHeatmapSlot({ supabase, tenantId, nowIso, tryb, kosztyKsefOd, className }: CardProps) {
   return loadAnalizyCard('Kalendarz wydatków', className, async () => {
     const entries = await loadCostsWindow(supabase, tenantId, nowIso);
     const days = dailyTotals(entries, (e) => e.issueDate, (e) => e.outflow, todayInWarsaw(new Date(nowIso)), HEATMAP_DAYS);
@@ -216,7 +217,7 @@ export async function CostHeatmapSlot({ supabase, tenantId, nowIso, tryb, verifi
       <SpendHeatmap
         title="Kalendarz wydatków"
         // Podpis mówi o źródle liczb i oknie (E4); wcześniejszy dopisek „mocniejszy kolor to więcej” odpadł dla zachowania jednej linii.
-        description={podpisKosztow(`ostatnie ${HEATMAP_DAYS} dni`, ksefOd(tryb, verifiedAt, oknoKalendarzaOd(nowIso)))}
+        description={podpisKosztow(`ostatnie ${HEATMAP_DAYS} dni`, ksefOd(tryb, kosztyKsefOd, oknoKalendarzaOd(nowIso)))}
         data={days}
         empty={costsWindowEmpty(entries, ANALIZY_EMPTY.noCostsInWindow, tryb)}
         className={className}

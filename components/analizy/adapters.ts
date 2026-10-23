@@ -16,6 +16,7 @@ import { countedDays, isoDatePl } from '@/lib/analytics-finance/months';
 import type { RecurringItem } from '@/lib/analytics-finance/recurring';
 import { recentSales, type SaleInvoice } from '@/lib/analytics-finance/sales';
 import type { CostEntry } from '@/lib/dashboard/costs';
+import { costHref } from '@/lib/dashboard/ksef-invoice-cost';
 import type { Receivables } from '@/lib/dashboard/receivables';
 import { countLabel } from '@/lib/i18n/plural';
 import { setAsRecurringHref } from '@/lib/invoices/recurring/visibility';
@@ -105,16 +106,22 @@ export function salesAvgDaily(total: number, month: string, today: string): numb
   return roundToCents(total / countedDays(month, today)) || 0;
 }
 
-/** „Ostatnie wydatki”: Finora `getRecentExpenses` + ikona kategorii wydatku. */
+/**
+ * „Ostatnie wydatki”: Finora `getRecentExpenses` + ikona kategorii wydatku.
+ * Link do dokumentu: wydatek albo faktura zakupu z KSeF bez wydatku (E10).
+ */
 export function recentCostItems(entries: readonly CostEntry[], month: string, linkItems = false): FeedItem[] {
-  return recentCosts(entries, month).map((cost) => ({
-    id: cost.id,
-    ...(linkItems ? { href: `/expenses/${cost.id}` } : {}),
-    merchant: cost.name,
-    subtitle: isoDatePl(cost.date),
-    amount: cost.amount,
-    icon: costCategoryIcon(entries.find((e) => e.id === cost.id)?.categoryLabel ?? null),
-  }));
+  return recentCosts(entries, month).map((cost) => {
+    const entry = entries.find((e) => e.id === cost.id);
+    return {
+      id: cost.id,
+      ...(linkItems ? { href: costHref(entry ?? { id: cost.id, source: '' }) } : {}),
+      merchant: cost.name,
+      subtitle: isoDatePl(cost.date),
+      amount: cost.amount,
+      icon: costCategoryIcon(entry?.categoryLabel ?? null),
+    };
+  });
 }
 
 /**
@@ -171,7 +178,10 @@ export function toSubscriptionItems(
   }));
 }
 
-/** Finora `getIncomeExpenseNet`: przychód netto i koszt jak w KPiR wybranego miesiąca. */
+/**
+ * Finora `getIncomeExpenseNet`: przychód netto i koszt wybranego miesiąca —
+ * wydatki jak w KPiR i faktury zakupu z KSeF bez wydatku netto (E10).
+ */
 export function incomeExpenseNet(income: number, expense: number): IncomeExpenseNet {
   return { income, expense, net: roundToCents(income - expense) || 0 };
 }

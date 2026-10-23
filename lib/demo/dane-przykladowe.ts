@@ -8,6 +8,12 @@
 // przychodu, 24 miesiące historii z datami względem `now` (strefa Warszawa),
 // dwie faktury po terminie (do 30 dni i ponad 30 dni). Firmy i NIP-y są
 // fikcyjne: każda nazwa z „Przykład”, NIP-y zaczynają się od zer (AGENTS.md).
+//
+// Koszty jak u prawdziwej firmy po weryfikacji KSeF (E10, decyzja D-K):
+// faktury zakupu z KSeF — z ostatnich miesięcy ze Skrzynki, każda z jednym
+// wydatkiem (kategoria, opis), starsze z historii KSeF bez wydatku
+// (archiwum) — oraz wydatki spoza KSeF (OCR, ręczne, paragony). Karty liczą
+// je jedną definicją (`getCostsWithKsefPurchases`), KPiR — same wydatki.
 import { currentMonthKey, daysInMonth, shiftMonthKey } from '@/lib/analytics-finance/months';
 import { addDaysToIsoDate, todayInWarsaw } from '@/lib/format/warsaw-date';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
@@ -285,26 +291,41 @@ interface Dostawca {
   bezOdliczenia?: boolean;
   /** Dokument z bieżącego miesiąca czeka na opisanie („Do opisania”). */
   doOpisania?: boolean;
+  /**
+   * Skąd dokument (E10): `ksef` — faktura zakupu z KSeF (Skrzynka z wydatkiem
+   * albo archiwum z historii), `ocr` — zdjęcie dokumentu spoza KSeF; brak —
+   * wydatek wpisany ręcznie.
+   */
+  kanal?: 'ksef' | 'ocr';
 }
 
 const DOSTAWCY: Dostawca[] = [
-  { nip: '0000000011', name: 'Coworking Przykład sp. z o.o.', category: 'Czynsz', day: 3, gross: () => 2460, aktywny: ZAWSZE },
-  { nip: '0000000022', name: 'Leasing Przykład S.A.', category: 'Usługi finansowe', day: 15, gross: () => 1599, aktywny: ZAWSZE },
-  { nip: '0000000033', name: 'Biuro Rachunkowe Przykład sp. z o.o.', category: 'Usługi obce', day: 10, gross: () => 738, aktywny: ZAWSZE },
-  { nip: '0000000044', name: 'Chmura Przykład sp. z o.o.', category: 'Oprogramowanie', day: 1, gross: (k) => 1230 - k * 12.3, aktywny: ZAWSZE },
-  { nip: '0000000055', name: 'Energia Przykład S.A.', category: 'Energia', day: 12, gross: (k) => 380 + (k % 12) * 17.5, aktywny: ZAWSZE },
-  { nip: '0000000066', name: 'Telekom Przykład S.A.', category: 'Telekomunikacja', day: 8, gross: () => 184.5, aktywny: ZAWSZE },
-  { nip: '0000000077', name: 'Stacja Paliw Przykład sp. z o.o.', category: 'Paliwo', day: 6, gross: (k) => 412.3 - (k % 6) * 21, aktywny: ZAWSZE },
-  { nip: '0000000077', name: 'Stacja Paliw Przykład sp. z o.o.', category: 'Paliwo', day: 19, gross: (k) => 368.9 + (k % 5) * 12, aktywny: ZAWSZE },
-  { nip: '0000000077', name: 'Stacja Paliw Przykład sp. z o.o.', category: 'Paliwo', day: 27, gross: (k) => 198 + (k % 4) * 5, aktywny: (k) => k > 0 },
-  { nip: '0000000088', name: 'Agencja Reklamowa Przykład sp. z o.o.', category: 'Marketing', day: 14, gross: (k) => (k === 0 ? 1230 : 615), aktywny: (k) => k % 3 === 0 },
-  { nip: '0000000099', name: 'Restauracja Przykład', category: 'Reprezentacja', day: 17, gross: (k) => 286 - (k % 4) * 9, aktywny: (k) => k % 2 === 0, bezOdliczenia: true, doOpisania: true },
+  { nip: '0000000011', name: 'Coworking Przykład sp. z o.o.', category: 'Czynsz', day: 3, gross: () => 2460, aktywny: ZAWSZE, kanal: 'ksef' },
+  { nip: '0000000022', name: 'Leasing Przykład S.A.', category: 'Usługi finansowe', day: 15, gross: () => 1599, aktywny: ZAWSZE, kanal: 'ksef' },
+  { nip: '0000000033', name: 'Biuro Rachunkowe Przykład sp. z o.o.', category: 'Usługi obce', day: 10, gross: () => 738, aktywny: ZAWSZE, kanal: 'ksef' },
+  { nip: '0000000044', name: 'Chmura Przykład sp. z o.o.', category: 'Oprogramowanie', day: 1, gross: (k) => 1230 - k * 12.3, aktywny: ZAWSZE, kanal: 'ksef' },
+  { nip: '0000000055', name: 'Energia Przykład S.A.', category: 'Energia', day: 12, gross: (k) => 380 + (k % 12) * 17.5, aktywny: ZAWSZE, kanal: 'ksef' },
+  { nip: '0000000066', name: 'Telekom Przykład S.A.', category: 'Telekomunikacja', day: 8, gross: () => 184.5, aktywny: ZAWSZE, kanal: 'ksef' },
+  { nip: '0000000077', name: 'Stacja Paliw Przykład sp. z o.o.', category: 'Paliwo', day: 6, gross: (k) => 412.3 - (k % 6) * 21, aktywny: ZAWSZE, kanal: 'ocr' },
+  { nip: '0000000077', name: 'Stacja Paliw Przykład sp. z o.o.', category: 'Paliwo', day: 19, gross: (k) => 368.9 + (k % 5) * 12, aktywny: ZAWSZE, kanal: 'ocr' },
+  { nip: '0000000077', name: 'Stacja Paliw Przykład sp. z o.o.', category: 'Paliwo', day: 27, gross: (k) => 198 + (k % 4) * 5, aktywny: (k) => k > 0, kanal: 'ocr' },
+  { nip: '0000000088', name: 'Agencja Reklamowa Przykład sp. z o.o.', category: 'Marketing', day: 14, gross: (k) => (k === 0 ? 1230 : 615), aktywny: (k) => k % 3 === 0, kanal: 'ksef' },
+  { nip: '0000000099', name: 'Restauracja Przykład', category: 'Reprezentacja', day: 17, gross: (k) => 286 - (k % 4) * 9, aktywny: (k) => k % 2 === 0, bezOdliczenia: true, doOpisania: true, kanal: 'ocr' },
   { nip: null, name: 'Sklep Papierniczy Przykład', category: 'Materiały biurowe', day: 9, gross: (k) => 159.9 + (k % 3) * 7, aktywny: (k) => k % 2 === 0, paragon: true, doOpisania: true },
   { nip: null, name: 'Księgarnia Przykład', category: 'Pozostałe', day: 20, gross: () => 89, aktywny: (k) => k % 6 === 0, paragon: true },
-  { nip: '0000000101', name: 'Szkolenia Przykład sp. z o.o.', category: 'Usługi obce', day: 24, gross: () => 1476, aktywny: (k) => k % 6 === 1 },
+  { nip: '0000000101', name: 'Szkolenia Przykład sp. z o.o.', category: 'Usługi obce', day: 24, gross: () => 1476, aktywny: (k) => k % 6 === 1, kanal: 'ksef' },
   { nip: '0000000112', name: 'Kurier Przykład sp. z o.o.', category: 'Pozostałe', day: 4, gross: (k) => 36.9 + (k % 3), aktywny: ZAWSZE },
-  { nip: '0000000123', name: 'Sklep Komputerowy Przykład S.A.', category: 'Oprogramowanie', day: 22, gross: () => 1845, aktywny: (k) => k % 12 === 3 },
+  { nip: '0000000123', name: 'Sklep Komputerowy Przykład S.A.', category: 'Oprogramowanie', day: 22, gross: () => 1845, aktywny: (k) => k % 12 === 3, kanal: 'ksef' },
 ];
+
+/**
+ * Skrzynka KSeF działa od tylu miesięcy (z bieżącym): faktury zakupu z tego
+ * okresu mają wydatek ze Skrzynki, starsze są archiwum z historii KSeF.
+ */
+const MIESIACE_SKRZYNKI = 3;
+
+/** Firma przykładowa jako nabywca faktur zakupu (fikcyjna, jak reszta). */
+const NABYWCA = { name: 'Twoja Firma Przykład', nip: '0000000000' } as const;
 
 /**
  * Podwykonawca — koszt dopełniający miesiąc do 33–37% przychodu netto
@@ -316,36 +337,43 @@ const PODWYKONAWCA = {
   name: 'Programista Przykład',
   category: 'Usługi obce',
   day: 25,
+  kanal: 'ksef',
 } as const;
 
 function udzialKosztow(k: number): number {
   return 0.33 + ((k * 7) % 5) * 0.01;
 }
 
+type DaneDostawcy = Pick<Dostawca, 'nip' | 'name' | 'category' | 'paragon' | 'bezOdliczenia' | 'kanal'>;
+
 function wydatek(
   kal: Kalendarz,
   id: string,
   nr: number,
-  d: Pick<Dostawca, 'nip' | 'name' | 'category' | 'paragon' | 'bezOdliczenia'>,
+  d: DaneDostawcy,
   date: string,
   gross: number,
   net: number,
   zwolniony: boolean,
   reviewed: boolean,
+  /** Faktura ze Skrzynki, z której powstał wydatek (00121: jeden wydatek na fakturę). */
+  faktura: Row | null = null,
 ): Row {
   const vat = r2(gross - net);
   const odliczenie = zwolniony || d.paragon || d.bezOdliczenia ? 0 : vat;
   return {
     id,
     tenant_id: T,
-    source: 'manual',
-    ksef_invoice_id: null,
+    source: faktura ? 'ksef_inbox' : d.kanal === 'ocr' ? 'ocr_photo' : 'manual',
+    ksef_invoice_id: faktura ? faktura.id : null,
     issue_date: date,
     seller_nip: d.nip,
     seller_name: d.name,
-    document_number: d.paragon
-      ? `PAR ${date.slice(8, 10)}/${nr}`
-      : `FV/${nr}/${date.slice(5, 7)}/${date.slice(0, 4)}`,
+    document_number: faktura
+      ? faktura.internal_number
+      : d.paragon
+        ? `PAR ${date.slice(8, 10)}/${nr}`
+        : `FV/${nr}/${date.slice(5, 7)}/${date.slice(0, 4)}`,
     is_deductible: true,
     is_reviewed: reviewed,
     document_type: d.paragon ? 'receipt' : 'invoice',
@@ -359,15 +387,102 @@ function wydatek(
   };
 }
 
+/**
+ * Faktura zakupu z KSeF (E10) w kształcie zapisu prawdziwych ścieżek:
+ * Skrzynka (`inbox-polling`: metadane w `fa3_data`, bez `seller_data`) albo
+ * historia (`processImportedInvoices`: `seller_data`). Bez terminu i bez
+ * wpłat — zakupów nie rozliczamy (statusy jak wyzwalacz 00073 dla braku terminu).
+ */
+function fakturaZakupu(
+  kal: Kalendarz,
+  env: KsefEnvironment,
+  id: string,
+  nr: number,
+  d: DaneDostawcy,
+  date: string,
+  gross: number,
+  net: number,
+  origin: 'ksef_inbox' | 'ksef_import',
+): Row {
+  const sprzedawca = { name: d.name, nip: d.nip };
+  return {
+    id,
+    tenant_id: T,
+    direction: 'incoming',
+    origin,
+    ksef_status: 'accepted',
+    ksef_environment: env,
+    ksef_number: `${d.nip}-${date.replaceAll('-', '')}-${id.toUpperCase()}`,
+    internal_number: `FV/${nr}/${date.slice(5, 7)}/${date.slice(0, 4)}`,
+    invoice_kind: 'regular',
+    invoice_type: 'VAT',
+    parent_invoice_id: null,
+    advance_invoice_ids: [],
+    currency: 'PLN',
+    issue_date: date,
+    sale_date: date,
+    net_total: net,
+    vat_total: r2(gross - net),
+    gross_total: gross,
+    seller_nip: d.nip,
+    seller_data: origin === 'ksef_import' ? sprzedawca : null,
+    fa3_data: origin === 'ksef_inbox' ? { _source: 'inbox-metadata', seller: sprzedawca } : {},
+    buyer_nip: NABYWCA.nip,
+    buyer_data: { ...NABYWCA },
+    is_b2c: false,
+    payment_data: null,
+    payment_due_date: null,
+    payment_status: 'unpaid',
+    paid_amount: 0,
+    paid_at: null,
+    created_at: date === kal.today ? kal.now.toISOString() : `${date}T08:00:00.000Z`,
+  };
+}
+
 /** Koszt jak w KPiR: netto + VAT bez odliczenia (`kpirCostAmount`). */
 function kosztKpir(row: Row): number {
   return Number(row.net_amount) + Number(row.vat_amount) - Number(row.vat_deductible_amount);
 }
 
-function wydatki(kal: Kalendarz, przychod: Map<string, number>, opcje: OpcjePrzykladu): Row[] {
+/**
+ * Dokument kosztowy miesiąca `k`: wydatek, a dla faktur z KSeF także faktura
+ * zakupu — ze Skrzynki z wydatkiem (ostatnie `MIESIACE_SKRZYNKI`) albo
+ * z historii bez wydatku. Zwraca koszt jak w KPiR — dla faktury bez wydatku
+ * ten sam, który policzy `getCostsWithKsefPurchases` (netto; firma zwolniona
+ * — brutto), więc proporcja kosztów do przychodu nie zależy od kanału.
+ */
+function dokument(
+  kal: Kalendarz,
+  env: KsefEnvironment,
+  k: number,
+  slot: string,
+  nr: number,
+  d: DaneDostawcy,
+  date: string,
+  gross: number,
+  net: number,
+  zwolniony: boolean,
+  reviewed: boolean,
+  out: { expenses: Row[]; purchases: Row[] },
+): number {
+  const faktura = d.kanal === 'ksef'
+    ? fakturaZakupu(kal, env, `z-${slot}`, nr, d, date, gross, net, k < MIESIACE_SKRZYNKI ? 'ksef_inbox' : 'ksef_import')
+    : null;
+  const row = wydatek(kal, `w-${slot}`, nr, d, date, gross, net, zwolniony, reviewed, faktura);
+  if (faktura) out.purchases.push(faktura);
+  if (!faktura || faktura.origin === 'ksef_inbox') out.expenses.push(row);
+  return kosztKpir(row);
+}
+
+function wydatki(
+  kal: Kalendarz,
+  env: KsefEnvironment,
+  przychod: Map<string, number>,
+  opcje: OpcjePrzykladu,
+): { expenses: Row[]; purchases: Row[] } {
   const skala = opcje.zwolnionyZVat ? 0.45 : 1;
   const zwolniony = opcje.zwolnionyZVat === true;
-  const rows: Row[] = [];
+  const out = { expenses: [] as Row[], purchases: [] as Row[] };
   for (let k = 0; k < MIESIACE_HISTORII; k++) {
     const month = shiftMonthKey(kal.month, -k);
     let koszt = 0;
@@ -375,17 +490,15 @@ function wydatki(kal: Kalendarz, przychod: Map<string, number>, opcje: OpcjePrzy
       if (!d.aktywny(k)) return;
       const date = dzien(kal, k, d.day);
       const gross = r2(d.gross(k) * skala);
-      const row = wydatek(kal, `w-${k}-${pad(i)}`, 100 + i, d, date, gross, r2(gross / 1.23), zwolniony, !(k === 0 && d.doOpisania));
-      koszt += kosztKpir(row);
-      rows.push(row);
+      koszt += dokument(kal, env, k, `${k}-${pad(i)}`, 100 + i, d, date, gross, r2(gross / 1.23), zwolniony, !(k === 0 && d.doOpisania), out);
     });
     const brakuje = Math.max(0, (przychod.get(month) ?? 0) * udzialKosztow(k) - koszt);
     // Koszt podwykonawcy = netto (VAT odliczony) albo brutto (firma zwolniona).
     const net = r2(zwolniony ? brakuje / 1.23 : brakuje);
     const gross = r2(net * 1.23);
-    rows.push(wydatek(kal, `w-${k}-99`, 24 - k, PODWYKONAWCA, dzien(kal, k, PODWYKONAWCA.day), gross, net, zwolniony, true));
+    dokument(kal, env, k, `${k}-99`, 24 - k, PODWYKONAWCA, dzien(kal, k, PODWYKONAWCA.day), gross, net, zwolniony, true, out);
   }
-  return rows;
+  return out;
 }
 
 // ─── Firma ────────────────────────────────────────────────────────────────
@@ -399,7 +512,10 @@ function firma(kal: Kalendarz, opcje: OpcjePrzykladu): Row {
   };
 }
 
-/** Tabele atrapy bazy: `tenants`, `invoices`, `invoice_line_items`, `expenses`. */
+/**
+ * Tabele atrapy bazy: `tenants`, `invoices` (sprzedaż i faktury zakupu
+ * z KSeF), `invoice_line_items` (sprzedaż), `expenses`.
+ */
 export function danePrzykladowe(now: Date, env: KsefEnvironment, opcje: OpcjePrzykladu = {}): Tables {
   const kal: Kalendarz = { now, today: todayInWarsaw(now), month: currentMonthKey(now) };
   const { invoices, lines } = faktury(kal, env, opcje);
@@ -408,10 +524,11 @@ export function danePrzykladowe(now: Date, env: KsefEnvironment, opcje: OpcjePrz
     const month = String(inv.issue_date).slice(0, 7);
     przychod.set(month, (przychod.get(month) ?? 0) + Number(inv.net_total));
   }
+  const { expenses, purchases } = wydatki(kal, env, przychod, opcje);
   return {
     tenants: [firma(kal, opcje)],
-    invoices,
+    invoices: [...invoices, ...purchases],
     invoice_line_items: lines,
-    expenses: wydatki(kal, przychod, opcje),
+    expenses,
   };
 }
