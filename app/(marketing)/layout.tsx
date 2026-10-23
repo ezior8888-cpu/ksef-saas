@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 
 import { SiteShell } from '@/components/site/site-shell';
 
+import { fraunces } from './_fonts';
+
 export const metadata: Metadata = {
   title: {
     default: 'FaktWay',
@@ -22,5 +24,11 @@ export default function MarketingLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <SiteShell>{children}</SiteShell>;
+  // Nowy wygląd stron (#318) + Fraunces tylko w marketingu (#326): zmienna
+  // `--font-fraunces` na elemencie `contents`, więc nie dodaje pudełka do układu.
+  return (
+    <div className={`${fraunces.variable} contents`}>
+      <SiteShell>{children}</SiteShell>
+    </div>
+  );
 }

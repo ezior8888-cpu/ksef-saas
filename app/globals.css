@@ -1597,7 +1597,9 @@ html:not(.dark) .ff-dashboard tbody tr:not([data-slot])[class*='hover:bg-']:hove
 }
 
 /* Italic Fraunces — emphasis w hero/headlines (np. "Automatyzacja").
- * Global utility, nie scoped — używane w landingu, vs, blog. */
+ * `--font-fraunces` ustawia tylko `app/(marketing)/layout.tsx` (od 24.10.2026,
+ * żeby panel nie pobierał fontu) — poza tą grupą klasa spada na Georgię.
+ * Pilnuje: tests/unit/fraunces-tylko-marketing.test.ts. */
 .font-editorial {
   font-family: var(--font-fraunces), 'EB Garamond', Georgia, serif;
   font-feature-settings: 'ss01' on;
