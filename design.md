@@ -32,7 +32,7 @@ components/marketing/
   faq-section.tsx                    # 'use client' — accordion FAQ
 
 components/brand/
-  faktflow-mark.tsx     # logo PNG: warianty hero / header
+  brand-wordmark.tsx    # napis FaktWay i inicjały FW (logo graficzne: czeka na nowe)
 
 components/ui/
   button.tsx            # CTA: variant glass-primary | glass
@@ -169,7 +169,7 @@ Semantyczne kolory stanów:
 ## 7. Zależności od reszty produktu (dla redesignu)
 
 - Linki wyjściowe z landing: **`/register`**, **`/login`**, **`/kalkulator-oszczednosci`**, **`/pricing`**, **`/blog`**, **`/vs/*`**, **`/kontakt`**, **`/legal/*`**, zewnętrzna dokumentacja.
-- Obraz marki: **`/public/brand/faktflow-mark.png`** (Next `Image`).
+- Obraz marki: brak. Zielony znak zdjęty 23.10.2026, do czasu nowego logo marka to napis FaktWay.
 - Pełna zmiana wyglądu w Figma itd. **nie wymaga** zmiany URL — wdrożenie i tak trafia do `page.tsx` + ewentualnie `layout.tsx` i `components/marketing/*`.
 
 ---
