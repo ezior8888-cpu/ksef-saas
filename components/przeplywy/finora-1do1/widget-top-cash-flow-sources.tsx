@@ -2,15 +2,24 @@
 // React Imports
 import type { ReactElement } from 'react'
 
+// Next Imports
+import Link from 'next/link'
+
 // Component Imports
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import CardHeaderWithMenu from '@/components/dashboard/finora/card-header-with-menu'
+import CardHeaderWithMenu, { type CardMenuItem } from '@/components/dashboard/finora/card-header-with-menu'
 
 // Util Imports
 import { cn } from '@/lib/utils'
 
+/**
+ * PLAN-PRAWDZIWE-DANE E6: źródła = kontrahenci (klienci z wpłat, dostawcy
+ * z kosztów) z propsów; nazwa jest linkiem do kontrahentów tylko w trybie
+ * prawdziwym (E7 pkt 3), wygląd wiersza bez zmian. Długa nazwa firmy jest
+ * przycinana, żeby wiersz nie urósł o linię.
+ */
 type Props = {
   title: string
   sources: {
@@ -18,21 +27,27 @@ type Props = {
     sourceName: string
     sourceType: string
     amount: string
+    amountTitle?: string
     share: number
     direction: 'in' | 'out'
     iconClassName?: string
+    href?: string | null
   }[]
+  /** Tekst pustej listy (karta bez pozycji). */
+  empty?: string
+  menuItems?: CardMenuItem[]
   className?: string
 }
 
-const TopCashFlowSourcesCard = ({ title, sources, className }: Props) => {
+const TopCashFlowSourcesCard = ({ title, sources, empty, menuItems, className }: Props) => {
   return (
     <Card className={cn(className)}>
-      <CardHeaderWithMenu title={title} />
+      <CardHeaderWithMenu title={title} menuItems={menuItems} />
       <CardContent className='flex flex-1 flex-col justify-evenly gap-5'>
+        {sources.length === 0 && empty ? <span className='text-muted-foreground text-sm'>{empty}</span> : null}
         {sources.map((source, index) => (
           <div key={index} className='flex items-center justify-between gap-4'>
-            <div className='flex items-center gap-3'>
+            <div className='flex min-w-0 items-center gap-3'>
               <Avatar className='size-10 after:border-0'>
                 <AvatarFallback
                   className={cn('bg-primary/10 text-primary shrink-0 [&>svg]:size-4.5', source.iconClassName)}
@@ -40,9 +55,17 @@ const TopCashFlowSourcesCard = ({ title, sources, className }: Props) => {
                   {source.icon}
                 </AvatarFallback>
               </Avatar>
-              <div className='flex flex-col'>
-                <span className='text-base'>{source.sourceName}</span>
-                <span className='text-muted-foreground text-sm'>{source.sourceType}</span>
+              <div className='flex min-w-0 flex-col'>
+                {source.href ? (
+                  <Link href={source.href} className='truncate text-base'>
+                    {source.sourceName}
+                  </Link>
+                ) : (
+                  <span className='truncate text-base'>{source.sourceName}</span>
+                )}
+                <span className='text-muted-foreground truncate text-sm' title={source.sourceType}>
+                  {source.sourceType}
+                </span>
               </div>
             </div>
             <div className='flex flex-col items-end gap-2'>
@@ -51,6 +74,7 @@ const TopCashFlowSourcesCard = ({ title, sources, className }: Props) => {
                   'text-sm',
                   source.direction === 'in' ? 'text-green-600 dark:text-green-400' : 'text-destructive'
                 )}
+                title={source.amountTitle}
               >
                 {source.direction === 'in' ? '+' : '-'}
                 {source.amount}

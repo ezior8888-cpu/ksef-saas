@@ -8,18 +8,30 @@ import { Area, AreaChart } from 'recharts'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
+import { DymekWiersz } from '@/components/dashboard/finora/dymek'
 
 // Util Imports
+import { formatPlMoney } from '@/lib/format/pl'
 import { cn } from '@/lib/utils'
+
+/**
+ * PLAN-PRAWDZIWE-DANE E6: kwota, plakietka, podpis plakietki i krzywa
+ * narastająca dzień po dniu z propsów (`adaptery.ts`); wygląd bez zmian.
+ * Brak podstawy procentu → „—”, brak wpłat → pusty stan w miejscu podpisu.
+ */
 
 export type StatisticsAreaStatCardProps = {
   chartKey: string
   title: string
   amount: string
+  /** Pełna kwota i zastrzeżenie danej (dymek kwoty). */
+  amountTitle: string
   changePercentage: string
+  /** Podpis plakietki („wobec poprzedniego miesiąca”) albo pusty stan karty. */
+  comparison: string
   color: string
   badgeClassName: string
-  chartData: { date: string; value: number }[]
+  chartData: { label: string; value: number }[]
   className?: string
 }
 
@@ -27,7 +39,9 @@ const StatisticsAreaStatCard = ({
   chartKey,
   title,
   amount,
+  amountTitle,
   changePercentage,
+  comparison,
   color,
   badgeClassName,
   chartData,
@@ -48,11 +62,13 @@ const StatisticsAreaStatCard = ({
         <div className='flex shrink-0 flex-col justify-between gap-6'>
           <div className='flex flex-col gap-1'>
             <span className='text-muted-foreground text-sm'>{title}</span>
-            <span className='text-3xl font-semibold'>{amount}</span>
+            <span className='text-3xl font-semibold' title={amountTitle}>
+              {amount}
+            </span>
           </div>
           <div className='flex gap-3'>
             <Badge className={cn('h-6 px-3 py-1', badgeClassName)}>{changePercentage}</Badge>
-            <span className='text-muted-foreground'>wobec poprzedniego miesiąca</span>
+            <span className='text-muted-foreground'>{comparison}</span>
           </div>
         </div>
         <ChartContainer config={chartConfig} className='max-h-26.5 w-full max-w-70 flex-1 max-sm:max-w-35'>
@@ -63,7 +79,21 @@ const StatisticsAreaStatCard = ({
                 <stop offset='90%' stopColor='var(--color-value)' stopOpacity={0} />
               </linearGradient>
             </defs>
-            <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
+            <ChartTooltip
+              cursor={false}
+              content={
+                <ChartTooltipContent
+                  hideLabel
+                  formatter={(value, _name, item) => (
+                    <DymekWiersz
+                      color={item.color}
+                      label={String((item.payload as { label?: string } | undefined)?.label ?? '')}
+                      value={`${formatPlMoney(Number(value))} zł`}
+                    />
+                  )}
+                />
+              }
+            />
             <Area
               dataKey='value'
               type='natural'

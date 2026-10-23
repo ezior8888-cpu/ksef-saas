@@ -12,7 +12,7 @@ import { memoryClient } from './helpers/baza-w-pamieci';
  * kliencie zwracającym puste zbiory; szpiedzy pilnują, że atrapa
  * (`analizyDemoSupabase`) i księga przykładowa (`kpirPrzykladowe`) nie są
  * nawet wołane. Etap E1b: Analizy (sprzedaż, koszty) i KPiR; E5: Pulpit;
- * Przepływy dochodzą w E6.
+ * E6: Przepływy.
  */
 
 type Proof = { verifiedAt: string | null; verifiedEnvironment: string | null };
@@ -54,6 +54,7 @@ const { default: SprzedazPage } = await import('@/app/(dashboard)/analizy/sprzed
 const { default: KosztyPage } = await import('@/app/(dashboard)/analizy/koszty/page');
 const { default: KpirPage } = await import('@/app/(dashboard)/reports/kpir/page');
 const { default: PulpitPage } = await import('@/app/(dashboard)/dashboard/page');
+const { default: PrzeplywyPage } = await import('@/app/(dashboard)/przeplywy/page');
 
 async function html(node: ReactNode): Promise<string> {
   const { prelude } = await prerenderToNodeStream(<>{node}</>);
@@ -69,6 +70,8 @@ const STRONY: Array<[string, () => Promise<ReactNode>]> = [
   ['/analizy/koszty', () => KosztyPage({ searchParams: params() })],
   ['/reports/kpir', () => KpirPage({ searchParams: params() })],
   ['/dashboard', () => PulpitPage()],
+  // Przed E6 strona była synchroniczna (stałe szablonu) — `await` działa na obu.
+  ['/przeplywy', async () => PrzeplywyPage()],
 ];
 
 const ZWERYFIKOWANA: Proof = { verifiedAt: '2026-09-01T08:00:00Z', verifiedEnvironment: 'test' };
@@ -103,7 +106,7 @@ describe('T2: zero przecieku przykładu w trybie prawdziwym', () => {
     expect(kpirPrzykladowe).not.toHaveBeenCalled();
   });
 
-  it.each([...STRONY.slice(0, 2), STRONY[3]!])("%s — G'' (brak KSEF_ENV): prawdziwe dane, nie przykład u każdej firmy", async (_path, page) => {
+  it.each([...STRONY.slice(0, 2), STRONY[3]!, STRONY[4]!])("%s — G'' (brak KSEF_ENV): prawdziwe dane, nie przykład u każdej firmy", async (_path, page) => {
     vi.stubEnv('KSEF_ENV', '');
     state.ctx.supabase = fakePostgrest({});
     const markup = await html(await page());

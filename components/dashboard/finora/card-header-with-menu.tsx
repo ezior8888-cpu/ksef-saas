@@ -29,6 +29,11 @@ const defaultMenuItems: CardMenuItem[] = [{ label: 'Odśwież', akcja: 'odswiez'
 type CardHeaderWithMenuProps = {
   title: string
   subTitle?: string
+  /**
+   * Zastrzeżenie, które nie mieści się w podtytule (PLAN-PRAWDZIWE-DANE Z16):
+   * dymek podtytułu i tekst dla czytnika ekranu, bez nowej linii na karcie.
+   */
+  subTitleHint?: string
   menuItems?: CardMenuItem[]
   className?: string
 }
@@ -40,12 +45,23 @@ const RefreshItem = ({ label }: { label: string }) => {
   return <DropdownMenuItem onClick={() => router.refresh()}>{label}</DropdownMenuItem>
 }
 
-const CardHeaderWithMenu = ({ title, subTitle, menuItems = defaultMenuItems, className }: CardHeaderWithMenuProps) => {
+const CardHeaderWithMenu = ({
+  title,
+  subTitle,
+  subTitleHint,
+  menuItems = defaultMenuItems,
+  className
+}: CardHeaderWithMenuProps) => {
   return (
     <CardHeader className={className ?? 'flex items-center justify-between'}>
       <div className='flex flex-col gap-1'>
         <span className='text-lg font-semibold'>{title}</span>
-        {subTitle && <span className='text-muted-foreground text-sm'>{subTitle}</span>}
+        {subTitle && (
+          <span className='text-muted-foreground text-sm' title={subTitleHint}>
+            {subTitle}
+          </span>
+        )}
+        {subTitleHint && <span className='sr-only'>{subTitleHint}</span>}
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger
