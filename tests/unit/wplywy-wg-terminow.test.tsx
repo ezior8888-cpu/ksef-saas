@@ -383,8 +383,9 @@ describe('Przepływy: napisy kart', () => {
 
   it('kafel wpływów miesiąca: podpis „według terminów płatności”, pusty stan bez „oznaczania”', () => {
     const flow = movements.monthFlows([wpis('a', '2026-10-05')], [], TODAY).inflow;
-    expect(przeplywyAdaptery.wplywyMiesiacaProps(flow, 'prawdziwe').amountTitle).toContain('według terminów płatności');
-    const pusty = przeplywyAdaptery.wplywyMiesiacaProps(movements.monthFlows([], [], TODAY).inflow, 'prawdziwe');
+    const krzywa = przeplywyAdaptery.krzywaWplywow([wpis('a', '2026-10-05')], TODAY);
+    expect(przeplywyAdaptery.wplywyMiesiacaProps(flow, krzywa, 'prawdziwe').amountTitle).toContain('według terminów płatności');
+    const pusty = przeplywyAdaptery.wplywyMiesiacaProps(movements.monthFlows([], [], TODAY).inflow, [], 'prawdziwe');
     expect(pusty.amount).toBe('—');
     expect(`${pusty.comparison} ${pusty.amountTitle}`).not.toMatch(ZALEGLOSC);
     // Pusty stan mieści się w miejscu „wobec poprzedniego miesiąca” (27 znaków).

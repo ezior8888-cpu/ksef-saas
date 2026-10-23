@@ -88,6 +88,9 @@ const KLASY_DODANE = [
   // Recenzja 2: plakietka obok tytułu zwęża się na wąskim ekranie (`DemoBadge skracana`: `shrink`
   // zamiast `shrink-0`, napis z `truncate`), żeby tytuł karty nie łamał się w drugą linię przy 320–360 px.
   'shrink',
+  // Poprawka Bartosza 23.10.2026 („przejścia nie są już takie clean”): strona wchodzi raz, w całości,
+  // z animacją szablonu trasy (`app/globals.css`) — opakowanie bez wpływu na układ siatki.
+  'ff-route-content',
 ];
 /**
  * Klasy usunięte z konieczności danych: `capitalize` dawała wielką literę
@@ -122,14 +125,12 @@ function decode(text: string): string {
     .replaceAll('&amp;', '&');
 }
 
-/** Prerender strumieniuje szkielet slotu, potem kartę — do porównań liczy się karta. */
-function bezSzkieletow(markup: string): string {
-  return markup.replace(/<!--\$\?--><template id="B:\d+"><\/template>[\s\S]*?<!--\/\$-->/g, '');
-}
-
+// Poprawka 23.10.2026: karty nie mają już `Suspense` ani szkieletów — prerender oddaje gotową
+// stronę bez podmian, więc dawne wycinanie szkieletów (`bezSzkieletow`) odpadło; gdyby szkielet
+// wrócił, jego klasy wyjdą w porównaniu niżej (i w `finora-wyglad-ladowanie.test.tsx`).
 function klasy(markup: string): Set<string> {
   const out = new Set<string>();
-  for (const m of bezSzkieletow(markup).matchAll(/class="([^"]*)"/g)) {
+  for (const m of markup.matchAll(/class="([^"]*)"/g)) {
     for (const c of decode(m[1]!).split(/\s+/)) if (c) out.add(c);
   }
   return out;
@@ -137,7 +138,7 @@ function klasy(markup: string): Set<string> {
 
 function przeplywy(supabase: unknown = memoryClient({}), tenantId = 'firma-a') {
   state.ctx = { supabase, tenantId, user: { id: 'uzytkownik-1', email: null }, role: 'owner' };
-  return PrzeplywyPage().then(html).then(bezSzkieletow);
+  return PrzeplywyPage().then(html);
 }
 
 beforeEach(() => {
@@ -191,9 +192,10 @@ describe('Przepływy przed weryfikacją KSeF: dane przykładowe przez te same lo
     const markup = await przeplywy();
     expect(markup).toContain('<h1 class="sr-only">Przepływy pieniężne</h1>');
     expect(markup).toContain('<div class="grid grid-cols-6 gap-6">');
-    // Prerender dopisuje gotowe sloty w kolejności ukończenia, więc porównujemy zbiór.
+    // Poprawka 23.10.2026: strona renderuje się raz, w całości — karty w kolejności siatki Finory
+    // (dawniej prerender dopisywał sloty w kolejności ukończenia i porównywaliśmy zbiór).
     const spans = [...markup.matchAll(/class="[^"]*?((?:col-span-full)(?: [a-z]+:col-span-\d)?)"/g)].map((m) => m[1]);
-    expect(spans.sort()).toEqual([
+    expect(spans).toEqual([
       'col-span-full xl:col-span-4',
       'col-span-full xl:col-span-2',
       'col-span-full sm:col-span-3',
@@ -202,7 +204,7 @@ describe('Przepływy przed weryfikacją KSeF: dane przykładowe przez te same lo
       'col-span-full lg:col-span-2',
       'col-span-full lg:col-span-2',
       'col-span-full',
-    ].sort());
+    ]);
   });
 
   it('karta nie zmienia klas układu: ten sam zbiór klas co Przepływy Finory', async () => {
@@ -317,23 +319,58 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
     expect(pusty.subTitle).toBe('Pobieramy faktury z KSeF…');
   });
 
-  it('kafel wpływów: bez wpływu „—” i pusty stan bez „oznaczania”, nie „0 zł”; jeden punkt dostaje zero na początku', () => {
+  it('kafel wpływów: bez wpływu „—” i pusty stan bez „oznaczania”, nie „0 zł”', () => {
     const flow = { amount: 0, prevAmount: 500, count: 0, changePct: -100, daily: [{ date: '2026-10-01', value: 0 }] };
-    const dane = adaptery.wplywyMiesiacaProps(flow, 'prawdziwe');
+    const dane = adaptery.wplywyMiesiacaProps(flow, adaptery.krzywaTygodni([], '2026-10-01'), 'prawdziwe');
     expect(dane.amount).toBe('—');
     expect(dane.changePercentage).toBe('—');
     expect(dane.comparison).toBe('Brak wpływów wg terminów');
-    expect(dane.chartData).toHaveLength(2);
-    expect(dane.chartData[0]!.value).toBe(0);
+    // Krzywa nie zależy od dnia miesiąca: 1. dnia też 8 punktów (dawniej jeden punkt + dopisane zero).
+    expect(dane.chartData).toHaveLength(8);
 
     const pelny = adaptery.wplywyMiesiacaProps(
       { amount: 1234.5, prevAmount: 1000, count: 2, changePct: 23.45, daily: [{ date: '2026-10-01', value: 0 }, { date: '2026-10-02', value: 1234.5 }] },
+      [],
       'prawdziwe',
     );
     // Konwencja `lib/format/pl`: cztery cyfry bez spacji („1235”).
     expect(pelny.amount).toBe('1235 zł');
     expect(pelny.changePercentage).toBe('+23%');
     expect(pelny.comparison).toBe('wobec poprzedniego miesiąca');
+  });
+
+  /**
+   * Zrzuty 24.10.2026: krzywa kafli to sumy 8 ostatnich tygodni (falista linia
+   * z 8 punktów jak w Finorze), nie suma narastająca od 1. dnia miesiąca,
+   * która zawsze rosła. Świadomie zastępuje dawny test „jeden punkt dostaje zero”.
+   */
+  it('krzywa kafli: 8 tygodni pn–nd, ostatni = bieżący, dymek z zakresem tygodnia; spoza okna się nie liczy', () => {
+    // Piątek 23.10.2026: bieżący tydzień 19.10–25.10, najstarszy 31.08–06.09.
+    const krzywa = adaptery.krzywaTygodni(
+      [
+        { date: '2026-08-30', amount: 999 }, // niedziela przed oknem
+        { date: '2026-08-31', amount: 100 },
+        { date: '2026-09-06', amount: 50 },
+        { date: '2026-10-12', amount: 300 },
+        { date: '2026-10-18', amount: 200 },
+        { date: '2026-10-19', amount: 400.25 },
+        { date: '2026-10-25', amount: 10 }, // dokument z datą w tym tygodniu, po dziś
+        { date: '2026-10-26', amount: 777 }, // następny tydzień
+      ],
+      '2026-10-23',
+    );
+    expect(krzywa.map((p) => p.label)).toEqual([
+      '31.08–06.09', '07.09–13.09', '14.09–20.09', '21.09–27.09', '28.09–04.10', '05.10–11.10', '12.10–18.10', '19.10–25.10',
+    ]);
+    expect(krzywa.map((p) => p.value)).toEqual([150, 0, 0, 0, 0, 0, 500, 410.25]);
+
+    // Wpływy: termin dziś to jeszcze „Spodziewane wpływy” (`receivedInflows`), koszty — według daty dokumentu, brutto.
+    const wpis = (id: string, date: string, amount: number) =>
+      ({ id, date, amount, basis: 'due' as const, dueDate: date, outstanding: amount }) as unknown as Parameters<typeof adaptery.krzywaWplywow>[0][number];
+    const wplywy = adaptery.krzywaWplywow([wpis('a', '2026-10-20', 100), wpis('b', '2026-10-23', 900)], '2026-10-23');
+    expect(wplywy.at(-1)!.value).toBe(100);
+    const koszt = { issueDate: '2026-10-21', outflow: 123, cost: 100 } as unknown as Parameters<typeof adaptery.krzywaKosztow>[0][number];
+    expect(adaptery.krzywaKosztow([koszt], '2026-10-23').at(-1)!.value).toBe(123);
   });
 
   it('źródła: kontrahenci z liczebnikiem, udział z danych, link do kontrahentów tylko w trybie prawdziwym', () => {
@@ -379,9 +416,10 @@ describe('Adaptery: napisy w istniejących miejscach, liczba prawdziwa albo jej 
     expect(adaptery.tabelaProps(ops, 'przyklad').rows.every((r) => r.href === null)).toBe(true);
   });
 
-  it('podatek (Z10): pełny łuk, kwota szacunku, podpis „szacunek”', () => {
+  // Zrzuty 24.10.2026: łuk = pokazany procent (19% na jasnym torze, jak 68% w Finorze), nie pełny łuk przy napisie „19%”.
+  it('podatek (Z10): łuk = stawka 19%, kwota szacunku, podpis „szacunek”', () => {
     const dane = adaptery.podatekProps({ amount: 8400, label: 'Szac. podatek od 1 stycznia', subtitle: '19% liniowy', fullYear: true }, 'prawdziwe');
-    expect(dane).toMatchObject({ title: 'Odłóż na podatek', subtitle: 'Szacunek PIT od 1 stycznia', pct: 100 });
+    expect(dane).toMatchObject({ title: 'Odłóż na podatek', subtitle: 'Szacunek PIT od 1 stycznia', pct: 19 });
     expect(dane.lines.map((l) => l.replace(/\u00a0/g, ' '))).toEqual(['19%', '8,4 tys. zł', 'do odłożenia']);
     expect(dane.caption).toBe('Szacunek: liniowy, bez ZUS');
   });

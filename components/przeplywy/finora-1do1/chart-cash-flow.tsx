@@ -61,25 +61,31 @@ function totals(buckets: readonly FlowBucket[]) {
   }
 }
 
-function niceStep(raw: number): number {
-  if (!(raw > 0)) return 1
-  const power = 10 ** Math.floor(Math.log10(raw))
-  const unit = [1, 2, 2.5, 5, 10].find(u => u * power >= raw) ?? 10
+/**
+ * Krok etykiet domyślnej osi recharts (`getNiceTickValues`, 5 etykiet) —
+ * ta sama oś co w Finorze (0, 950, 1900, 2850, 3800), więc kroki „po 0,05 ×
+ * 10ⁿ”: przy maksimum 37 801 zł to 9500 („28,5 tys.”).
+ */
+function rechartsStep(max: number): number {
+  const rough = max / 4
+  if (!(rough > 0)) return 1
+  const scale = 10 ** (Math.floor(Math.log10(rough)) + 1)
+  const amend = scale === 10 ? 0.1 : 0.05
 
-  return unit * power
+  return Math.ceil(rough / scale / amend) * amend * scale
 }
 
 /**
- * Szerokość osi Y tylko tyle, by zmieściły się etykiety („125 tys.”). Nie
+ * Szerokość osi Y tylko tyle, by zmieściły się etykiety („28,5 tys.”). Nie
  * węższa niż w szablonie: domyślne 60 px przy `margin left -20`.
  */
 function yAxisWidth(buckets: readonly FlowBucket[]): number {
   const max = Math.max(0, ...buckets.flatMap(b => [b.inflow, b.outflow]))
-  const step = niceStep(max / 4)
+  const step = rechartsStep(max)
   let longest = 1
 
-  for (let tick = 0; tick <= max + step; tick += step) {
-    longest = Math.max(longest, formatPlCompactNumber(tick).length)
+  for (let i = 0; i <= 5; i++) {
+    longest = Math.max(longest, formatPlCompactNumber(step * i).length)
   }
 
   return Math.max(40, Math.ceil(longest * 6 + 8))

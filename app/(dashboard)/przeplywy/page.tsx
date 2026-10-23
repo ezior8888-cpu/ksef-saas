@@ -20,6 +20,11 @@ import { getPageContext } from '@/lib/supabase/page-context'
  * dane przykładowe czytane tymi samymi loaderami z atrapy bazy. Tryb liczy
  * wyłącznie `kontekstDanych`; strona nie woła sama żadnej funkcji danych.
  *
+ * Ładowanie (poprawka Bartosza 23.10.2026): dane wszystkich kart naraz,
+ * strona renderuje się RAZ, w całości — bez szkieletów kart wskakujących po
+ * kolei; wejście treści animuje `ff-route-content` (ten sam ruch co szablon
+ * trasy), a `loading.tsx` tej trasy nie pokazuje obcego szkieletu.
+ *
  * Dawne karty (`components/przeplywy/przeplywy-grid.tsx`,
  * `components/przeplywy/finora/*`) zostają w kodzie jako wzór logiki.
  */
@@ -30,28 +35,40 @@ const CashFlowDashboard = async () => {
   const { supabase, tenantId, nowIso, tryb, kosztyKsefOd } = await kontekstDanych(pageCtx, new Date())
   const props: PrzeplywySlotProps = { supabase, tenantId, nowIso, tryb, kosztyKsefOd }
 
+  // Sloty nie odrzucają (błąd loadera = karta błędu), więc `Promise.all` = `allSettled`.
+  const [wykres, pierscien, wplywy, koszty, zrodla, spodziewane, aktywnosc, operacje] = await Promise.all([
+    WykresSlot({ ...props, className: 'col-span-full xl:col-span-4' }),
+    PierscienSlot({ ...props, className: 'col-span-full xl:col-span-2' }),
+    WplywySlot({ ...props, className: 'col-span-full sm:col-span-3' }),
+    KosztySlot({ ...props, className: 'col-span-full sm:col-span-3' }),
+    ZrodlaSlot({ ...props, className: 'col-span-full lg:col-span-2' }),
+    SpodziewaneSlot({ ...props, className: 'col-span-full lg:col-span-2' }),
+    AktywnoscSlot({ ...props, className: 'col-span-full lg:col-span-2' }),
+    OperacjeSlot({ ...props, className: 'col-span-full' })
+  ])
+
   return (
-    <>
+    <div className='ff-route-content'>
       {/* Odstępstwo od Finory (WCAG 1.3.1): niewidoczny nagłówek strony dla czytników. */}
       <h1 className='sr-only'>Przepływy pieniężne</h1>
       <div className='grid grid-cols-6 gap-6'>
-        <WykresSlot {...props} className='col-span-full xl:col-span-4' />
+        {wykres}
 
-        <PierscienSlot {...props} className='col-span-full xl:col-span-2' />
+        {pierscien}
 
-        <WplywySlot {...props} className='col-span-full sm:col-span-3' />
+        {wplywy}
 
-        <KosztySlot {...props} className='col-span-full sm:col-span-3' />
+        {koszty}
 
-        <ZrodlaSlot {...props} className='col-span-full lg:col-span-2' />
+        {zrodla}
 
-        <SpodziewaneSlot {...props} className='col-span-full lg:col-span-2' />
+        {spodziewane}
 
-        <AktywnoscSlot {...props} className='col-span-full lg:col-span-2' />
+        {aktywnosc}
 
-        <OperacjeSlot {...props} className='col-span-full' />
+        {operacje}
       </div>
-    </>
+    </div>
   )
 }
 

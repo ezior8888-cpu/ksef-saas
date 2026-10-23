@@ -40,8 +40,10 @@ const { default: DashboardHomePage } = await import('@/app/(dashboard)/dashboard
 const { default: StatisticsCard } = await import('@/components/dashboard/finora/statistics-card-03');
 const { default: StatisticsImpressionCard } = await import('@/components/dashboard/finora/statistics-impression-card');
 const { default: TopProductsCard } = await import('@/components/dashboard/finora/widget-top-products');
-const { financeChartConfig } = await import('@/components/dashboard/finora/chart-finance');
+const { financeChartConfig, financeYAxis } = await import('@/components/dashboard/finora/chart-finance');
 const adaptery = await import('@/components/dashboard/finora/adaptery');
+const { default: TotalVisitorsCard } = await import('@/components/dashboard/finora/chart-total-visitors');
+const { Button } = await import('@/components/ui/button');
 const { danePrzykladowe, DEMO_TENANT } = await import('@/lib/demo/dane-przykladowe');
 const { fakePostgrest } = await import('@/lib/demo/fake-postgrest');
 
@@ -70,6 +72,9 @@ const KLASY_DODANE = [
   // Recenzja 2: plakietka obok tytułu zwęża się na wąskim ekranie (`DemoBadge skracana`: `shrink`
   // zamiast `shrink-0`, napis z `truncate`), żeby tytuł karty nie łamał się w drugą linię przy 320–360 px.
   'shrink',
+  // Poprawka Bartosza 23.10.2026 („przejścia nie są już takie clean”): strona wchodzi raz, w całości,
+  // z animacją szablonu trasy (`app/globals.css`) — opakowanie bez wpływu na układ siatki.
+  'ff-route-content',
 ];
 
 const NOW = new Date('2026-10-23T08:00:00Z');
@@ -104,18 +109,12 @@ function decode(text: string): string {
     .replaceAll('&amp;', '&');
 }
 
-/**
- * Prerender strumieniuje: najpierw szkielet slotu (fallback `Suspense`),
- * potem gotową kartę podmienianą skryptem. Do porównania klas liczy się
- * karta, więc szkielety wypadają.
- */
-function bezSzkieletow(markup: string): string {
-  return markup.replace(/<!--\$\?--><template id="B:\d+"><\/template>[\s\S]*?<!--\/\$-->/g, '');
-}
-
+// Poprawka 23.10.2026: karty nie mają już `Suspense` ani szkieletów — prerender oddaje gotową
+// stronę bez podmian, więc dawne wycinanie szkieletów (`bezSzkieletow`) odpadło; gdyby szkielet
+// wrócił, jego klasy wyjdą w porównaniu niżej (i w `finora-wyglad-ladowanie.test.tsx`).
 function klasy(markup: string): Set<string> {
   const out = new Set<string>();
-  for (const m of bezSzkieletow(markup).matchAll(/class="([^"]*)"/g)) {
+  for (const m of markup.matchAll(/class="([^"]*)"/g)) {
     for (const c of decode(m[1]!).split(/\s+/)) if (c) out.add(c);
   }
   return out;
@@ -162,15 +161,21 @@ describe('Finanse (Z17 po zmianie Bartosza): stos Koszty + Zysk + VAT', () => {
     expect(paz).toMatchObject({ profit: 0, result: -1500.5, costs: 9500.5, vat: 1840 });
   });
 
-  it('trzy serie w tych samych kolorach Finory, z prawdziwymi nazwami', () => {
-    expect(financeChartConfig.profit).toEqual({ label: 'Zysk', color: 'var(--chart-2)' });
-    expect(financeChartConfig.vat).toEqual({ label: 'VAT należny', color: 'var(--chart-3)' });
-    expect(financeChartConfig.costs).toEqual({ label: 'Koszty', color: 'var(--chart-4)' });
+  // Zrzuty 24.10.2026 (świadoma zmiana): segmenty od dołu Koszty, Zysk, VAT — kolory segmentów jak w Finorze
+  // (dolny chart-2, środkowy chart-3, górny chart-4), zmieniło się tylko przypisanie wartości (dawniej Zysk, VAT, Koszty).
+  it('trzy serie w kolorach segmentów Finory, z prawdziwymi nazwami; od dołu Koszty, Zysk, VAT', () => {
+    expect(financeChartConfig.costs).toEqual({ label: 'Koszty', color: 'var(--chart-2)' });
+    expect(financeChartConfig.profit).toEqual({ label: 'Zysk', color: 'var(--chart-3)' });
+    expect(financeChartConfig.vat).toEqual({ label: 'VAT należny', color: 'var(--chart-4)' });
     const src = readFileSync(join(process.cwd(), 'components/dashboard/finora/chart-finance.tsx'), 'utf8');
-    const bars = [...src.matchAll(/<Bar dataKey='(\w+)' stackId='a'/g)].map((m) => m[1]);
-    expect(bars).toEqual(['profit', 'vat', 'costs']);
-    // Oś Y z danych, nie wpisany zakres 0–50.
+    const bars = [...src.matchAll(/<Bar dataKey='(\w+)' stackId='a' fill='var\(--color-(\w+)\)'/g)].map((m) => [m[1], m[2]]);
+    expect(bars).toEqual([['costs', 'costs'], ['profit', 'profit'], ['vat', 'vat']]);
+    // Oś Y z danych, nie wpisany zakres 0–50…
     expect(src).not.toMatch(/domain=\{\[0, 50\]\}|ticks=\{\[/);
+    // …ale jak w Finorze (poprawka 23.10.2026): sześć etykiet od zera do „ładnego” maksimum.
+    expect(financeYAxis(50_000)).toEqual({ max: 50_000, ticks: [0, 10_000, 20_000, 30_000, 40_000, 50_000] });
+    expect(financeYAxis(0)).toEqual({ max: 50, ticks: [0, 10, 20, 30, 40, 50] });
+    expect(financeYAxis(61_000).ticks).toHaveLength(6);
     // Dymek jak w Finorze: bez wiersza z nazwą miesiąca (miesiąc jest na osi X pod słupkiem).
     expect(src).toMatch(/<ChartTooltipContent\s+hideLabel/);
   });
@@ -303,6 +308,20 @@ describe('Pulpit przed weryfikacją KSeF: dane przykładowe przez te same loader
     expect(markup).not.toContain('href="/payments/overdue"');
   });
 
+  // Zrzuty 24.10.2026: link „Szczegóły” zgubił obramowanie dawnego `<Button variant='outline' size='xs'>` —
+  // sam `buttonVariants` zostawiał `border-transparent` obok `border-border` (bez `cn()`), a w arkuszu wygrywała przezroczysta.
+  it('Należności: „Szczegóły” z obramowaniem i klasami dawnego przycisku outline xs', () => {
+    const karta = renderToStaticMarkup(
+      <TotalVisitorsCard title='Należności' total='1 zł' badge='1 faktura' detailsHref='/przeplywy' visitorData={[]} />,
+    );
+    const link = /<a [^>]*href="\/przeplywy"[^>]*class="([^"]*)"|<a [^>]*class="([^"]*)"[^>]*href="\/przeplywy"/.exec(karta);
+    const klasyLinku = (link?.[1] ?? link?.[2] ?? '').split(' ');
+    expect(klasyLinku).toContain('border-border');
+    expect(klasyLinku).not.toContain('border-transparent');
+    const przycisk = /class="([^"]*)"/.exec(renderToStaticMarkup(<Button variant='outline' size='xs'>Szczegóły</Button>))![1]!.split(' ');
+    expect(new Set(klasyLinku)).toEqual(new Set(przycisk));
+  });
+
   it('siatka Finory bez zmian: te same kontenery col-span', async () => {
     const markup = await pulpit();
     expect(markup).toContain('class="grid grid-cols-6 gap-6"');
@@ -372,7 +391,7 @@ describe('Odporność i koszt: karty czytają osobno', () => {
       user: { id: 'uzytkownik-1', email: null },
       role: 'owner',
     };
-    return DashboardHomePage().then(html).then(bezSzkieletow);
+    return DashboardHomePage().then(html);
   }
 
   it('faktura w EUR sprzed 10 miesięcy zabiera tylko karty, których okno ją obejmuje', async () => {

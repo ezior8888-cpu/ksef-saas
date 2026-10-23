@@ -23,9 +23,9 @@ const RING_START = 90
 
 /**
  * PLAN-PRAWDZIWE-DANE E6: „Cel oszczędnościowy” bez celu i salda zamienia
- * się w „Odłóż na podatek” (płatnik VAT, pełny łuk) albo „Limit zwolnienia
- * z VAT” (art. 113) — treść z propsów (`adaptery.ts`), wygląd bez zmian:
- * ten sam pierścień, trzy wiersze w środku i podpis pod spodem.
+ * się w „Odłóż na podatek” (płatnik VAT, łuk = stawka 19%) albo „Limit
+ * zwolnienia z VAT” (art. 113) — treść z propsów (`adaptery.ts`), wygląd bez
+ * zmian: ten sam pierścień na jasnym torze, trzy wiersze w środku i podpis.
  */
 type StatisticsSavingsGoalCardProps = {
   title: string
