@@ -30,7 +30,7 @@ export default async function AnalizaKosztowPage({
   const [pageCtx, params] = await Promise.all([getPageContext(), searchParams]);
   const now = new Date();
   // Przed weryfikacją KSeF: dane przykładowe; tryb liczy lib/demo/tryb-danych.ts.
-  const { supabase, tenantId, demo, tryb } = await kontekstDanych(pageCtx, now);
+  const { supabase, tenantId, demo, tryb, verifiedAt } = await kontekstDanych(pageCtx, now);
   const month = resolveAnalyticsMonth(params[ANALYTICS_MONTH_PARAM], now);
 
   return (
@@ -46,7 +46,7 @@ export default async function AnalizaKosztowPage({
         month={month}
         currentMonth={currentMonthKey(now)}
       />
-      <KosztyGrid supabase={supabase} tenantId={tenantId} nowIso={now.toISOString()} month={month} tryb={tryb} />
+      <KosztyGrid supabase={supabase} tenantId={tenantId} nowIso={now.toISOString()} month={month} tryb={tryb} verifiedAt={verifiedAt} />
     </div>
   );
 }

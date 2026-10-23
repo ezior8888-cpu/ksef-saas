@@ -29,6 +29,8 @@ export interface AnalizyCardProps {
   month: string;
   /** Tryb danych strony (`kontekstDanych`) — puste stany zależne od weryfikacji KSeF. */
   tryb: TrybDanych;
+  /** `ksef_verified_at` firmy w bieżącym środowisku (podpis „KSeF od DD.MM”, Z9); `null` w przykładzie. */
+  verifiedAt?: string | null;
 }
 
 /** Dane karty albo karta błędu z treścią wyjątku dla klienta. */

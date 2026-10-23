@@ -9,16 +9,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 type SpendingStreaksCardProps = {
   title: string
   description: string
+  /** Pełne zastrzeżenie w dymku podpisu (podpis w jednej linii jak dotąd). */
+  descriptionTitle?: string
   rows: SummaryRow[]
   className?: string
 }
 
-const SpendingStreaksCard = ({ title, description, rows, className }: SpendingStreaksCardProps) => {
+const SpendingStreaksCard = ({ title, description, descriptionTitle, rows, className }: SpendingStreaksCardProps) => {
   return (
     <Card className={className}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+        <CardDescription title={descriptionTitle}>{description}</CardDescription>
       </CardHeader>
       <CardContent className='space-y-2'>
         {rows.map(row => (

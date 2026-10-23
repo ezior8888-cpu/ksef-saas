@@ -142,11 +142,14 @@ export const RECURRING_LIST_LIMIT = 6;
  * Finora „Subscriptions” ← N3 (stałe koszty / stali klienci). Zamiast „Renews
  * <data>” — typowy dzień miesiąca, zamiast cyklu rozliczeń — „Średnio / mies.”.
  * „Zrób fakturę cykliczną” (N1/E9) tylko przy kliencie z fakturą-wzorem
- * (nigdy dla dostawcy ani „Konsumentów” — lib nie daje im `templateInvoiceId`).
+ * (nigdy dla dostawcy ani „Konsumentów” — lib nie daje im `templateInvoiceId`)
+ * i tylko na prawdziwych danych: faktura-wzór z przykładu nie istnieje, więc
+ * w trybie `przyklad` (`linkAction = false`) wiersz zostaje bez linku.
  */
 export function toSubscriptionItems(
   items: readonly RecurringItem[],
   kind: 'supplier' | 'client',
+  linkAction = true,
 ): SubscriptionItem[] {
   return items.map((item) => ({
     id: item.key,
@@ -156,7 +159,7 @@ export function toSubscriptionItems(
     renewsLabel: `Zwykle ok. ${item.typicalDay}. dnia miesiąca`,
     billingCycle: 'Średnio / mies.',
     action:
-      kind === 'client' && item.templateInvoiceId
+      linkAction && kind === 'client' && item.templateInvoiceId
         ? {
             href: setAsRecurringHref(item.templateInvoiceId),
             label: 'Zrób fakturę cykliczną',

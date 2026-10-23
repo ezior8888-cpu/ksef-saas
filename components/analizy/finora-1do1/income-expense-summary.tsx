@@ -27,14 +27,14 @@ const IncomeExpenseSummary = ({ data, className }: IncomeExpenseSummaryProps) =>
       amount: data.income
     },
     { icon: RiArrowDownCircleLine, iconClassName: 'text-destructive', title: 'Koszty', amount: data.expense },
-    { icon: RiScales3Line, iconClassName: 'text-foreground', title: 'Wynik', amount: data.net }
+    { icon: RiScales3Line, iconClassName: 'text-foreground', title: 'Wynik (netto)', amount: data.net }
   ]
 
   return (
     <Card className={className}>
       <CardHeader>
         <CardTitle>Przychody a koszty</CardTitle>
-        <CardDescription>Podsumowanie wybranego miesiąca · netto, jak w KPiR</CardDescription>
+        <CardDescription>Netto · koszty jak w KPiR, bez VAT do odliczenia</CardDescription>
       </CardHeader>
       <CardContent className='space-y-2'>
         {rows.map(row => (

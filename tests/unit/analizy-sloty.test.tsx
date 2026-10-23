@@ -109,7 +109,7 @@ describe('karty analizy sprzedaży', () => {
     expect(stats).toContain('href="/przeplywy"');
 
     const costs = html(await koszty.CostStatsSlot(p));
-    expect(costs).toContain('Wydano (brutto)');
+    expect(costs).toContain('Dokumenty (brutto)');
     expect(costs).not.toContain('Raport wstrzymany');
   });
 

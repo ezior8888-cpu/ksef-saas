@@ -29,7 +29,7 @@ export default async function AnalizaSprzedazyPage({
   const [pageCtx, params] = await Promise.all([getPageContext(), searchParams]);
   const now = new Date();
   // Przed weryfikacją KSeF: dane przykładowe; tryb liczy lib/demo/tryb-danych.ts.
-  const { supabase, tenantId, demo, tryb } = await kontekstDanych(pageCtx, now);
+  const { supabase, tenantId, demo, tryb, verifiedAt } = await kontekstDanych(pageCtx, now);
   const month = resolveAnalyticsMonth(params[ANALYTICS_MONTH_PARAM], now);
 
   return (
@@ -45,7 +45,7 @@ export default async function AnalizaSprzedazyPage({
         month={month}
         currentMonth={currentMonthKey(now)}
       />
-      <SprzedazGrid supabase={supabase} tenantId={tenantId} nowIso={now.toISOString()} month={month} tryb={tryb} />
+      <SprzedazGrid supabase={supabase} tenantId={tenantId} nowIso={now.toISOString()} month={month} tryb={tryb} verifiedAt={verifiedAt} />
     </div>
   );
 }
