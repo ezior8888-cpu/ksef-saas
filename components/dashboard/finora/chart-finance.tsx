@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
+import { DemoBadge } from '@/components/dashboard/demo-badge'
 import CardHeaderWithMenu, { type CardMenuItem } from './card-header-with-menu'
 import { DymekWiersz } from './dymek'
 
@@ -59,6 +60,8 @@ export type FinanceCardProps = {
   report: { subTitle: string; rows: FinanceReportRow[] }
   financeMenu: CardMenuItem[]
   reportMenu: CardMenuItem[]
+  /** D-P: plakietka „Dane przykładowe” w nagłówku „Finanse”. */
+  demo?: boolean
   className?: string
 }
 
@@ -110,14 +113,14 @@ function yAxisWidth(max: number): number {
   return Math.max(30, Math.ceil(longest * 6 + 8))
 }
 
-const FinanceCard = ({ subTitle, costsLabel, months, report, financeMenu, reportMenu, className }: FinanceCardProps) => {
+const FinanceCard = ({ subTitle, costsLabel, months, report, financeMenu, reportMenu, demo, className }: FinanceCardProps) => {
   const config = { ...financeChartConfig, costs: { ...financeChartConfig.costs, label: costsLabel } } satisfies ChartConfig
   const max = Math.max(0, ...months.map(m => m.profit + m.vat + m.costs))
 
   return (
     <Card className={cn('grid grid-cols-1 gap-x-2 gap-y-4 lg:grid-cols-5', className)}>
       <div className='flex flex-col gap-10 max-lg:border-b max-lg:pb-6 lg:col-span-3 lg:border-r lg:pr-2'>
-        <CardHeaderWithMenu title='Finanse' subTitle={subTitle} menuItems={financeMenu} className='flex justify-between' />
+        <CardHeaderWithMenu title='Finanse' subTitle={subTitle} menuItems={financeMenu} badge={demo ? <DemoBadge /> : undefined} className='flex justify-between' />
         <CardContent className='flex-1'>
           <ChartContainer config={config} className='h-full min-h-65 w-full'>
             <BarChart accessibilityLayer data={months} barSize={12} margin={{ left: 0, bottom: -5 }}>

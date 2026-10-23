@@ -12,6 +12,7 @@ import { Bar, BarChart, XAxis, YAxis } from 'recharts'
 import { Card, CardContent } from '@/components/ui/card'
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DemoBadge } from '@/components/dashboard/demo-badge'
 import CardHeaderWithMenu, { type CardMenuItem } from '@/components/dashboard/finora/card-header-with-menu'
 import { DymekWiersz } from '@/components/dashboard/finora/dymek'
 
@@ -90,16 +91,18 @@ type CashFlowCardProps = {
   /** Pełne zdanie podtytułu (dymek i czytnik ekranu) — podtytuł mieści się w jednej linii. */
   subTitleHint?: string
   menuItems?: CardMenuItem[]
+  /** D-P: plakietka „Dane przykładowe” w nagłówku. */
+  demo?: boolean
   className?: string
 }
 
-const CashFlowCard = ({ tabs, subTitle, subTitleHint, menuItems, className }: CashFlowCardProps) => {
+const CashFlowCard = ({ tabs, subTitle, subTitleHint, menuItems, demo, className }: CashFlowCardProps) => {
   const [tab, setTab] = useState<TabValue>('monthly')
   const current = totals(tabs[tab])
 
   return (
     <Card className={cn(className)}>
-      <CardHeaderWithMenu title='Przepływy pieniężne' subTitle={subTitle} subTitleHint={subTitleHint} menuItems={menuItems} />
+      <CardHeaderWithMenu title='Przepływy pieniężne' subTitle={subTitle} subTitleHint={subTitleHint} menuItems={menuItems} badge={demo ? <DemoBadge /> : undefined} />
 
       <Tabs value={tab} onValueChange={value => setTab(value as TabValue)} className='gap-6'>
         <CardContent className='flex flex-wrap items-center justify-between gap-4'>

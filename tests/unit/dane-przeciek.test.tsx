@@ -130,3 +130,25 @@ describe('T2: kontrola znaczników — przed weryfikacją przykład jest widoczn
     expect(znaczniki(markup).length).toBeGreaterThan(0);
   });
 });
+
+describe('E12 (D-P): plakietka „Dane przykładowe” na Pulpicie i Przepływach', () => {
+  const OBA: Array<[string, () => Promise<ReactNode>]> = [STRONY[3]!, STRONY[4]!];
+
+  it.each(OBA)('%s — przed weryfikacją KSeF plakietka jest w nagłówku', async (_path, page) => {
+    state.proof = { verifiedAt: null, verifiedEnvironment: null };
+    const markup = await html(await page());
+    expect(markup).toContain('Dane przykładowe');
+  });
+
+  it.each(OBA)('%s — zweryfikowana firma: bez plakietki', async (_path, page) => {
+    const markup = await html(await page());
+    expect(markup).not.toContain('Dane przykładowe');
+  });
+
+  it.each(OBA)("%s — G'' (brak KSEF_ENV): bez plakietki", async (_path, page) => {
+    vi.stubEnv('KSEF_ENV', '');
+    state.ctx.supabase = fakePostgrest({});
+    const markup = await html(await page());
+    expect(markup).not.toContain('Dane przykładowe');
+  });
+});

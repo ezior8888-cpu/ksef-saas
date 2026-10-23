@@ -214,6 +214,7 @@ async function WykresKarta({ supabase, tenantId, nowIso, tryb, className }: Slot
         subTitle={dane.subTitle}
         subTitleHint={dane.subTitleHint}
         menuItems={[ODSWIEZ, { label: 'Wydatki', href: '/expenses' }]}
+        demo={tryb === 'przyklad'}
         className={className}
       />
     );

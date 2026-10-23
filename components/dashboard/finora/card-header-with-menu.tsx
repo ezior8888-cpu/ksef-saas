@@ -1,6 +1,7 @@
 'use client'
 
 // Third-party Imports
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { RiMore2Line } from '@remixicon/react'
@@ -35,6 +36,8 @@ type CardHeaderWithMenuProps = {
    */
   subTitleHint?: string
   menuItems?: CardMenuItem[]
+  /** Plakietka obok tytułu (D-P: „Dane przykładowe”); mieści się w wysokości wiersza tytułu. */
+  badge?: ReactNode
   className?: string
 }
 
@@ -50,12 +53,20 @@ const CardHeaderWithMenu = ({
   subTitle,
   subTitleHint,
   menuItems = defaultMenuItems,
+  badge,
   className
 }: CardHeaderWithMenuProps) => {
   return (
     <CardHeader className={className ?? 'flex items-center justify-between'}>
       <div className='flex flex-col gap-1'>
-        <span className='text-lg font-semibold'>{title}</span>
+        {badge ? (
+          <div className='flex items-center gap-2'>
+            <span className='text-lg font-semibold'>{title}</span>
+            {badge}
+          </div>
+        ) : (
+          <span className='text-lg font-semibold'>{title}</span>
+        )}
         {subTitle && (
           <span className='text-muted-foreground text-sm' title={subTitleHint}>
             {subTitle}

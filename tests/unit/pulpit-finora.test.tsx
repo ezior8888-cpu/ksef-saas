@@ -57,7 +57,17 @@ const KLASY_USUNIETE = ['h-[17%]', 'h-[18%]', 'h-[65%]'];
  * pozycje i firmy są dłuższe niż „Dell XPS 13”). Kolorów nie dodajemy
  * (zasada Bartosza 23.10.2026) — spadek VAT niesie minus, nie czerwień.
  */
-const KLASY_DODANE = ['truncate', 'min-w-0'];
+const KLASY_DODANE = [
+  'truncate',
+  'min-w-0',
+  // E12 (D-P): klasy plakietki „Dane przykładowe” (components/dashboard/demo-badge.tsx), jedyny nowy element.
+  '[a]:hover:bg-secondary/80',
+  'bg-amber-500/15',
+  'font-normal',
+  'text-amber-800',
+  'dark:bg-amber-400/15',
+  'dark:text-amber-300',
+];
 
 const NOW = new Date('2026-10-23T08:00:00Z');
 /**

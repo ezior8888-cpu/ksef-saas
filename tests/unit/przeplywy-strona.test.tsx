@@ -71,7 +71,17 @@ const KLASY_FINORY: string[] = JSON.parse(
  * Klasy dodane z konieczności danych: przycięcie długiej nazwy (prawdziwe
  * firmy są dłuższe niż „Czynsz za biuro”) — te same co na Pulpicie (E5).
  */
-const KLASY_DODANE = ['truncate', 'min-w-0'];
+const KLASY_DODANE = [
+  'truncate',
+  'min-w-0',
+  // E12 (D-P): klasy plakietki „Dane przykładowe” (components/dashboard/demo-badge.tsx), jedyny nowy element.
+  '[a]:hover:bg-secondary/80',
+  'bg-amber-500/15',
+  'font-normal',
+  'text-amber-800',
+  'dark:bg-amber-400/15',
+  'dark:text-amber-300',
+];
 /**
  * Klasy usunięte z konieczności danych: `capitalize` dawała wielką literę
  * w KAŻDYM słowie prawdziwych etykiet („Do Akceptacji”, „Bez Kategorii”);

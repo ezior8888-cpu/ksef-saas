@@ -183,6 +183,7 @@ async function FinanseKarta({ supabase, tenantId, nowIso, tryb, kosztyKsefOd, cl
         {...dane}
         financeMenu={[ODSWIEZ, { label: 'Analiza sprzedaży', href: '/analizy/sprzedaz' }]}
         reportMenu={[ODSWIEZ, { label: 'Księga KPiR', href: '/reports/kpir' }]}
+        demo={tryb === 'przyklad'}
         className={className}
       />
     );
