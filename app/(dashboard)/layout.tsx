@@ -10,6 +10,7 @@ import { AppSidebar } from '@/components/dashboard/app-sidebar';
 import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { Footer } from '@/components/dashboard/footer';
 import { PrefetchDashboardRoutes } from '@/components/dashboard/prefetch-dashboard-routes';
+import { ShellScrollMemory } from '@/components/dashboard/shell-scroll-memory';
 import { PrefetchExportsRoute } from '@/components/dashboard/exports-route-client';
 import { WelcomeModal } from '@/components/dashboard/welcome-modal';
 import { IdleWatcher } from '@/components/auth/idle-watcher';
@@ -74,6 +75,8 @@ export default async function DashboardLayout({
 
   // `100dvh`, nie `100vh`: na iOS Safari `100vh` to wysokość okna BEZ pasków
   // przeglądarki, więc dolna krawędź szkieletu chowa się pod paskiem adresu.
+  // `ff-app-shell` blokuje przewijanie samego dokumentu (`globals.css`, „Pasek
+  // górny stoi w miejscu”) — przewija się tylko `.ff-shell-scroll`.
   // Wysokość nagłówka niesie `.ff-shell-header` (tokeny `--ff-header-h`
   // i `--ff-safe-t`), stąd brak `h-20` w `AppHeader`.
   //
@@ -93,7 +96,7 @@ export default async function DashboardLayout({
     <TooltipProvider>
       <SidebarProvider
         defaultOpen={sidebarOpen}
-        className="ff-dashboard relative h-[100dvh] min-h-0 overflow-hidden text-[var(--ff-on-surface)]"
+        className="ff-dashboard ff-app-shell relative h-[100dvh] min-h-0 overflow-hidden text-[var(--ff-on-surface)]"
       >
         <PortalContainerProvider>
           <AppSidebar />
@@ -128,6 +131,8 @@ export default async function DashboardLayout({
           </SidebarInset>
 
           <BottomNav />
+          {/* Za treścią: jego efekt układu biegnie po przewinięciu Nexta. */}
+          <ShellScrollMemory />
           <DashboardRouteFlags />
           <InstallPrompt />
           <PrefetchDashboardRoutes />
