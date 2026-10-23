@@ -215,7 +215,10 @@ describe('Faktury w tym miesiącu', () => {
 describe('Opłacone (wpływy w tym miesiącu)', () => {
   it('podpisy karty', () => {
     expect(PAID_NOTE).toBe('według oznaczonych wpłat');
-    expect(PAID_EMPTY_STATE).toBe('Oznaczaj wpłaty, a pokażemy wpływy');
+    // E0 (PLAN-PRAWDZIWE-DANE, Z8): bez potwierdzania wpłat (N6) pusty stan nie
+    // każe „oznaczać” — tej czynności klient nie ma; mówi tylko, jak jest.
+    expect(PAID_EMPTY_STATE).toBe('Wpłat jeszcze nie oznaczono');
+    expect(PAID_EMPTY_STATE).not.toMatch(/oznaczaj/i);
   });
 
   it('bez opłaconych faktur w miesiącu → null (pusty stan), nie 0', async () => {

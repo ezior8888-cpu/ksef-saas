@@ -3,8 +3,8 @@ import { RiArrowRightUpLine, RiDownloadCloud2Line, RiFileEditLine, RiMailUnreadL
 import { PULPIT_EMPTY } from '@/components/dashboard/pulpit/card-states';
 import { loadStatCell, StatSlot } from '@/components/expenses/finora/stat-slot';
 import { StatsCardsFrame } from '@/components/expenses/finora/stats-cards';
-import { getDashboardActiveOrgVerified } from '@/lib/dashboard-shell-data';
 import { countExpensesToReview, getInboxMonthCosts, getLastInboxFetchAt } from '@/lib/dashboard/expense-stats';
+import { trybDanych } from '@/lib/demo/tryb-danych';
 import { formatPlCompactMoney, formatPlInt, formatPlMoney } from '@/lib/format/pl';
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import { plural } from '@/lib/i18n/plural';
@@ -20,6 +20,8 @@ import type { PageContext } from '@/lib/supabase/page-context';
 export interface InboxStatsProps {
   supabase: PageContext['supabase'];
   tenantId: string;
+  /** Użytkownik strony — tryb danych (weryfikacja KSeF) liczony dla `tenantId`. */
+  user: Pick<PageContext['user'], 'id'>;
   now?: Date;
 }
 
@@ -57,7 +59,7 @@ export async function InboxToReviewCell({ supabase, tenantId }: InboxStatsProps)
   });
 }
 
-export async function InboxLastFetchCell({ supabase, tenantId }: InboxStatsProps) {
+export async function InboxLastFetchCell({ supabase, tenantId, user, now }: InboxStatsProps) {
   return loadStatCell('Ostatnie pobranie z KSeF', async () => {
     const last = await getLastInboxFetchAt(supabase, tenantId);
     if (last) {
@@ -68,7 +70,8 @@ export async function InboxLastFetchCell({ supabase, tenantId }: InboxStatsProps
         icon: RiDownloadCloud2Line,
       };
     }
-    const verified = await getDashboardActiveOrgVerified();
+    // Jedna funkcja trybu (lib/demo/tryb-danych.ts): „bez KSeF” = tryb przykładowy.
+    const verified = (await trybDanych({ supabase, tenantId, user }, now ?? new Date())).tryb !== 'przyklad';
     return {
       value: '—',
       // Rytm pobierania mówił dawny podtytuł skrzynki; bez niego klient czekający

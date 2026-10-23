@@ -27,14 +27,15 @@ const IncomeExpenseSummary = ({ data, className }: IncomeExpenseSummaryProps) =>
       amount: data.income
     },
     { icon: RiArrowDownCircleLine, iconClassName: 'text-destructive', title: 'Koszty', amount: data.expense },
-    { icon: RiScales3Line, iconClassName: 'text-foreground', title: 'Wynik', amount: data.net }
+    { icon: RiScales3Line, iconClassName: 'text-foreground', title: 'Wynik (netto)', amount: data.net }
   ]
 
   return (
     <Card className={className}>
       <CardHeader>
         <CardTitle>Przychody a koszty</CardTitle>
-        <CardDescription>Podsumowanie wybranego miesiąca · netto, jak w KPiR</CardDescription>
+        {/* E10 (D-K): koszty z faktur zakupu z KSeF i wydatków — nie tylko KPiR; napis tej samej długości. */}
+        <CardDescription>Netto · z KSeF i wydatków, bez VAT do odliczenia</CardDescription>
       </CardHeader>
       <CardContent className='space-y-2'>
         {rows.map(row => (

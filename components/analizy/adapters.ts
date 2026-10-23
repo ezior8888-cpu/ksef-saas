@@ -1,12 +1,12 @@
 import {
-  RiAlarmWarningLine,
+  RiCalendarLine,
   RiFileEditLine,
   RiFileList3Line,
   RiHourglassLine,
-  RiMoneyDollarCircleLine,
   RiPercentLine,
   RiReceiptLine,
   RiRepeatLine,
+  RiTimeLine,
 } from '@remixicon/react';
 
 import type { BreakdownSlice } from '@/lib/analytics-finance/breakdown';
@@ -16,7 +16,8 @@ import { countedDays, isoDatePl } from '@/lib/analytics-finance/months';
 import type { RecurringItem } from '@/lib/analytics-finance/recurring';
 import { recentSales, type SaleInvoice } from '@/lib/analytics-finance/sales';
 import type { CostEntry } from '@/lib/dashboard/costs';
-import type { Receivables } from '@/lib/dashboard/receivables';
+import type { InflowTerms } from '@/lib/dashboard/inflow-terms';
+import { costHref } from '@/lib/dashboard/ksef-invoice-cost';
 import { countLabel } from '@/lib/i18n/plural';
 import { setAsRecurringHref } from '@/lib/invoices/recurring/visibility';
 import { roundToCents } from '@/lib/xml/invoice-calculator';
@@ -40,7 +41,7 @@ import type {
  * dopasować dane pasujące do naszych”). Karty w `finora-1do1/` dostają
  * dokładnie te pola, które Finora bierze ze swojej warstwy przykładowej
  * (`getMonthlyStats`, `getSpendTrend`…), a każda liczba pochodzi z `lib/`
- * (`loadCostsWindow`, `loadSalesWindow`, `loadProductLines`, `loadReceivables`)
+ * (`loadCostsWindow`, `loadSalesWindow`, `loadProductLines`, `loadUpcomingInflows`)
  * — tu nic się nie liczy od nowa, tylko przekłada. Czyste funkcje bez
  * `server-only`, więc testuje się je wprost.
  */
@@ -105,24 +106,32 @@ export function salesAvgDaily(total: number, month: string, today: string): numb
   return roundToCents(total / countedDays(month, today)) || 0;
 }
 
-/** „Ostatnie wydatki”: Finora `getRecentExpenses` + ikona kategorii wydatku. */
-export function recentCostItems(entries: readonly CostEntry[], month: string): FeedItem[] {
-  return recentCosts(entries, month).map((cost) => ({
-    id: cost.id,
-    merchant: cost.name,
-    subtitle: isoDatePl(cost.date),
-    amount: cost.amount,
-    icon: costCategoryIcon(entries.find((e) => e.id === cost.id)?.categoryLabel ?? null),
-  }));
+/**
+ * „Ostatnie wydatki”: Finora `getRecentExpenses` + ikona kategorii wydatku.
+ * Link do dokumentu: wydatek albo faktura zakupu z KSeF bez wydatku (E10).
+ */
+export function recentCostItems(entries: readonly CostEntry[], month: string, linkItems = false): FeedItem[] {
+  return recentCosts(entries, month).map((cost) => {
+    const entry = entries.find((e) => e.id === cost.id);
+    return {
+      id: cost.id,
+      ...(linkItems ? { href: costHref(entry ?? { id: cost.id, source: '' }) } : {}),
+      merchant: cost.name,
+      subtitle: isoDatePl(cost.date),
+      amount: cost.amount,
+      icon: costCategoryIcon(entry?.categoryLabel ?? null),
+    };
+  });
 }
 
 /**
  * „Ostatnie faktury”: brutto dokumentu (korekta — różnica, może być ujemna),
  * druga linia „[Korekta · ]numer · DD.MM.RRRR”.
  */
-export function recentSaleItems(invoices: readonly SaleInvoice[], month: string): FeedItem[] {
+export function recentSaleItems(invoices: readonly SaleInvoice[], month: string, linkItems = false): FeedItem[] {
   return recentSales(invoices, month, saleBuyerName).map((sale) => ({
     id: sale.id,
+    ...(linkItems ? { href: `/invoices/${sale.id}` } : {}),
     merchant: sale.name,
     subtitle: [sale.kind === 'correction' ? 'Korekta' : null, sale.number, isoDatePl(sale.date)]
       .filter(Boolean)
@@ -142,11 +151,14 @@ export const RECURRING_LIST_LIMIT = 6;
  * Finora „Subscriptions” ← N3 (stałe koszty / stali klienci). Zamiast „Renews
  * <data>” — typowy dzień miesiąca, zamiast cyklu rozliczeń — „Średnio / mies.”.
  * „Zrób fakturę cykliczną” (N1/E9) tylko przy kliencie z fakturą-wzorem
- * (nigdy dla dostawcy ani „Konsumentów” — lib nie daje im `templateInvoiceId`).
+ * (nigdy dla dostawcy ani „Konsumentów” — lib nie daje im `templateInvoiceId`)
+ * i tylko na prawdziwych danych: faktura-wzór z przykładu nie istnieje, więc
+ * w trybie `przyklad` (`linkAction = false`) wiersz zostaje bez linku.
  */
 export function toSubscriptionItems(
   items: readonly RecurringItem[],
   kind: 'supplier' | 'client',
+  linkAction = true,
 ): SubscriptionItem[] {
   return items.map((item) => ({
     id: item.key,
@@ -156,7 +168,7 @@ export function toSubscriptionItems(
     renewsLabel: `Zwykle ok. ${item.typicalDay}. dnia miesiąca`,
     billingCycle: 'Średnio / mies.',
     action:
-      kind === 'client' && item.templateInvoiceId
+      linkAction && kind === 'client' && item.templateInvoiceId
         ? {
             href: setAsRecurringHref(item.templateInvoiceId),
             label: 'Zrób fakturę cykliczną',
@@ -166,17 +178,22 @@ export function toSubscriptionItems(
   }));
 }
 
-/** Finora `getIncomeExpenseNet`: przychód netto i koszt jak w KPiR wybranego miesiąca. */
+/**
+ * Finora `getIncomeExpenseNet`: przychód netto i koszt wybranego miesiąca —
+ * wydatki jak w KPiR i faktury zakupu z KSeF bez wydatku netto (E10).
+ */
 export function incomeExpenseNet(income: number, expense: number): IncomeExpenseNet {
   return { income, expense, net: roundToCents(income - expense) || 0 };
 }
 
 const DOCUMENT_FORMS = ['dokument', 'dokumenty', 'dokumentów'] as const;
 const INVOICE_FORMS = ['faktura', 'faktury', 'faktur'] as const;
-const DAY_FORMS = ['dzień', 'dni', 'dni'] as const;
 
-/** „VAT z wydatków” w miejscu Finorowego „Spending Streaks” (plan P10, decyzja D3). */
-export function costVatRows(vat: CostVatSummary): SummaryRow[] {
+/**
+ * „VAT z wydatków” w miejscu Finorowego „Spending Streaks” (plan P10, decyzja D3).
+ * `reviewHref` (tylko prawdziwe dane): wiersz „Do opisania” prowadzi do listy nieopisanych.
+ */
+export function costVatRows(vat: CostVatSummary, reviewHref: string | null = null): SummaryRow[] {
   return [
     { icon: RiReceiptLine, iconClassName: 'text-foreground', title: 'VAT naliczony', value: formatZl(vat.vat) },
     { icon: RiPercentLine, iconClassName: 'text-primary', title: 'VAT do odliczenia', value: formatZl(vat.vatDeductible) },
@@ -185,32 +202,29 @@ export function costVatRows(vat: CostVatSummary): SummaryRow[] {
       iconClassName: vat.toReview > 0 ? 'text-destructive' : 'text-foreground',
       title: 'Do opisania',
       value: countLabel(vat.toReview, DOCUMENT_FORMS),
+      href: reviewHref,
     },
   ];
 }
 
-type ReceivablesSummary = Pick<Receivables, 'total' | 'count' | 'overdue' | 'overdueCount' | 'oldestOverdueDays'>;
+/** Wiersze należności po kolei: tytuł jak kolumna karty Pulpitu, ikona bez oceny. */
+const TERM_ROWS: Record<InflowTerms['buckets'][number]['key'], { title: string; icon: FinoraIcon }> = {
+  thisWeek: { title: 'Ten tydzień', icon: RiCalendarLine },
+  upTo30: { title: 'Do 30 dni', icon: RiTimeLine },
+  later: { title: 'Później', icon: RiHourglassLine },
+};
 
-/** „Należności” w miejscu Finorowego „Spending Streaks” (plan P11, decyzja D3). */
-export function receivablesRows(r: ReceivablesSummary): SummaryRow[] {
-  return [
-    {
-      icon: RiMoneyDollarCircleLine,
-      iconClassName: 'text-foreground',
-      title: 'Do zapłaty',
-      value: `${formatZl(r.total)} · ${countLabel(r.count, INVOICE_FORMS)}`,
-    },
-    {
-      icon: RiAlarmWarningLine,
-      iconClassName: r.overdue > 0 ? 'text-destructive' : 'text-foreground',
-      title: 'Po terminie',
-      value: `${formatZl(r.overdue)} · ${countLabel(r.overdueCount, INVOICE_FORMS)}`,
-    },
-    {
-      icon: RiHourglassLine,
-      iconClassName: 'text-foreground',
-      title: 'Najstarsza zaległość',
-      value: r.oldestOverdueDays === null ? 'Brak zaległości' : countLabel(r.oldestOverdueDays, DAY_FORMS),
-    },
-  ];
+/**
+ * „Należności” w miejscu Finorowego „Spending Streaks” (plan P11, decyzja D3).
+ * E11 (D-W): te same trzy przedziały przyszłych terminów co karta Pulpitu
+ * (`inflowTerms`) — bez „Po terminie” i „Najstarszej zaległości”, bo
+ * zakładamy zapłatę w terminie; ikony bez czerwieni.
+ */
+export function receivablesRows(terms: InflowTerms): SummaryRow[] {
+  return terms.buckets.map((b) => ({
+    icon: TERM_ROWS[b.key].icon,
+    iconClassName: 'text-foreground',
+    title: TERM_ROWS[b.key].title,
+    value: `${formatZl(b.amount)} · ${countLabel(b.count, INVOICE_FORMS)}`,
+  }));
 }

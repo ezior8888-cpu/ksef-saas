@@ -1,5 +1,6 @@
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { assertAcceptedEnvironmentKnown } from '@/lib/dashboard/monthly-figures';
+import { normalizeProductName } from '@/lib/dashboard/product-name';
 import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
 import { shortCompanyName } from '@/lib/format/company-name';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
@@ -116,8 +117,9 @@ export interface ProductLine {
 }
 
 /**
- * Ranking pozycji: grupa = `lower(trim(name))` + `unit` (NULL to osobna
- * j.m.), kwota = suma `net_amount`, nazwa z najnowszej pozycji grupy. Tylko
+ * Ranking pozycji: grupa = nazwa bez okresu i numeru umowy, małymi literami
+ * (`normalizeProductName`) + `unit` (NULL to osobna j.m.), kwota = suma
+ * `net_amount`, nazwa z najnowszej pozycji grupy (też bez okresu). Tylko
  * grupy z netto > 0, malejąco po netto, potem po kluczu.
  *
  * Wejście ma już być zawężone do faktur `regular` i `final` — zaliczki
@@ -131,11 +133,13 @@ export function rankProducts(lines: readonly ProductLine[], limit = 5): TopProdu
     newest: { date: string; id: string; name: string };
   }>();
   for (const line of lines) {
-    const trimmed = (line.name ?? '').trim();
+    // Nazwa bez okresu i numeru umowy (`normalizeProductName`): „Usługi – październik 2026”
+    // i „Usługi – listopad 2026” to ten sam produkt. Wielkość liter bierze najnowsza pozycja.
+    const normalized = normalizeProductName(line.name);
     // J.m. z formularza bywa z odstępem albo pusta — „ szt ” to „szt”, a pusta to brak.
     const unit = line.unit?.trim() || null;
-    const key = JSON.stringify([trimmed.toLowerCase(), unit]);
-    const candidate = { date: line.issue_date, id: line.id, name: trimmed };
+    const key = JSON.stringify([normalized.key, unit]);
+    const candidate = { date: line.issue_date, id: line.id, name: normalized.display };
     const group = groups.get(key);
     if (!group) {
       groups.set(key, { key, unit, net: amount(line.net_amount), newest: candidate });

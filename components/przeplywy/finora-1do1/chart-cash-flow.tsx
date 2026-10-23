@@ -2,6 +2,9 @@
 
 // Kopia 1:1 z finora-src/src/views/dashboards/charts/chart-cash-flow.tsx (Przepływy, decyzja Bartosza 21.10.2026): zmienione tylko teksty, kwoty, daty i importy.
 
+// React Imports
+import { useState } from 'react'
+
 // Third-party Imports
 import { Bar, BarChart, XAxis, YAxis } from 'recharts'
 
@@ -9,38 +12,25 @@ import { Bar, BarChart, XAxis, YAxis } from 'recharts'
 import { Card, CardContent } from '@/components/ui/card'
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import CardHeaderWithMenu from '@/components/dashboard/finora/card-header-with-menu'
+import { DemoBadge } from '@/components/dashboard/demo-badge'
+import CardHeaderWithMenu, { type CardMenuItem } from '@/components/dashboard/finora/card-header-with-menu'
+import { DymekWiersz } from '@/components/dashboard/finora/dymek'
 
 // Util Imports
+import type { FlowBucket } from '@/lib/dashboard/cash-movements'
+import { INFLOW_EMPTY, INFLOW_EMPTY_TITLE, INFLOW_NOTE } from '@/lib/dashboard/inflow-labels'
+import { formatPlCompactNumber, formatPlInt, formatPlMoney } from '@/lib/format/pl'
 import { cn } from '@/lib/utils'
 
-const weeklyData = [
-  { label: 'pon', inflow: 620, outflow: 480 },
-  { label: 'wto', inflow: 340, outflow: 520 },
-  { label: 'śro', inflow: 780, outflow: 240 },
-  { label: 'czw', inflow: 410, outflow: 670 },
-  { label: 'pią', inflow: 890, outflow: 280 },
-  { label: 'sob', inflow: 460, outflow: 320 },
-  { label: 'nie', inflow: 300, outflow: 390 }
-]
+/**
+ * PLAN-PRAWDZIWE-DANE E6: dane z propsów (`buildCashFlowChart` przez
+ * `adaptery.ts`), wygląd bez zmian. Sumy nad wykresem idą za AKTYWNĄ
+ * zakładką (w szablonie zawsze z miesięcy), oś Y z danych („12 tys.”),
+ * dymek z „zł”. E11 (D-W): seria „Wpływy” według terminów płatności, a okres
+ * bez żadnej faktury z terminem mówi to wprost.
+ */
 
-const monthlyData = [
-  { label: 'sty', inflow: 3200, outflow: 2400 },
-  { label: 'lut', inflow: 2800, outflow: 2400 },
-  { label: 'mar', inflow: 3500, outflow: 2000 },
-  { label: 'kwi', inflow: 2600, outflow: 3250 },
-  { label: 'maj', inflow: 3800, outflow: 2100 },
-  { label: 'cze', inflow: 3000, outflow: 3420 },
-  { label: 'lip', inflow: 3400, outflow: 1900 }
-]
-
-const yearlyData = [
-  { label: '2021', inflow: 28400, outflow: 24200 },
-  { label: '2022', inflow: 31200, outflow: 33000 },
-  { label: '2023', inflow: 36400, outflow: 30000 },
-  { label: '2024', inflow: 39100, outflow: 36000 },
-  { label: '2025', inflow: 34600, outflow: 26180 }
-]
+type TabValue = 'weekly' | 'monthly' | 'yearly'
 
 const cashFlowChartConfig = {
   inflow: {
@@ -48,60 +38,112 @@ const cashFlowChartConfig = {
     color: 'var(--chart-2)'
   },
   outflow: {
-    label: 'Wydatki',
+    label: 'Koszty (brutto)',
     color: 'var(--chart-4)'
   }
 } satisfies ChartConfig
 
-const tabsData = [
-  { value: 'weekly', label: 'Tygodniowo', data: weeklyData },
-  { value: 'monthly', label: 'Miesięcznie', data: monthlyData },
-  { value: 'yearly', label: 'Rocznie', data: yearlyData }
+const tabsData: { value: TabValue; label: string }[] = [
+  { value: 'weekly', label: 'Tygodniowo' },
+  { value: 'monthly', label: 'Miesięcznie' },
+  { value: 'yearly', label: 'Rocznie' }
 ]
 
-const totalInflow = monthlyData.reduce((sum, item) => sum + item.inflow, 0)
-const totalOutflow = monthlyData.reduce((sum, item) => sum + item.outflow, 0)
+// Kwota bez groszy jak w szablonie („22 300 zł”); pełna w dymku sumy.
+const formatPln = (value: number) => `${formatPlInt(Math.round(value))} zł`
+const zl = (value: number) => `${formatPlMoney(value)} zł`
 
-const formatPln = (value: number) => `${value.toLocaleString('pl-PL')} zł`
+function totals(buckets: readonly FlowBucket[]) {
+  return {
+    inflow: buckets.reduce((sum, b) => sum + b.inflow, 0),
+    outflow: buckets.reduce((sum, b) => sum + b.outflow, 0),
+    inflowCount: buckets.reduce((sum, b) => sum + b.inflowCount, 0)
+  }
+}
 
-const CashFlowCard = ({ className }: { className?: string }) => {
+function niceStep(raw: number): number {
+  if (!(raw > 0)) return 1
+  const power = 10 ** Math.floor(Math.log10(raw))
+  const unit = [1, 2, 2.5, 5, 10].find(u => u * power >= raw) ?? 10
+
+  return unit * power
+}
+
+/**
+ * Szerokość osi Y tylko tyle, by zmieściły się etykiety („125 tys.”). Nie
+ * węższa niż w szablonie: domyślne 60 px przy `margin left -20`.
+ */
+function yAxisWidth(buckets: readonly FlowBucket[]): number {
+  const max = Math.max(0, ...buckets.flatMap(b => [b.inflow, b.outflow]))
+  const step = niceStep(max / 4)
+  let longest = 1
+
+  for (let tick = 0; tick <= max + step; tick += step) {
+    longest = Math.max(longest, formatPlCompactNumber(tick).length)
+  }
+
+  return Math.max(40, Math.ceil(longest * 6 + 8))
+}
+
+type CashFlowCardProps = {
+  tabs: Record<TabValue, FlowBucket[]>
+  subTitle: string
+  /** Pełne zdanie podtytułu (dymek i czytnik ekranu) — podtytuł mieści się w jednej linii. */
+  subTitleHint?: string
+  menuItems?: CardMenuItem[]
+  /** D-P: plakietka „Dane przykładowe” w nagłówku. */
+  demo?: boolean
+  className?: string
+}
+
+const CashFlowCard = ({ tabs, subTitle, subTitleHint, menuItems, demo, className }: CashFlowCardProps) => {
+  const [tab, setTab] = useState<TabValue>('monthly')
+  const current = totals(tabs[tab])
+
   return (
     <Card className={cn(className)}>
-      <CardHeaderWithMenu title='Przepływy pieniężne' subTitle='Wpływy i wydatki w czasie' />
+      <CardHeaderWithMenu title='Przepływy pieniężne' subTitle={subTitle} subTitleHint={subTitleHint} menuItems={menuItems} badge={demo ? <DemoBadge skracana /> : undefined} />
 
-      <Tabs defaultValue='monthly' className='gap-6'>
+      <Tabs value={tab} onValueChange={value => setTab(value as TabValue)} className='gap-6'>
         <CardContent className='flex flex-wrap items-center justify-between gap-4'>
           <div className='flex items-center gap-6'>
             <div className='flex items-center gap-2'>
               <span className='bg-chart-2 h-8 w-1 rounded-full' />
               <div className='flex flex-col'>
-                <span className='text-xl font-semibold'>{formatPln(totalInflow)}</span>
+                <span
+                  className='text-xl font-semibold'
+                  title={current.inflowCount > 0 ? `${zl(current.inflow)} · ${INFLOW_NOTE}` : INFLOW_EMPTY_TITLE}
+                >
+                  {current.inflowCount > 0 ? formatPln(current.inflow) : '—'}
+                </span>
                 <span className='text-muted-foreground text-sm'>Suma wpływów</span>
               </div>
             </div>
             <div className='flex items-center gap-2'>
               <span className='bg-chart-4 h-8 w-1 rounded-full' />
               <div className='flex flex-col'>
-                <span className='text-xl font-semibold'>{formatPln(totalOutflow)}</span>
-                <span className='text-muted-foreground text-sm'>Suma wydatków</span>
+                <span className='text-xl font-semibold' title={`${zl(current.outflow)} brutto`}>
+                  {formatPln(current.outflow)}
+                </span>
+                <span className='text-muted-foreground text-sm'>Suma kosztów</span>
               </div>
             </div>
           </div>
 
           <TabsList>
-            {tabsData.map(tab => (
-              <TabsTrigger className='shadow-none' key={tab.value} value={tab.value}>
-                {tab.label}
+            {tabsData.map(item => (
+              <TabsTrigger className='shadow-none' key={item.value} value={item.value}>
+                {item.label}
               </TabsTrigger>
             ))}
           </TabsList>
         </CardContent>
 
         <CardContent>
-          {tabsData.map(tab => (
-            <TabsContent key={tab.value} value={tab.value}>
+          {tabsData.map(item => (
+            <TabsContent key={item.value} value={item.value}>
               <ChartContainer config={cashFlowChartConfig} className='h-65 w-full'>
-                <BarChart accessibilityLayer data={tab.data} barGap={4} margin={{ left: -20, right: 0, bottom: -5 }}>
+                <BarChart accessibilityLayer data={tabs[item.value]} barGap={4} margin={{ left: 0, right: 0, bottom: -5 }}>
                   <XAxis
                     dataKey='label'
                     tickLine={false}
@@ -109,8 +151,37 @@ const CashFlowCard = ({ className }: { className?: string }) => {
                     axisLine={false}
                     tick={{ fill: 'var(--muted-foreground)' }}
                   />
-                  <YAxis tickLine={false} axisLine={false} tickMargin={8} tick={{ fill: 'var(--muted-foreground)' }} />
-                  <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+                  <YAxis
+                    width={yAxisWidth(tabs[item.value])}
+                    tickFormatter={value => formatPlCompactNumber(Number(value))}
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tick={{ fill: 'var(--muted-foreground)' }}
+                  />
+                  <ChartTooltip
+                    cursor={false}
+                    content={
+                      <ChartTooltipContent
+                        labelFormatter={(_, payload) => String((payload?.[0]?.payload as FlowBucket | undefined)?.period ?? '')}
+                        formatter={(value, name, item) => {
+                          const bucket = item.payload as FlowBucket
+
+                          if (name === 'inflow') {
+                            return (
+                              <DymekWiersz
+                                color={item.color}
+                                label={cashFlowChartConfig.inflow.label}
+                                value={bucket.inflowCount > 0 ? zl(Number(value)) : INFLOW_EMPTY.toLowerCase()}
+                              />
+                            )
+                          }
+
+                          return <DymekWiersz color={item.color} label={cashFlowChartConfig.outflow.label} value={zl(Number(value))} />
+                        }}
+                      />
+                    }
+                  />
                   <Bar dataKey='inflow' fill='var(--color-inflow)' radius={4} />
                   <Bar dataKey='outflow' fill='var(--color-outflow)' radius={4} />
                 </BarChart>

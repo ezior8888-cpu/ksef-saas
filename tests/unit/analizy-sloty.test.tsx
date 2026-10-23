@@ -81,11 +81,13 @@ function expense(id: string, fields: Row = {}): Row {
 }
 
 function props(tables: Record<string, Row[]>, month = '2026-10') {
-  return { supabase: fakePostgrest(tables), tenantId: TENANT, nowIso: NOW_ISO, month };
+  // Tryb danych strony (`kontekstDanych`): bez KSeF = przykład; tu karty czytają podaną bazę.
+  const tryb = verified.value ? ('prawdziwe' as const) : ('przyklad' as const);
+  return { supabase: fakePostgrest(tables), tenantId: TENANT, nowIso: NOW_ISO, month, tryb };
 }
 
 describe('karty analizy sprzedaży', () => {
-  it('z danymi: kafle, ostatnia faktura i należność po terminie', async () => {
+  it('z danymi: kafle, ostatnia faktura i należności według terminów płatności', async () => {
     const p = props({ invoices: [invoice('a')], invoice_line_items: [] });
     const stats = html(await sprzedaz.SalesStatsSlot(p));
     expect(stats).toContain('Sprzedano (netto)');
@@ -94,10 +96,16 @@ describe('karty analizy sprzedaży', () => {
     const recent = html(await sprzedaz.RecentSalesSlot(p));
     expect(recent).toContain('FV/a · 05.10.2026');
 
-    const receivables = html(await sprzedaz.ReceivablesSlot(p));
-    expect(receivables).toContain('Po terminie');
-    expect(receivables).toContain('Najstarsza zaległość');
-    expect(receivables).toContain('16 dni');
+    // E11 (D-W): termin 01.10 minął — zakładamy zapłatę w terminie, to już wpływ, nie zaległość.
+    // Należności to przyszły termin (20.10, po niedzieli 18.10 → „Do 30 dni”).
+    const receivables = html(await sprzedaz.ReceivablesSlot(props({
+      invoices: [invoice('a'), invoice('b', { payment_due_date: '2026-10-20' })],
+    })));
+    expect(receivables).toContain('Ten tydzień');
+    expect(receivables).toContain('Do 30 dni');
+    expect(receivables).toContain('1230,00 zł · 1 faktura');
+    expect(receivables).not.toContain('Po terminie');
+    expect(receivables).not.toContain('Najstarsza zaległość');
   });
 
   it('faktura w EUR zabiera karty sprzedaży z polską treścią, karty kosztów działają', async () => {
@@ -107,7 +115,7 @@ describe('karty analizy sprzedaży', () => {
     expect(stats).toContain('href="/przeplywy"');
 
     const costs = html(await koszty.CostStatsSlot(p));
-    expect(costs).toContain('Wydano (brutto)');
+    expect(costs).toContain('Dokumenty (brutto)');
     expect(costs).not.toContain('Raport wstrzymany');
   });
 

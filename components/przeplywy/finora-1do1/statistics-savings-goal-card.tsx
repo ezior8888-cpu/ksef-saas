@@ -11,8 +11,6 @@ import { type ChartConfig, ChartContainer } from '@/components/ui/chart'
 // Util Imports
 import { cn } from '@/lib/utils'
 
-const savingsGoalChartData = [{ progress: 68, fill: 'var(--color-progress)' }]
-
 const savingsGoalChartConfig = {
   progress: {
     label: 'Postęp',
@@ -20,24 +18,38 @@ const savingsGoalChartConfig = {
   }
 } satisfies ChartConfig
 
-const StatisticsCardData = {
-  title: 'Cel oszczędnościowy',
-  description: 'Fundusz awaryjny',
-  value: '6,8 tys. zł',
-  target: '10 tys. zł',
-  changePercentage: '+68%'
+/** Początek łuku jak w szablonie; procent niesie `endAngle` (68% → 335°). */
+const RING_START = 90
+
+/**
+ * PLAN-PRAWDZIWE-DANE E6: „Cel oszczędnościowy” bez celu i salda zamienia
+ * się w „Odłóż na podatek” (płatnik VAT, pełny łuk) albo „Limit zwolnienia
+ * z VAT” (art. 113) — treść z propsów (`adaptery.ts`), wygląd bez zmian:
+ * ten sam pierścień, trzy wiersze w środku i podpis pod spodem.
+ */
+type StatisticsSavingsGoalCardProps = {
+  title: string
+  subtitle: string
+  /** 0–100; 100 = pełny łuk. */
+  pct: number
+  lines: [string, string, string]
+  caption: string
+  className?: string
 }
 
-const StatisticsSavingsGoalCard = ({ className }: { className?: string }) => {
+const StatisticsSavingsGoalCard = ({ title, subtitle, pct, lines, caption, className }: StatisticsSavingsGoalCardProps) => {
+  const progress = Math.max(0, Math.min(100, pct))
+  const chartData = [{ progress, fill: 'var(--color-progress)' }]
+
   return (
     <Card className={cn(className)}>
       <CardHeader>
-        <CardTitle className='text-lg font-semibold'>{StatisticsCardData.title}</CardTitle>
-        <CardDescription className='text-muted-foreground text-base'>{StatisticsCardData.description}</CardDescription>
+        <CardTitle className='text-lg font-semibold'>{title}</CardTitle>
+        <CardDescription className='text-muted-foreground text-base'>{subtitle}</CardDescription>
       </CardHeader>
       <CardContent className='flex flex-1 flex-col items-center justify-center gap-2'>
         <ChartContainer config={savingsGoalChartConfig} className='mx-auto aspect-square h-62 w-62'>
-          <RadialBarChart data={savingsGoalChartData} startAngle={90} endAngle={335} innerRadius={115} outerRadius={86}>
+          <RadialBarChart data={chartData} startAngle={RING_START} endAngle={RING_START + (progress / 100) * 360} innerRadius={115} outerRadius={86}>
             <PolarGrid
               gridType='circle'
               radialLines={false}
@@ -57,17 +69,17 @@ const StatisticsSavingsGoalCard = ({ className }: { className?: string }) => {
                           y={(viewBox.cy || 0) - 18}
                           className='fill-foreground text-4xl font-semibold'
                         >
-                          {savingsGoalChartData[0].progress}%
+                          {lines[0]}
                         </tspan>
                         <tspan
                           x={viewBox.cx}
                           y={(viewBox.cy || 0) + 16}
                           className='fill-foreground text-xl font-medium'
                         >
-                          {StatisticsCardData.value}
+                          {lines[1]}
                         </tspan>
                         <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 38} className='fill-muted-foreground text-sm'>
-                          z celu {StatisticsCardData.target}
+                          {lines[2]}
                         </tspan>
                       </text>
                     )
@@ -77,7 +89,7 @@ const StatisticsSavingsGoalCard = ({ className }: { className?: string }) => {
             </PolarRadiusAxis>
           </RadialBarChart>
         </ChartContainer>
-        <span className='text-primary text-sm font-medium'>{StatisticsCardData.changePercentage} wobec poprzedniego miesiąca</span>
+        <span className='text-primary text-sm font-medium'>{caption}</span>
       </CardContent>
     </Card>
   )

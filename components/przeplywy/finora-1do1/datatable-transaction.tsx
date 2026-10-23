@@ -4,6 +4,8 @@
 
 import { useId, useMemo, useState } from 'react'
 
+import Link from 'next/link'
+
 import type { Column, ColumnDef, ColumnFiltersState, PaginationState, RowData } from '@tanstack/react-table'
 import {
   flexRender,
@@ -19,7 +21,7 @@ import {
 import { RiArrowDownSLine, RiArrowLeftSLine, RiArrowRightSLine, RiArrowUpSLine, RiMore2Line } from '@remixicon/react'
 
 // Component Imports
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,7 +40,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { usePagination } from '@/hooks/use-pagination'
 
 // Utils imports
+import { plural } from '@/lib/i18n/plural'
 import { cn } from '@/lib/utils'
+
+/**
+ * PLAN-PRAWDZIWE-DANE E6, E7 pkt 4: wiersze to operacje z FaktWay (wpłaty
+ * i koszty, `cashFlowOperations` przez `adaptery.ts`): inicjały zamiast
+ * nieistniejących awatarów, „NIP … · numer” zamiast e-maila, prawdziwe
+ * kategorie i statusy (filtry z wartości w danych), a menu wiersza otwiera
+ * dokument zamiast „Edytuj / Duplikuj / Usuń”. Wygląd bez zmian.
+ */
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -49,27 +60,38 @@ declare module '@tanstack/react-table' {
 
 export type Item = {
   id: string
-  avatar: string
-  avatarFallback: string
+  initials: string
   counterparty: string
-  email: string
-  category: 'income' | 'bills' | 'shopping' | 'transfer' | 'subscription'
+  /** Druga linia: „NIP … · numer dokumentu”. */
+  detail: string
+  category: string
+  /** Kierunek pieniędzy (zwrot kosztu to wpływ). */
   direction: 'in' | 'out'
+  /** Kwota bez znaku; znak i kolor z `direction`. */
   amount: number
-  status: 'completed' | 'pending' | 'failed'
+  status: 'paid' | 'due' | 'issued' | 'reviewed' | 'pending' | 'ksef'
+  /** „Otwórz fakturę” / „Otwórz wydatek”. */
+  openLabel: string
+  /** `null` w danych przykładowych — demo nie ma prawdziwych dokumentów. */
+  href: string | null
 }
 
-// Etykiety wartości po polsku (w Finorze wyświetlane są surowe angielskie wartości); dane i filtry zostają bez zmian.
-const VALUE_LABELS: Record<string, string> = {
-  income: 'przychód',
-  bills: 'rachunki',
-  shopping: 'zakupy',
-  transfer: 'przelew',
-  subscription: 'subskrypcja',
-  completed: 'zrealizowana',
-  pending: 'oczekująca',
-  failed: 'nieudana'
+// Statusy po polsku: wpływ „Opłacona” TYLKO przy prawdziwej zapłacie, inaczej „Wg terminu” (termin płatności)
+// albo „Wg wystawienia” (faktura bez terminu) — E11, decyzja D-W: wpływy według terminów płatności, bez
+// twierdzenia o zaległości. Koszt „Zatwierdzony” albo „Do akceptacji” (opisanie, nie zapłata), faktura
+// zakupu z KSeF bez wydatku „Z KSeF” (E10 — nie ma jej w Wydatkach, więc nie ma czego akceptować).
+// Bez `capitalize` z Finory: wielowyrazowe etykiety („Do akceptacji”, „Bez kategorii”) dostałyby
+// wielką literę w każdym słowie; wielką literę na początku daje adapter.
+const STATUS_LABELS: Record<Item['status'], string> = {
+  paid: 'Opłacona',
+  due: 'Wg terminu',
+  issued: 'Wg wystawienia',
+  reviewed: 'Zatwierdzony',
+  pending: 'Do akceptacji',
+  ksef: 'Z KSeF'
 }
+
+const valueLabel = (value: string) => STATUS_LABELS[value as Item['status']] ?? value
 
 const columns: ColumnDef<Item>[] = [
   {
@@ -78,12 +100,11 @@ const columns: ColumnDef<Item>[] = [
     cell: ({ row }) => (
       <div className='flex items-center gap-2'>
         <Avatar className='size-9'>
-          <AvatarImage src={row.original.avatar} alt={row.getValue('counterparty')} />
-          <AvatarFallback className='text-xs'>{row.original.avatarFallback}</AvatarFallback>
+          <AvatarFallback className='text-xs'>{row.original.initials}</AvatarFallback>
         </Avatar>
         <div className='flex flex-col'>
           <span className='font-medium'>{row.getValue('counterparty')}</span>
-          <span className='text-muted-foreground'>{row.original.email}</span>
+          <span className='text-muted-foreground'>{row.original.detail}</span>
         </div>
       </div>
     ),
@@ -93,7 +114,7 @@ const columns: ColumnDef<Item>[] = [
     header: 'Kategoria',
     accessorKey: 'category',
     filterFn: 'equalsString',
-    cell: ({ row }) => <span className='text-muted-foreground capitalize'>{VALUE_LABELS[row.getValue('category') as string] ?? (row.getValue('category') as string)}</span>
+    cell: ({ row }) => <span className='text-muted-foreground'>{row.getValue('category') as string}</span>
   },
   {
     header: 'Kwota',
@@ -125,17 +146,25 @@ const columns: ColumnDef<Item>[] = [
       const status = row.getValue('status') as string
 
       const styles = {
-        completed:
+        paid:
           'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
-        failed:
-          'bg-destructive/10 [a&]:hover:bg-destructive/5 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 text-destructive',
+        reviewed:
+          'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
+        // „Wg terminu” / „Wg wystawienia” (E11) i „Z KSeF” (E10): ten sam wygląd co „Zatwierdzony” —
+        // bez nowego koloru (zasada Bartosza 23.10.2026), bez bursztynu „do zrobienia”.
+        due:
+          'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
+        issued:
+          'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
+        ksef:
+          'bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
         pending:
           'bg-amber-600/10 text-amber-600 focus-visible:ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:focus-visible:ring-amber-400/40 [a&]:hover:bg-amber-600/5 dark:[a&]:hover:bg-amber-400/5'
       }[status]
 
       return (
-        <Badge className={cn('h-auto border-none capitalize focus-visible:outline-none', styles)}>
-          {VALUE_LABELS[row.getValue('status') as string] ?? (row.getValue('status') as string)}
+        <Badge className={cn('h-auto border-none focus-visible:outline-none', styles)}>
+          {valueLabel(row.getValue('status') as string)}
         </Badge>
       )
     }
@@ -143,13 +172,13 @@ const columns: ColumnDef<Item>[] = [
   {
     id: 'actions',
     header: () => 'Akcje',
-    cell: () => <RowActions />,
+    cell: ({ row }) => <RowActions href={row.original.href} label={row.original.openLabel} />,
     size: 60,
     enableHiding: false
   }
 ]
 
-const TransactionDatatable = ({ data }: { data: Item[] }) => {
+const TransactionDatatable = ({ data, emptyMessage = 'Brak wyników.' }: { data: Item[]; emptyMessage?: string }) => {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
   const pageSize = 5
@@ -249,7 +278,7 @@ const TransactionDatatable = ({ data }: { data: Item[] }) => {
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className='h-24 text-center'>
-                  Brak wyników.
+                  {emptyMessage}
                 </TableCell>
               </TableRow>
             )}
@@ -261,7 +290,11 @@ const TransactionDatatable = ({ data }: { data: Item[] }) => {
         <p className='text-muted-foreground text-sm whitespace-nowrap' aria-live='polite'>
           Wyświetlane{' '}
           <span>
-            {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} do{' '}
+            {Math.min(
+              table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1,
+              table.getRowCount()
+            )}{' '}
+            do{' '}
             {Math.min(
               Math.max(
                 table.getState().pagination.pageIndex * table.getState().pagination.pageSize +
@@ -271,7 +304,10 @@ const TransactionDatatable = ({ data }: { data: Item[] }) => {
               table.getRowCount()
             )}
           </span>{' '}
-          z <span>{table.getRowCount().toString()} wpisów</span>
+          z{' '}
+          <span>
+            {table.getRowCount().toString()} {plural(table.getRowCount(), ['wpisu', 'wpisów', 'wpisów'])}
+          </span>
         </p>
 
         <div>
@@ -376,7 +412,7 @@ function Filter({ column }: { column: Column<any, unknown> }) {
         items={[
           { label: `Wszystkie`, value: 'all' },
           ...sortedUniqueValues.map(value => ({
-            label: VALUE_LABELS[String(value)] ?? String(value),
+            label: valueLabel(String(value)),
             value: String(value)
           }))
         ]}
@@ -385,15 +421,15 @@ function Filter({ column }: { column: Column<any, unknown> }) {
           column.setFilterValue(value === 'all' || value === null ? undefined : value)
         }}
       >
-        <SelectTrigger id={`${id}-select`} className='w-full capitalize'>
+        <SelectTrigger id={`${id}-select`} className='w-full'>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
             <SelectItem value='all'>Wszystkie</SelectItem>
             {sortedUniqueValues.map(value => (
-              <SelectItem key={String(value)} value={String(value)} className='capitalize'>
-                {VALUE_LABELS[String(value)] ?? String(value)}
+              <SelectItem key={String(value)} value={String(value)}>
+                {valueLabel(String(value))}
               </SelectItem>
             ))}
           </SelectGroup>
@@ -403,23 +439,28 @@ function Filter({ column }: { column: Column<any, unknown> }) {
   )
 }
 
-function RowActions() {
+/**
+ * Menu wiersza (E7 pkt 4): jedna pozycja „Otwórz fakturę / wydatek”.
+ * Przyjętych faktur nie wolno usuwać, a „Usuń” sugerowało kasowanie faktury
+ * z KSeF. W danych przykładowych pozycja jest wyłączona (brak dokumentu).
+ */
+export function RowActions({ href, label, defaultOpen }: { href: string | null; label: string; defaultOpen?: boolean }) {
   return (
-    <DropdownMenu>
+    <DropdownMenu defaultOpen={defaultOpen}>
       <DropdownMenuTrigger render={<Button size='icon' variant='ghost' aria-label='Więcej akcji' />}>
         <RiMore2Line className='size-4.5' aria-hidden='true' />
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end'>
         <DropdownMenuGroup>
-          <DropdownMenuItem>
-            <span>Edytuj</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem>
-            <span>Duplikuj</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem variant='destructive'>
-            <span>Usuń</span>
-          </DropdownMenuItem>
+          {href ? (
+            <DropdownMenuItem render={<Link href={href} />}>
+              <span>{label}</span>
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem disabled>
+              <span>{label}</span>
+            </DropdownMenuItem>
+          )}
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>

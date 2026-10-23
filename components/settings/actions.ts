@@ -5,6 +5,7 @@ import { X509Certificate } from 'node:crypto';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { authenticateWithXades } from '@/lib/ksef/auth';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { clearKsefHistoryCertificateErrors } from '@/lib/ksef/history-sync/client-pause';
 import { hasFreshKsefOwnerProof } from '@/lib/ksef/owner-claim';
 import { encryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -144,6 +145,16 @@ export async function uploadCertificateAction(data: {
     }
     if (claimResult !== 'claimed' && claimResult !== 'already_claimed_by_self') {
       return { success: false, error: GENERIC_KSEF_ERROR };
+    }
+
+    // Z11: klient właśnie naprawił certyfikat — zapisany błąd historii (wygasł,
+    // brak poświadczeń, brak uprawnień) znika od razu, a nie po najbliższym
+    // cronie. Błąd czyszczenia nie cofa wgrania: nic tu nie rzuca, tylko logujemy.
+    try {
+      const cleared = await clearKsefHistoryCertificateErrors({ tenantId, environment: env });
+      if (!cleared.ok) console.error('[uploadCertificateAction] nie wyczyszczono błędu certyfikatu historii');
+    } catch (error) {
+      console.error('[uploadCertificateAction] czyszczenie błędu certyfikatu historii:', error);
     }
 
     revalidatePath('/settings/ksef');

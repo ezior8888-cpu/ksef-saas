@@ -478,11 +478,12 @@ describe('SpendingStreaksCard i IncomeExpenseSummary', () => {
   it('przychody a koszty: ten sam układ, kwoty w złotych, ujemny wynik z minusem typograficznym', () => {
     const out = html(<IncomeExpenseSummary data={{ income: 1000, expense: 1500.5, net: -500.5 }} />);
     expect(out).toContain('Przychody a koszty');
-    expect(out).toContain('Podsumowanie wybranego miesiąca · netto, jak w KPiR');
+    // E10 (D-K): koszty z faktur z KSeF i wydatków — ta sama długość napisu co dawny „koszty jak w KPiR”.
+    expect(out).toContain('Netto · z KSeF i wydatków, bez VAT do odliczenia');
     expect(out).toContain('class="bg-muted flex items-center gap-3 p-3"');
     expect(out).toContain('Przychody');
     expect(out).toContain('Koszty');
-    expect(out).toContain('Wynik');
+    expect(out).toContain('Wynik (netto)');
     expect(out).toContain('1000,00 zł');
     expect(out).toContain('1500,50 zł');
     expect(out).toContain(`${MINUS}500,50 zł`);

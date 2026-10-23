@@ -20,6 +20,7 @@ const stats = vi.hoisted(() => ({
   countExpensesToReview: vi.fn(),
   getLastInboxFetchAt: vi.fn(),
   verified: vi.fn(),
+  trybCtx: null as unknown,
 }));
 const router = vi.hoisted(() => ({ refresh: vi.fn(), push: vi.fn() }));
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
@@ -28,7 +29,13 @@ const pageContext = vi.hoisted(() => ({ get: vi.fn() }));
 
 vi.mock('@/lib/dashboard/expense-stats', () => stats);
 vi.mock('@/lib/supabase/page-context', () => ({ getPageContext: pageContext.get }));
-vi.mock('@/lib/dashboard-shell-data', () => ({ getDashboardActiveOrgVerified: stats.verified }));
+// Kafel „Ostatnie pobranie” pyta o tryb danych firmy (weryfikacja KSeF) — jedna funkcja trybu.
+vi.mock('@/lib/demo/tryb-danych', () => ({
+  trybDanych: async (ctx: unknown) => {
+    stats.trybCtx = ctx;
+    return { tryb: (await stats.verified()) ? 'prawdziwe' : 'przyklad', stan: 'C', verifiedAt: null };
+  },
+}));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
 vi.mock('sonner', () => ({ toast }));
 vi.mock('@/app/actions/expenses', () => ({
@@ -486,7 +493,7 @@ describe('Skrzynka KSeF P9', () => {
     stats.countExpensesToReview.mockResolvedValue(2);
     stats.getInboxMonthCosts.mockResolvedValue({ month: '2026-10', gross: 1845, count: 3 });
     stats.getLastInboxFetchAt.mockResolvedValueOnce('2026-10-19T14:05:00Z').mockResolvedValue(null);
-    const props = { supabase, tenantId: TENANT };
+    const props = { supabase, tenantId: TENANT, user: { id: 'uzytkownik-1' } };
 
     const fresh = html((await InboxNewCell(props)) as ReactElement);
     expect(fresh).toContain('Nowe faktury');
@@ -503,6 +510,9 @@ describe('Skrzynka KSeF P9', () => {
     expect(none).toContain('Jeszcze nie pobraliśmy żadnej faktury');
     // Poprawka 21.10.2026: podtytuł z „co 15 minut” zniknął — rytm jest w kaflu także przed pierwszym pobraniem.
     expect(none).toContain('sprawdzamy KSeF co 15 minut');
+
+    // Tryb liczony dla firmy i użytkownika strony (PLAN-PRAWDZIWE-DANE §4 „Uwaga do F”).
+    expect(stats.trybCtx).toEqual({ supabase, tenantId: TENANT, user: { id: 'uzytkownik-1' } });
 
     stats.verified.mockResolvedValue(false);
     const noKsef = html((await InboxLastFetchCell(props)) as ReactElement);

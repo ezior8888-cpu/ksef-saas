@@ -13,10 +13,11 @@ import {
 import { productBreakdown } from '@/lib/analytics-finance/products';
 import { RECURRING_MONTHS, recurringClients } from '@/lib/analytics-finance/recurring';
 import { salesMonthStats, salesOfMonth, salesTrend, type SaleInvoice } from '@/lib/analytics-finance/sales';
+import { inflowTerms } from '@/lib/dashboard/inflow-terms';
+import { INFLOW_NOTE } from '@/lib/dashboard/inflow-labels';
 import { PRODUCTS_NOTE } from '@/lib/dashboard/rankings';
-import { RECEIVABLES_NOTE } from '@/lib/dashboard/receivables';
+import type { TrybDanych } from '@/lib/demo/tryb-danych';
 import { todayInWarsaw } from '@/lib/format/warsaw-date';
-import { plural } from '@/lib/i18n/plural';
 
 import {
   incomeExpenseNet,
@@ -44,7 +45,8 @@ import SubscriptionsCard from './finora-1do1/subscriptions-card';
 import AssetAllocationCard from './finora/chart-asset-allocation';
 import { ANALIZY_EMPTY, type EmptyStateProps } from './finora/empty';
 import MoverListCard from './finora/mover-list-card';
-import { loadCostsWindow, loadProductLines, loadReceivables, loadSalesWindow } from './loaders';
+import { loadCostsWindow, loadProductLines, loadSalesWindow, loadUpcomingInflows } from './loaders';
+import { pobieramy } from './podpisy';
 
 /**
  * Analiza sprzedaży `/analizy/sprzedaz` — poprawka Bartosza 21.10.2026:
@@ -54,23 +56,40 @@ import { loadCostsWindow, loadProductLines, loadReceivables, loadSalesWindow } f
  * spodem. Karty to kopie z `finora-1do1/`, dane — prawdziwe, przez czyste
  * adaptery (`./adapters`). Faktury jednym odczytem `getSalesInvoices`
  * (§2.4 pkt 2, 4–7), produkty `fetchProductLines` (§2.4 pkt 13), należności
- * `getReceivables` (§2.4 pkt 11). Każda karta osobno w `Suspense`
+ * — przyszłe terminy z `getInflows` (E11, D-W). Każda karta osobno w `Suspense`
  * + `SectionErrorBoundary` (§2.4 pkt 15).
  */
 
 type CardProps = AnalizyCardProps & { className?: string };
 
-/** Pusty miesiąc: bez żadnej faktury w oknie — „wystaw pierwszą fakturę” (§7.3). */
-function salesEmpty(invoices: readonly SaleInvoice[]): EmptyStateProps {
-  return invoices.length === 0 ? ANALIZY_EMPTY.noInvoices : ANALIZY_EMPTY.noSalesThisMonth;
+/**
+ * Okno bez żadnej faktury: „wystaw pierwszą fakturę” (§7.3); w stanie B
+ * (`synchronizacja`) historia sprzedaży się pobiera — „Pobieramy faktury z KSeF…”.
+ */
+function noInvoices(tryb: TrybDanych): EmptyStateProps {
+  return tryb === 'synchronizacja' ? pobieramy() : ANALIZY_EMPTY.noInvoices;
 }
+
+/** Pusty miesiąc: bez żadnej faktury w oknie — stan firmy, z fakturami w innym miesiącu — „brak sprzedaży”. */
+function salesEmpty(invoices: readonly SaleInvoice[], tryb: TrybDanych): EmptyStateProps {
+  return invoices.length === 0 ? noInvoices(tryb) : ANALIZY_EMPTY.noSalesThisMonth;
+}
+
+/**
+ * Należności (E11, D-W): przyszłe terminy faktur sprzedaży bez prawdziwej
+ * zapłaty — założenie nazwane w podpisie („według terminów płatności”,
+ * krótszy od dawnego zastrzeżenia Z16), pełne zdanie w dymku.
+ */
+const RECEIVABLES_CAPTION = `Faktury sprzedaży · ${INFLOW_NOTE}`;
+const RECEIVABLES_CAPTION_TITLE =
+  `Faktury sprzedaży z terminem płatności od dziś, bez potwierdzonej zapłaty — ${INFLOW_NOTE}. Termin, który minął, liczymy jako wpływ w Przepływach.`;
 
 const inMonth = (invoices: readonly SaleInvoice[], month: string) =>
   invoices.filter((inv) => inv.issueDate.slice(0, 7) === month);
 
 /** Produkty: miesiąc bez faktur to brak sprzedaży; faktury bez pozycji produktowych — osobny komunikat. */
-function productsEmpty(invoices: readonly SaleInvoice[], month: string): EmptyStateProps {
-  return inMonth(invoices, month).length === 0 ? salesEmpty(invoices) : ANALIZY_EMPTY.noProducts;
+function productsEmpty(invoices: readonly SaleInvoice[], month: string, tryb: TrybDanych): EmptyStateProps {
+  return inMonth(invoices, month).length === 0 ? salesEmpty(invoices, tryb) : ANALIZY_EMPTY.noProducts;
 }
 
 export async function SalesStatsSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
@@ -100,7 +119,7 @@ export async function SalesStatsSlot({ supabase, tenantId, nowIso, month, classN
   });
 }
 
-export async function SalesTrendSlot({ supabase, tenantId, nowIso, className }: CardProps) {
+export async function SalesTrendSlot({ supabase, tenantId, nowIso, tryb, className }: CardProps) {
   return loadAnalizyCard('Trend sprzedaży', className, async () => {
     const invoices = await loadSalesWindow(supabase, tenantId, nowIso);
     // Miesiąc z korektą in minus rysuje się jako słupek ujemny — tak, jak jest.
@@ -108,7 +127,7 @@ export async function SalesTrendSlot({ supabase, tenantId, nowIso, className }: 
     // Słupki Finory zawsze; pusto tylko, gdy wszystkie 6 miesięcy to zero (D8).
     const empty = isAllZero(data)
       ? invoices.length === 0
-        ? ANALIZY_EMPTY.noInvoices
+        ? noInvoices(tryb)
         : ANALIZY_EMPTY.noSalesInTrend
       : null;
     return (
@@ -124,7 +143,7 @@ export async function SalesTrendSlot({ supabase, tenantId, nowIso, className }: 
   });
 }
 
-export async function ProductsChartSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
+export async function ProductsChartSlot({ supabase, tenantId, nowIso, month, tryb, className }: CardProps) {
   return loadAnalizyCard('Sprzedaż według produktów', className, async () => {
     const [lines, invoices] = await Promise.all([
       loadProductLines(supabase, tenantId, month),
@@ -135,14 +154,14 @@ export async function ProductsChartSlot({ supabase, tenantId, nowIso, month, cla
         title="Sprzedaż według produktów"
         description={`${PRODUCTS_NOTE} · wybrany miesiąc`}
         data={toCategorySlices(productBreakdown(lines))}
-        empty={productsEmpty(invoices, month)}
+        empty={productsEmpty(invoices, month, tryb)}
         className={className}
       />
     );
   });
 }
 
-export async function ProductsListSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
+export async function ProductsListSlot({ supabase, tenantId, nowIso, month, tryb, className }: CardProps) {
   return loadAnalizyCard('Najlepsze produkty i usługi', className, async () => {
     const [lines, invoices] = await Promise.all([
       loadProductLines(supabase, tenantId, month),
@@ -154,14 +173,14 @@ export async function ProductsListSlot({ supabase, tenantId, nowIso, month, clas
         description={`${PRODUCTS_NOTE} · netto`}
         data={toRankedItems(toCategorySlices(productBreakdown(lines)), (s) =>
           isOtherSlice(s) ? RiMoreLine : RiBox3Line)}
-        empty={productsEmpty(invoices, month)}
+        empty={productsEmpty(invoices, month, tryb)}
         className={className}
       />
     );
   });
 }
 
-export async function RecentSalesSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
+export async function RecentSalesSlot({ supabase, tenantId, nowIso, month, tryb, className }: CardProps) {
   return loadAnalizyCard('Ostatnie faktury', className, async () => {
     const invoices = await loadSalesWindow(supabase, tenantId, nowIso);
     return (
@@ -170,9 +189,9 @@ export async function RecentSalesSlot({ supabase, tenantId, nowIso, month, class
         // Poprawka 21.10.2026: `getSalesInvoices` czyta tylko faktury przyjęte w KSeF —
         // opis musi to mówić (Pulpit pokazuje wszystkie statusy), a mieścić się w linii.
         description="Przyjęte w KSeF w wybranym miesiącu · brutto"
-        data={recentSaleItems(invoices, month)}
+        data={recentSaleItems(invoices, month, tryb !== 'przyklad')}
         direction="in"
-        empty={salesEmpty(invoices)}
+        empty={salesEmpty(invoices, tryb)}
         className={className}
       />
     );
@@ -181,15 +200,14 @@ export async function RecentSalesSlot({ supabase, tenantId, nowIso, month, class
 
 export async function ReceivablesSlot({ supabase, tenantId, nowIso, className }: CardProps) {
   return loadAnalizyCard('Należności', className, async () => {
-    const r = await loadReceivables(supabase, tenantId, nowIso);
-    const skipped = r.foreignCurrencyCount > 0
-      ? ` · pominięto ${r.foreignCurrencyCount} ${plural(r.foreignCurrencyCount, ['fakturę', 'faktury', 'faktur'])} w walucie obcej`
-      : '';
+    // Faktura spoza PLN zatrzymuje kartę (jak przychód) — nie pomijamy jej po cichu.
+    const terms = inflowTerms(await loadUpcomingInflows(supabase, tenantId, nowIso), todayInWarsaw(new Date(nowIso)));
     return (
       <SpendingStreaksCard
         title="Należności"
-        description={`${RECEIVABLES_NOTE}${skipped}`}
-        rows={receivablesRows(r)}
+        description={RECEIVABLES_CAPTION}
+        descriptionTitle={RECEIVABLES_CAPTION_TITLE}
+        rows={receivablesRows(terms)}
         className={className}
       />
     );
@@ -208,7 +226,7 @@ export async function SalesIncomeExpenseSlot({ supabase, tenantId, nowIso, month
   });
 }
 
-export async function RecurringClientsSlot({ supabase, tenantId, nowIso, className }: CardProps) {
+export async function RecurringClientsSlot({ supabase, tenantId, nowIso, tryb, className }: CardProps) {
   return loadAnalizyCard('Stali klienci', className, async () => {
     const invoices = await loadSalesWindow(supabase, tenantId, nowIso);
     const months = monthKeysEnding(currentMonthKey(new Date(nowIso)), RECURRING_MONTHS);
@@ -216,7 +234,7 @@ export async function RecurringClientsSlot({ supabase, tenantId, nowIso, classNa
       <SubscriptionsCard
         title="Stali klienci"
         description="Nabywcy z fakturą w 3 z 4 ostatnich miesięcy · netto"
-        data={toSubscriptionItems(recurringClients(invoices, months, RECURRING_LIST_LIMIT), 'client')}
+        data={toSubscriptionItems(recurringClients(invoices, months, RECURRING_LIST_LIMIT), 'client', tryb !== 'przyklad')}
         empty={ANALIZY_EMPTY.noRecurringClients}
         className={className}
       />
@@ -224,7 +242,7 @@ export async function RecurringClientsSlot({ supabase, tenantId, nowIso, classNa
   });
 }
 
-export async function SalesHeatmapSlot({ supabase, tenantId, nowIso, className }: CardProps) {
+export async function SalesHeatmapSlot({ supabase, tenantId, nowIso, tryb, className }: CardProps) {
   return loadAnalizyCard('Kalendarz sprzedaży', className, async () => {
     const invoices = await loadSalesWindow(supabase, tenantId, nowIso);
     const days = dailyTotals(invoices, (inv) => inv.issueDate, (inv) => inv.net, todayInWarsaw(new Date(nowIso)), HEATMAP_DAYS);
@@ -236,7 +254,7 @@ export async function SalesHeatmapSlot({ supabase, tenantId, nowIso, className }
         description={`Ostatnie ${HEATMAP_DAYS} dni · netto — mocniejszy kolor to więcej`}
         data={days}
         // Siatka Finory zawsze, gdy w oknie jest choć jedna faktura; pusto tylko bez żadnej (D10).
-        empty={invoices.length === 0 ? ANALIZY_EMPTY.noInvoices : null}
+        empty={invoices.length === 0 ? noInvoices(tryb) : null}
         className={className}
       />
     );
@@ -244,12 +262,12 @@ export async function SalesHeatmapSlot({ supabase, tenantId, nowIso, className }
 }
 
 // Poza siatką 1:1 z Finory (decyzja Bartosza 21.10.2026: „na razie wszystko 1:1”) — wrócimy do tego.
-export async function ClientSharesSlot({ supabase, tenantId, nowIso, month, className }: CardProps) {
+export async function ClientSharesSlot({ supabase, tenantId, nowIso, month, tryb, className }: CardProps) {
   return loadAnalizyCard('Udział klientów w przychodach', className, async () => {
     const invoices = await loadSalesWindow(supabase, tenantId, nowIso);
     const shares = clientShares(inMonth(invoices, month));
     return (
-      <AssetAllocationCard data={shares.slices} concentrated={shares.concentrated} empty={salesEmpty(invoices)} className={className} />
+      <AssetAllocationCard data={shares.slices} concentrated={shares.concentrated} empty={salesEmpty(invoices, tryb)} className={className} />
     );
   });
 }
@@ -270,6 +288,7 @@ export async function ClientMoversSlot({
   tenantId,
   nowIso,
   mode,
+  tryb,
   className,
 }: CardProps & { mode: 'gainers' | 'losers' }) {
   return loadAnalizyCard(mode === 'gainers' ? 'Klienci: rośnie' : 'Klienci: spada', className, async () => {
@@ -279,7 +298,7 @@ export async function ClientMoversSlot({
       <MoverListCard
         mode={mode}
         items={mode === 'gainers' ? movers.gainers : movers.losers}
-        empty={invoices.length === 0 ? ANALIZY_EMPTY.noInvoices : mode === 'gainers' ? ANALIZY_EMPTY.noGainers : ANALIZY_EMPTY.noLosers}
+        empty={invoices.length === 0 ? noInvoices(tryb) : mode === 'gainers' ? ANALIZY_EMPTY.noGainers : ANALIZY_EMPTY.noLosers}
         className={className}
       />
     );

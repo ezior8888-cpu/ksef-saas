@@ -31,7 +31,7 @@ const INBOX_LIMIT = 200;
  * brzydka).
  */
 export default async function InboxPage() {
-  const { supabase, tenantId } = await getPageContext();
+  const { supabase, tenantId, user } = await getPageContext();
 
   const { data: invoices, error } = await supabase
     .from('invoices')
@@ -53,7 +53,7 @@ export default async function InboxPage() {
     <div className="ff-page-fill flex flex-col gap-6">
       <h1 className="sr-only">Skrzynka KSeF</h1>
 
-      <InboxStatsCards supabase={supabase} tenantId={tenantId} />
+      <InboxStatsCards supabase={supabase} tenantId={tenantId} user={user} />
 
       {error ? (
         // Błąd w karcie z zakładkami — z ekranu da się przejść do Wydatków.

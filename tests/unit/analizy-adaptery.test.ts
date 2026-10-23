@@ -1,16 +1,16 @@
 import {
-  RiAlarmWarningLine,
   RiBox3Line,
+  RiCalendarLine,
   RiCarLine,
   RiFileEditLine,
   RiFileList3Line,
   RiHourglassLine,
-  RiMoneyDollarCircleLine,
   RiMoreLine,
   RiPercentLine,
   RiPriceTag3Line,
   RiReceiptLine,
   RiRepeatLine,
+  RiTimeLine,
 } from '@remixicon/react';
 import { describe, expect, it } from 'vitest';
 
@@ -307,20 +307,23 @@ describe('wiersze w miejscu „Spending Streaks”', () => {
     });
   });
 
-  it('należności: suma i liczba, po terminie czerwone, najstarsza zaległość w dniach', () => {
-    const rows = receivablesRows({ total: 12345.6, count: 5, overdue: 1230, overdueCount: 1, oldestOverdueDays: 16 });
+  // E11 (D-W): należności to przyszłe terminy (`inflowTerms`) — dawne „Po terminie” (czerwone)
+  // i „Najstarsza zaległość” zniknęły, bo zakładamy zapłatę w terminie.
+  it('należności: trzy przedziały terminów, kwota i liczba faktur, ikony bez czerwieni', () => {
+    const rows = receivablesRows({
+      total: 13_575.6,
+      count: 6,
+      buckets: [
+        { key: 'thisWeek', label: 'x', amount: 12_345.6, count: 5, pct: 91 },
+        { key: 'upTo30', label: 'x', amount: 1230, count: 1, pct: 9 },
+        { key: 'later', label: 'x', amount: 0, count: 0, pct: 0 },
+      ],
+    });
     expect(rows.map((r) => [r.title, r.value, r.icon, r.iconClassName])).toEqual([
       // Separator tysięcy z `toLocaleString('pl-PL')` to twarda spacja (U+00A0).
-      ['Do zapłaty', '12\u00a0345,60 zł · 5 faktur', RiMoneyDollarCircleLine, 'text-foreground'],
-      ['Po terminie', '1230,00 zł · 1 faktura', RiAlarmWarningLine, 'text-destructive'],
-      ['Najstarsza zaległość', '16 dni', RiHourglassLine, 'text-foreground'],
+      ['Ten tydzień', '12\u00a0345,60 zł · 5 faktur', RiCalendarLine, 'text-foreground'],
+      ['Do 30 dni', '1230,00 zł · 1 faktura', RiTimeLine, 'text-foreground'],
+      ['Później', '0,00 zł · 0 faktur', RiHourglassLine, 'text-foreground'],
     ]);
-  });
-
-  it('należności bez zaległości: „Brak zaległości”, po terminie bez czerwieni', () => {
-    const rows = receivablesRows({ total: 500, count: 2, overdue: 0, overdueCount: 0, oldestOverdueDays: null });
-    expect(rows[1]).toMatchObject({ value: '0,00 zł · 0 faktur', iconClassName: 'text-foreground' });
-    expect(rows[2]?.value).toBe('Brak zaległości');
-    expect(receivablesRows({ total: 1, count: 1, overdue: 1, overdueCount: 1, oldestOverdueDays: 1 })[2]?.value).toBe('1 dzień');
   });
 });

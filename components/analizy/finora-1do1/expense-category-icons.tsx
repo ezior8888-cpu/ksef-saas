@@ -41,7 +41,9 @@ const COST_CATEGORY_ICONS = new Map<string, FinoraIcon>(Object.entries({
   wynagrodzenia: RiTeamLine,
   pozostałe: RiMoreLine,
   'pozostałe wydatki': RiMoreLine,
-  'bez kategorii': RiMoreLine
+  'bez kategorii': RiMoreLine,
+  // Faktura zakupu z KSeF bez wydatku (E10) — ikona dokumentu, jak rachunki.
+  'faktury z ksef': RiFileList3Line
 }))
 
 export function costCategoryIcon(label: string | null): FinoraIcon {
