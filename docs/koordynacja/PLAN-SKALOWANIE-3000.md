@@ -151,6 +151,6 @@ zamienia je w jeden skrypt.
 
 | Data | Sesja | PR | Stan |
 |---|---|---|---|
-| 24.10.2026 | Analiza i plan | ten PR | plan gotowy, czeka na akceptację Bartosza |
+| 24.10.2026 | Analiza i plan | #329 | plan gotowy, czeka na akceptację Bartosza |
 
 **Następny krok:** sesja 1 (baner KSeF), po akceptacji planu przez Bartosza.
