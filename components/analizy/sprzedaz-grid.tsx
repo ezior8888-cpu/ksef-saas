@@ -32,7 +32,7 @@ import {
   toSubscriptionItems,
   toTrendData,
 } from './adapters';
-import { AnalizySlot, loadAnalizyCard, type AnalizyCardProps } from './card-slot';
+import { AnalizySiatka, loadAnalizyCard, type AnalizyCardProps, type AnalizyKarta } from './card-slot';
 import CategoryBreakdownChart from './finora-1do1/category-breakdown-chart';
 import CategoryRankedList from './finora-1do1/category-ranked-list';
 import IncomeExpenseSummary from './finora-1do1/income-expense-summary';
@@ -56,8 +56,9 @@ import { pobieramy } from './podpisy';
  * spodem. Karty to kopie z `finora-1do1/`, dane — prawdziwe, przez czyste
  * adaptery (`./adapters`). Faktury jednym odczytem `getSalesInvoices`
  * (§2.4 pkt 2, 4–7), produkty `fetchProductLines` (§2.4 pkt 13), należności
- * — przyszłe terminy z `getInflows` (E11, D-W). Każda karta osobno w `Suspense`
- * + `SectionErrorBoundary` (§2.4 pkt 15).
+ * — przyszłe terminy z `getInflows` (E11, D-W). Każda karta osobno
+ * w `SectionErrorBoundary` z własną kartą błędu (§2.4 pkt 15); strona czeka
+ * na wszystkie naraz (`AnalizySiatka`, bez szkieletów — poprawka 23.10.2026).
  */
 
 type CardProps = AnalizyCardProps & { className?: string };
@@ -305,36 +306,23 @@ export async function ClientMoversSlot({
   });
 }
 
+/**
+ * Siatka `/analizy/sprzedaz`. Dziewięć kart Monthly Analytics Finory w jej kolejności
+ * i rozpiętościach: tytuł karty błędu, klasa siatki, karta.
+ */
+export const SIATKA_SPRZEDAZY: readonly AnalizyKarta[] = [
+  ['Sprzedaż miesiąca', 'md:col-span-4', SalesStatsSlot],
+  ['Trend sprzedaży', 'md:col-span-2 2xl:col-span-3', SalesTrendSlot],
+  ['Sprzedaż według produktów', 'md:max-2xl:col-span-2', ProductsChartSlot],
+  ['Najlepsze produkty i usługi', 'md:col-span-2', ProductsListSlot],
+  ['Ostatnie faktury', 'md:col-span-2', RecentSalesSlot],
+  ['Należności', 'md:col-span-2', ReceivablesSlot],
+  ['Przychody a koszty', 'md:col-span-2', SalesIncomeExpenseSlot],
+  ['Stali klienci', 'md:col-span-2', RecurringClientsSlot],
+  ['Kalendarz sprzedaży', 'md:col-span-2', SalesHeatmapSlot],
+];
+
+/** Wszystkie karty naraz, bez szkieletów (`AnalizySiatka`, poprawka Bartosza 23.10.2026). */
 export function SprzedazGrid(props: AnalizyCardProps) {
-  return (
-    <div className="grid gap-6 md:grid-cols-4">
-      <AnalizySlot title="Sprzedaż miesiąca" variant="stats" className="md:col-span-4">
-        <SalesStatsSlot {...props} className="md:col-span-4" />
-      </AnalizySlot>
-      <AnalizySlot title="Trend sprzedaży" variant="bar" className="md:col-span-2 2xl:col-span-3">
-        <SalesTrendSlot {...props} className="md:col-span-2 2xl:col-span-3" />
-      </AnalizySlot>
-      <AnalizySlot title="Sprzedaż według produktów" variant="pie" className="md:max-2xl:col-span-2">
-        <ProductsChartSlot {...props} className="md:max-2xl:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="Najlepsze produkty i usługi" variant="list" className="md:col-span-2">
-        <ProductsListSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="Ostatnie faktury" variant="feed" className="md:col-span-2">
-        <RecentSalesSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="Należności" variant="rows" className="md:col-span-2">
-        <ReceivablesSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="Przychody a koszty" variant="rows" className="md:col-span-2">
-        <SalesIncomeExpenseSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="Stali klienci" variant="list" className="md:col-span-2">
-        <RecurringClientsSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="Kalendarz sprzedaży" variant="heatmap" className="md:col-span-2">
-        <SalesHeatmapSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-    </div>
-  );
+  return <AnalizySiatka {...props} karty={SIATKA_SPRZEDAZY} />;
 }

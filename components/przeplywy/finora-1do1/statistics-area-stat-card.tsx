@@ -16,7 +16,8 @@ import { cn } from '@/lib/utils'
 
 /**
  * PLAN-PRAWDZIWE-DANE E6: kwota, plakietka, podpis plakietki i krzywa
- * narastająca dzień po dniu z propsów (`adaptery.ts`); wygląd bez zmian.
+ * z propsów (`adaptery.ts`: 8 punktów — sumy 8 ostatnich tygodni, dymek
+ * z zakresem tygodnia); wygląd bez zmian.
  * Brak podstawy procentu → „—”, brak wpływów → pusty stan w miejscu podpisu.
  */
 

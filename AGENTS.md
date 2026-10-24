@@ -507,8 +507,12 @@ jako problemu.
 - **`proxy.ts` przepuszcza tylko wymienione rozszerzenia.** Czego nie ma we
   wzorcu, leci przez bramkę auth i kończy przekierowaniem na `/login`.
   Dla wideo objawia się to wyłącznie cichym błędem dekodera.
-- **Lokalny `.env.local` celuje w INNĄ bazę** (`$LOCAL_SUPABASE_REF.supabase.co`)
-  niż produkcja. To celowe. Nie podmieniaj bez uzgodnienia.
+- **Lokalny `.env.local` celuje w lokalną bazę** (`http://127.0.0.1:54321`),
+  nie w produkcję. To celowe. Od 23.10.2026 to Supabase w Dockerze (Colima)
+  z migracjami z repo: `pnpm db:local` stawia ją, wgrywa brakujące migracje,
+  zakłada konto `dev@faktway.test` (hasło w `scripts/dev/baza-lokalna.sh`)
+  i ustawia `.env.local` — także w worktree. Dawny projekt Supabase Cloud
+  (`$LOCAL_SUPABASE_REF`) wygasł; nie wracaj do niego i nie celuj devem w db-1.
 - **Build padający z `exit code 137` to zabójca OOM, nie błąd kodu.** `pnpm build`
   na `app-1` potrzebuje więcej pamięci, niż maszyna ma fizycznie: pułap sterty
   w `Dockerfile` to 3072 MB, a realnie wolne jest ~2.2 GB (sam `dockerd` bierze

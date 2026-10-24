@@ -1008,6 +1008,22 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
   flex-grow: 1;
 }
 
+/* Zakładki w karcie (`components/lists/section-tabs.tsx`): dotknięta zakładka
+ * przejmuje podkreślenie od razu, zanim jej strona przyjdzie z serwera.
+ * Znacznik `[data-link-pending]` wstawia `SectionTabPending` tylko na czas
+ * oczekiwania. Zwykły CSS, nie warstwa: wygrywa z klasami Tailwinda zakładki. */
+.ff-section-tabs:has([data-link-pending]) > a:not(:has([data-link-pending]))::after {
+  opacity: 0;
+}
+
+.ff-section-tabs > a:has([data-link-pending]) {
+  color: var(--foreground);
+}
+
+.ff-section-tabs > a:has([data-link-pending])::after {
+  opacity: 1;
+}
+
 
 /* ─── Telefon: bezpieczne obszary i wysokości szkieletu ─────────────────────
  * `app/layout.tsx` ustawia `viewportFit: 'cover'` i `black-translucent`, czyli
@@ -1088,6 +1104,32 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
  * więc reguła nie robi nic na komputerze. */
 .ff-shell-scroll {
   padding-bottom: calc(var(--ff-bottom-nav-h) + var(--ff-safe-b));
+  /* Dojście do krawędzi listy nie przewija dalej dokumentu („gumka” iOS
+   * ciągnęła wtedy cały ekran razem z paskiem górnym). */
+  overscroll-behavior-y: contain;
+}
+
+/* ─── Pasek górny stoi w miejscu (zgłoszenie Bartosza 23.10.2026) ────────────
+ * W panelu przewija się WYŁĄCZNIE `.ff-shell-scroll`; dokument ma się nie
+ * przewijać wcale. A przewijał się: `<body>` ma `min-h-screen` (100vh), a na
+ * telefonie 100vh to wysokość okna BEZ pasków przeglądarki, czyli więcej niż
+ * widać. Szkielet (`100dvh`) był niższy od `<body>`, więc dokument dawał się
+ * przesunąć o wysokość paska Safari. Przy każdej zmianie zakładki Next woła
+ * `scrollIntoView()` na nowej stronie — to przewija też dokument, aż góra
+ * strony stanie przy górnej krawędzi ekranu, i pasek górny wyjeżdżał poza
+ * ekran. To samo robiła „gumka” iOS przy przeciąganiu za pasek.
+ *
+ * Tylko na ekranie: wydruk (podgląd faktury ma style `print:`) zostaje bez
+ * zmian. Klasa `ff-app-shell` stoi wyłącznie na korzeniu `(dashboard)/layout`,
+ * więc landing i strony logowania przewijają się po staremu. */
+@media screen {
+  html:has(.ff-app-shell),
+  html:has(.ff-app-shell) body {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
 }
 
 /* ─── Przyklejone paski akcji ────────────────────────────────────────────────
@@ -1271,6 +1313,22 @@ html:not(.dark) .ff-dashboard tbody tr:not([data-slot])[class*='hover:bg-']:hove
 
 @media (prefers-reduced-motion: reduce) {
   .ff-route-template {
+    animation: none;
+  }
+}
+
+/* Wejście treści Pulpitu i Przepływów (poprawka Bartosza 23.10.2026:
+ * „przejścia pomiędzy zakładkami nie są już takie clean”). Strona czeka na
+ * dane wszystkich kart i pojawia się RAZ, w całości — ten sam ruch co szablon
+ * trasy, bo szablon animuje się już przy kliknięciu (na pustym `loading.tsx`),
+ * a treść przychodzi chwilę później. `backwards` z tego samego powodu co
+ * wyżej: po animacji żadnego `transform`, więc żadnego bloku zawierającego. */
+.ff-route-content {
+  animation: ff-route-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-route-content {
     animation: none;
   }
 }
@@ -1539,7 +1597,9 @@ html:not(.dark) .ff-dashboard tbody tr:not([data-slot])[class*='hover:bg-']:hove
 }
 
 /* Italic Fraunces — emphasis w hero/headlines (np. "Automatyzacja").
- * Global utility, nie scoped — używane w landingu, vs, blog. */
+ * `--font-fraunces` ustawia tylko `app/(marketing)/layout.tsx` (od 24.10.2026,
+ * żeby panel nie pobierał fontu) — poza tą grupą klasa spada na Georgię.
+ * Pilnuje: tests/unit/fraunces-tylko-marketing.test.ts. */
 .font-editorial {
   font-family: var(--font-fraunces), 'EB Garamond', Georgia, serif;
   font-feature-settings: 'ss01' on;

@@ -1,12 +1,11 @@
-import { cache, Suspense, type ReactNode } from 'react';
+import { cache, type ReactNode } from 'react';
 import { RiBillLine, RiMoneyDollarCircleLine, RiReceiptLine } from '@remixicon/react';
 
 import { ODSWIEZ, notaKosztowKsef } from '@/components/dashboard/finora/adaptery';
 import { PULPIT_GENERIC_ERROR, pulpitErrorMessage } from '@/components/dashboard/pulpit/pulpit-grid';
 import { SectionErrorBoundary } from '@/components/dashboard/section-error-boundary';
 import { PrzeplywyCardError } from '@/components/przeplywy/przeplywy-grid';
-import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Card } from '@/components/ui/card';
 import { getCashFlowData } from '@/lib/dashboard/cash-flow';
 import {
   buildCashFlowChart,
@@ -30,6 +29,8 @@ import { cn } from '@/lib/utils';
 import {
   aktywnoscProps,
   kosztyMiesiacaProps,
+  krzywaKosztow,
+  krzywaWplywow,
   limitProps,
   podatekProps,
   tabelaProps,
@@ -48,10 +49,16 @@ import UpcomingBillsCard from './widget-upcoming-bills';
 
 /**
  * Sloty Przepływów (PLAN-PRAWDZIWE-DANE §5.6, §6.2, E6): każda karta Finory
- * to osobny asynchroniczny Server Component w `<Suspense>`
+ * to osobny asynchroniczny loader z własną kartą błędu
  * i `SectionErrorBoundary`. Strażnik, który rzuci (faktura w EUR, przyjęta
  * faktura bez środowiska), zabiera JEDNĄ kartę z treścią wyjątku i wyjściem
  * (`PrzeplywyCardError`: „napisz do nas”), reszta Przepływów działa.
+ *
+ * Ładowanie jak przed E6 (poprawka Bartosza 23.10.2026: „przejścia nie są już
+ * takie clean”): bez `Suspense` i szkieletu w każdej karcie. Strona pobiera
+ * dane wszystkich kart RÓWNOLEGLE (`Promise.all` na slotach, które nigdy nie
+ * odrzucają) i renderuje się raz, w całości; wejście treści animuje
+ * `ff-route-content`, a trasa ma własny, pusty `loading.tsx`.
  *
  * Ładowarki jak w dawnej siatce (`components/przeplywy/przeplywy-grid.tsx`):
  * wpływy i koszty OSOBNO (strażnik jednego źródła nie zabiera kafla
@@ -124,55 +131,18 @@ async function zaladujKarte(title: string, className: string | undefined, render
   }
 }
 
-// ─── Szkielety w kształcie kart Finory (bez skoku układu) ─────────────────
-
-type Wariant = 'wykres' | 'pierscien' | 'kafel' | 'lista' | 'tabela';
-
-function Szkielet({ wariant, className }: { wariant: Wariant; className?: string }) {
-  if (wariant === 'tabela') {
-    return (
-      <Card className={cn('py-0 shadow-none', className)} aria-busy="true">
-        <CardContent className="flex flex-col gap-4 p-6">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} className="h-9 w-full" />
-          ))}
-        </CardContent>
-      </Card>
-    );
-  }
-  if (wariant === 'lista') {
-    return (
-      <Card className={className} aria-busy="true">
-        <CardContent className="flex flex-1 flex-col gap-4">
-          <Skeleton className="h-5 w-40" />
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex items-center gap-3">
-              <Skeleton className="size-9 shrink-0 rounded-full" />
-              <Skeleton className="h-4 flex-1" />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    );
-  }
-  return (
-    <Card className={className} aria-busy="true">
-      <CardContent className="flex flex-col gap-4">
-        <Skeleton className="h-5 w-32" />
-        {wariant === 'wykres' ? <Skeleton className="h-65 w-full" /> : null}
-        {wariant === 'pierscien' ? <Skeleton className="mx-auto size-62 rounded-full" /> : null}
-        {wariant === 'kafel' ? <Skeleton className="h-26.5 w-full" /> : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-function Slot({ title, wariant, className, children }: { title: string; wariant: Wariant; className?: string; children: ReactNode }) {
+/**
+ * Karta w granicy błędu renderu (komponent kliencki karty). Dane są już
+ * pobrane, a wyjątek loadera to karta błędu — slot nigdy nie odrzuca, więc
+ * `Promise.all` strony działa jak `Promise.allSettled`.
+ */
+async function slot(title: string, className: string | undefined, karta: () => Promise<ReactNode>) {
+  const tresc = await zaladujKarte(title, className, karta);
   return (
     <SectionErrorBoundary
       fallback={<PrzeplywyCardError title={title} message="Nie udało się wyświetlić karty." className={className} />}
     >
-      <Suspense fallback={<Szkielet wariant={wariant} className={className} />}>{children}</Suspense>
+      {tresc}
     </SectionErrorBoundary>
   );
 }
@@ -257,12 +227,13 @@ const TYTUL_WPLYWOW = 'Wpływy w tym miesiącu (wg terminów)';
 async function WplywyKarta({ supabase, tenantId, nowIso, tryb, className }: SlotProps) {
   return zaladujKarte(TYTUL_WPLYWOW, className, async () => {
     const inflows = await loadInflows(supabase, tenantId, nowIso, 'recent');
-    const flow = monthFlows(inflows, [], todayInWarsaw(new Date(nowIso))).inflow;
+    const today = todayInWarsaw(new Date(nowIso));
+    const flow = monthFlows(inflows, [], today).inflow;
     return (
       <StatisticsAreaStatCard
         chartKey="income"
         title={TYTUL_WPLYWOW}
-        {...wplywyMiesiacaProps(flow, tryb)}
+        {...wplywyMiesiacaProps(flow, krzywaWplywow(inflows, today), tryb)}
         color="var(--chart-4)"
         badgeClassName="bg-chart-4/10 text-chart-4"
         className={className}
@@ -280,7 +251,7 @@ async function KosztyKarta({ supabase, tenantId, nowIso, tryb, kosztyKsefOd, cla
       <StatisticsAreaStatCard
         chartKey="expense"
         title="Koszty w tym miesiącu (brutto)"
-        {...kosztyMiesiacaProps(flow, tryb, notaKosztowKsef(tryb, kosztyKsefOd, today.slice(0, 7)))}
+        {...kosztyMiesiacaProps(flow, krzywaKosztow(costs, today), tryb, notaKosztowKsef(tryb, kosztyKsefOd, today.slice(0, 7)))}
         color="var(--chart-4)"
         badgeClassName="bg-chart-4/10 text-chart-4"
         className={className}
@@ -358,68 +329,36 @@ async function OperacjeKarta({ supabase, tenantId, nowIso, tryb, className }: Sl
   });
 }
 
-// ─── Sloty (karta + Suspense + granica błędu) ─────────────────────────────
+// ─── Sloty (karta + granica błędu; bez Suspense — strona czeka na wszystkie) ─
 
 export function WykresSlot(props: SlotProps) {
-  return (
-    <Slot title="Przepływy pieniężne" wariant="wykres" className={props.className}>
-      <WykresKarta {...props} />
-    </Slot>
-  );
+  return slot('Przepływy pieniężne', props.className, () => WykresKarta(props));
 }
 
 export function PierscienSlot(props: SlotProps) {
-  return (
-    <Slot title="Odłóż na podatek" wariant="pierscien" className={props.className}>
-      <PierscienKarta {...props} />
-    </Slot>
-  );
+  return slot('Odłóż na podatek', props.className, () => PierscienKarta(props));
 }
 
 export function WplywySlot(props: SlotProps) {
-  return (
-    <Slot title={TYTUL_WPLYWOW} wariant="kafel" className={props.className}>
-      <WplywyKarta {...props} />
-    </Slot>
-  );
+  return slot(TYTUL_WPLYWOW, props.className, () => WplywyKarta(props));
 }
 
 export function KosztySlot(props: SlotProps) {
-  return (
-    <Slot title="Koszty w tym miesiącu (brutto)" wariant="kafel" className={props.className}>
-      <KosztyKarta {...props} />
-    </Slot>
-  );
+  return slot('Koszty w tym miesiącu (brutto)', props.className, () => KosztyKarta(props));
 }
 
 export function ZrodlaSlot(props: SlotProps) {
-  return (
-    <Slot title="Największe źródła przepływów" wariant="lista" className={props.className}>
-      <ZrodlaKarta {...props} />
-    </Slot>
-  );
+  return slot('Największe źródła przepływów', props.className, () => ZrodlaKarta(props));
 }
 
 export function SpodziewaneSlot(props: SlotProps) {
-  return (
-    <Slot title="Spodziewane wpływy" wariant="lista" className={props.className}>
-      <SpodziewaneKarta {...props} />
-    </Slot>
-  );
+  return slot('Spodziewane wpływy', props.className, () => SpodziewaneKarta(props));
 }
 
 export function AktywnoscSlot(props: SlotProps) {
-  return (
-    <Slot title="Ostatnia aktywność" wariant="lista" className={props.className}>
-      <AktywnoscKarta {...props} />
-    </Slot>
-  );
+  return slot('Ostatnia aktywność', props.className, () => AktywnoscKarta(props));
 }
 
 export function OperacjeSlot(props: SlotProps) {
-  return (
-    <Slot title="Wszystkie operacje" wariant="tabela" className={props.className}>
-      <OperacjeKarta {...props} />
-    </Slot>
-  );
+  return slot('Wszystkie operacje', props.className, () => OperacjeKarta(props));
 }

@@ -5,9 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * przykładowymi zasila TE SAME loadery `lib/dashboard/*` co prawdziwe karty
  * Pulpitu i Przepływów (§6.1, §6.2). Każdy loader ma dać pełny, niepusty
  * wynik („pełna okazałość” przed weryfikacją KSeF), a liczby mają być
- * spójne jak w prawdziwej firmie usługowej: przychód ~25–45 tys. zł netto
- * miesięcznie, koszty ~30–40% przychodu, wpływy według terminów płatności
- * (E11, D-W — bez oznaczonych wpłat), daty względem `now` (strefa Warszawa).
+ * spójne jak w prawdziwej firmie usługowej: zysk < przychód, koszty <
+ * przychód, wpływy według terminów płatności (E11, D-W — bez oznaczonych
+ * wpłat), daty względem `now` (strefa Warszawa). Od poprawki Bartosza
+ * 23.10.2026 miesiące mają kształt wykresów Finory (zob. nagłówek
+ * `lib/demo/dane-przykladowe.ts`) — dawne widełki 25–45 tys. zł i 30–40%
+ * kosztów zastąpił kształt (`finora-wyglad-ladowanie.test.tsx`).
  *
  * Kształt propsów kart (adaptery) dochodzi w E5/E6 — tu loadery i spójność.
  */
@@ -144,15 +147,17 @@ describe('T4 Pulpit: loadery kart na atrapie dają pełne wyniki', () => {
     expect(series.netSeries.every((v) => v > 0)).toBe(true);
 
     const limit = await getVatLimit(sb, T, NOW);
-    expect(limit.startedOn).toBe('2023-10-01');
+    // Poprawka 23.10.2026: historia od stycznia sprzed 4 lat (widok „Rocznie”), działalność od 5 lat.
+    expect(limit.startedOn).toBe('2021-10-01');
     expect(limit.used).toBeGreaterThan(0);
     expect(limit.limit).not.toBeNull();
     expect(limit.limit!.pct).toBeGreaterThan(30);
     expect(limit.limit!.pct).toBeLessThan(100);
   });
 
-  it('data rozpoczęcia działalności: 3 lata wstecz od bieżącego miesiąca', async () => {
-    expect(await readTenantBusinessStart(demo(), T)).toBe('2023-10-01');
+  // Poprawka 23.10.2026: 5 lat (dawniej 3) — przed najstarszą fakturą, bo historia sięga stycznia sprzed 4 lat.
+  it('data rozpoczęcia działalności: 5 lat wstecz od bieżącego miesiąca', async () => {
+    expect(await readTenantBusinessStart(demo(), T)).toBe('2021-10-01');
   });
 
   // E11 (D-W): Należności to przyszłe terminy (`inflowTerms`), nie faktury po terminie.
@@ -196,7 +201,9 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
     expect(chart.week.some((b) => b.outflow > 0)).toBe(true);
     expect(chart.month).toHaveLength(7);
     expect(chart.month.every((b) => b.inflow > 0 && b.outflow > 0 && b.inflowCount > 0)).toBe(true);
-    expect(chart.year.length).toBeGreaterThanOrEqual(2);
+    // Poprawka 23.10.2026: pięć lat jak „Rocznie” w Finorze (dawniej co najmniej dwa).
+    expect(chart.year).toHaveLength(5);
+    expect(chart.year.every((b) => b.inflow > 0 && b.outflow > 0)).toBe(true);
   });
 
   it('kafle miesiąca: „Wpłynęło” ma krzywą z kilku dni, ostatni punkt = kwota kafla; koszty miesiąca', async () => {
@@ -262,7 +269,16 @@ describe('T4 Przepływy: loadery kart na atrapie dają pełne wyniki', () => {
 // ─── T5: spójność demo ───────────────────────────────────────────────────────
 
 describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
-  it('12 pełnych miesięcy: przychód 25–45 tys. zł netto, koszty 30–40% przychodu, zysk < przychód', async () => {
+  /**
+   * Dawniej: przychód 25–45 tys. zł netto i koszty 30–40% w każdym miesiącu.
+   * Poprawka Bartosza 23.10.2026 („przywróć stare wykresy”): miesiące mają
+   * kształt Finory (słupki 20–50 tys. zł brutto, linia VAT od 11 tys.), więc
+   * widełki zastępuje sama spójność — kształt pilnuje `finora-wyglad-ladowanie`.
+   * Zrzuty 24.10.2026: koszty 55–90% wpływów jak „Przepływy” Finory, więc
+   * sufit kosztów wobec przychodu netto świadomie 0,9 (dawniej 0,7) — zysk
+   * zostaje w każdym miesiącu.
+   */
+  it('12 pełnych miesięcy: zysk > 0, koszty < przychód netto, sprzedaż do 50 tys. zł brutto', async () => {
     const sb = demo();
     const series = await getSalesSeries(sb, T, NOW, { months: 13, withPrevYear: false });
     const keys = series.months.map((m) => m.key);
@@ -271,13 +287,12 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
       await getCostsWithKsefPurchases(sb, T, { from: `${keys[0]}-01`, toExclusive: nextMonthStart(todayInWarsaw(NOW)) }),
       keys,
     );
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 13; i++) {
       const net = series.netSeries[i]!;
-      const ratio = costs[i]! / net;
-      expect(net, keys[i]).toBeGreaterThanOrEqual(25_000);
-      expect(net, keys[i]).toBeLessThanOrEqual(45_000);
-      expect(ratio, keys[i]).toBeGreaterThanOrEqual(0.3);
-      expect(ratio, keys[i]).toBeLessThanOrEqual(0.4);
+      expect(net, keys[i]).toBeGreaterThan(0);
+      expect(costs[i]!, keys[i]).toBeGreaterThan(0);
+      expect(costs[i]! / net, keys[i]).toBeLessThanOrEqual(0.9 + 1e-9);
+      expect(series.currentSeries[i]!, keys[i]).toBeLessThanOrEqual(50_000);
     }
   });
 
@@ -298,12 +313,13 @@ describe('T5 spójność: firma usługowa, liczby i daty względem now', () => {
     }
   });
 
-  it('24 miesiące historii: najstarsza faktura 23 miesiące przed bieżącym, wydatki też', async () => {
+  // Poprawka 23.10.2026: dawniej 24 miesiące; widok „Rocznie” ma pięć lat jak w Finorze.
+  it('historia od stycznia sprzed 4 lat: najstarsza faktura i wydatek w styczniu roku Y−4', async () => {
     const sb = demo();
-    const month = todayInWarsaw(NOW).slice(0, 7);
+    const year = Number(todayInWarsaw(NOW).slice(0, 4));
     const oldest = (rows: Row[]) => rows.map((r) => String(r.issue_date)).sort()[0]!.slice(0, 7);
-    expect(oldest(await wszystkie(sb, 'invoices'))).toBe(shiftMonthKey(month, -23));
-    expect(oldest(await wszystkie(sb, 'expenses'))).toBe(shiftMonthKey(month, -23));
+    expect(oldest(await wszystkie(sb, 'invoices'))).toBe(`${year - 4}-01`);
+    expect(oldest(await wszystkie(sb, 'expenses'))).toBe(`${year - 4}-01`);
   });
 
   it('nazwy z „Przykład”, NIP-y fikcyjne (same zera na początku)', async () => {

@@ -192,8 +192,14 @@ describe('jedna faktura: wpływ, który był, albo spodziewany — nie oba', () 
 
   it('pusty kafel, gdy jedyna faktura ma termin dziś: nie twierdzi, że faktur z terminem nie ma', () => {
     const tylkoDzis = entries.filter((e) => e.id === 'dzis');
-    const dane = przeplywyAdaptery.wplywyMiesiacaProps(movements.monthFlows(tylkoDzis, [], TODAY).inflow, 'prawdziwe');
+    const dane = przeplywyAdaptery.wplywyMiesiacaProps(
+      movements.monthFlows(tylkoDzis, [], TODAY).inflow,
+      przeplywyAdaptery.krzywaWplywow(tylkoDzis, TODAY),
+      'prawdziwe',
+    );
     expect(dane.amount).toBe('—');
+    // Krzywa 8 tygodni (zrzuty 24.10.2026) też bez terminu dziś — to jeszcze nie wpływ.
+    expect(dane.chartData.every((p) => p.value === 0)).toBe(true);
     expect(`${dane.comparison} ${dane.amountTitle}`).not.toMatch(/brak faktur/i);
     expect(dane.comparison).toBe('Brak wpływów wg terminów');
     expect(dane.amountTitle).toContain('Spodziewanych wpływach');

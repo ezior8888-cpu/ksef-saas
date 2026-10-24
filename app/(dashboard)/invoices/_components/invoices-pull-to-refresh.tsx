@@ -1,5 +1,6 @@
 'use client';
 
+import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { InvoiceList } from '@/components/invoices/invoice-list';
@@ -33,9 +34,12 @@ export function InvoicesPullToRefresh({
   today?: string;
 }) {
   const router = useRouter();
+  // `router.refresh()` nie zwraca obietnicy; przejście mówi, kiedy nowy
+  // snapshot z serwera już stoi na ekranie.
+  const [refreshing, startRefresh] = useTransition();
 
   return (
-    <PullToRefresh onRefresh={async () => router.refresh()}>
+    <PullToRefresh refreshing={refreshing} onRefresh={() => startRefresh(() => router.refresh())}>
       <InvoiceList
         tenantId={tenantId}
         initialInvoices={initialInvoices}

@@ -38,28 +38,28 @@ function stripComments(source: string): string {
 const read = (p: string) => stripComments(readFileSync(p, 'utf8'));
 
 const FORBIDDEN: Array<[file: string, phrases: string[]]> = [
-  ['app/(landing)/_components/hero.tsx', ['Ocena 4,8', 'clientLogos', 'Logo klienta']],
-  ['app/(landing)/page.tsx', ['<Testimonial />']],
-  ['app/(landing)/about/page.tsx', ['<Metrics />', '<TeamGrid />', 'linkedin.com']],
-  ['app/(landing)/_components/contact.tsx', ['+48 22 123 45 67', 'Piękna 15', 'Bez botów', 'onSubmit={(e) => e.preventDefault()}']],
-  ['app/(landing)/_components/integrations.tsx', ['z banku, poczty i sklepu', 'Logo integracji']],
+  ['app/(marketing)/about/page.tsx', ['<Metrics />', '<TeamGrid />', 'linkedin.com']],
+  // Strona główna od 23.10.2026 (app/(home)): te same zakazy, co na
+  // poprzedniej (Zova). Treść pilnuje też tests/unit/strona-glowna.test.tsx.
+  ['app/(home)/page.tsx', ['Testimonial', 'clientLogos']],
+  ['app/(home)/_components/hero.tsx', ['Ocena 4,8', 'Logo klienta', 'asset.']],
+  ['app/(home)/_components/sections.tsx', ['dziesięć lat', 'i księgujemy', 'z banku, poczty i sklepu', 'bez podawania karty', '+48 22 123 45 67']],
+  ['app/(home)/_components/flo-section.tsx', ['sam pilnuje terminów i przepisów']],
   ['lib/jobs/runners/email-sequence.ts', ['Bez karty kredytowej', '[screenshot OCR]', 'beta-test', 'Fakturownią', 'KSeF SaaS', 'Już teraz się zwróciła']],
   ['content/help/okres-probny-trial.mdx', ['Bez karty na starcie', 'stan ograniczony']],
-  ['components/marketing/landing-calculator-emerald.tsx', ['pomiarów beta-testerów']],
   ['components/marketing/savings-calculator-preview.tsx', ['pomiarów beta-testerów']],
+  // 23.10.2026: kalkulator liczył abonament po 49 zł i doliczał różnicę do
+  // założonej ceny konkurencji (79 zł) jako „Przewaga rynkowa: Wysoka”;
+  // strona kalkulatora miała kafle „80% mniej czasu” i „11 dni DSO”.
+  ['components/marketing/savings-calculator-preview.tsx', ['49 * 12', '79 * 12', 'competitorAvg', 'Przewaga rynkowa']],
+  ['app/(marketing)/kalkulator-oszczednosci/page.tsx', ["'80%'", "'11 dni'", 'z Wkurzaczem']],
   // Rewizja 15.10.2026: „zrzuty produktu” z szablonu (panel inwestycyjny
   // „Zova AI” z Apple/Google/Meta), znak Zova AI jako nasze logo, zdjęcia
   // obcych osób jako nasz zespół i założyciel, obietnice „10 lat”.
-  ['app/(landing)/_components/why-us.tsx', ['asset.whyUs', 'dziesięć lat', 'zostają z nami', 'sam pilnuje terminów i przepisów']],
-  ['app/(landing)/_components/process.tsx', ['asset.process']],
-  ['app/(landing)/_components/hero.tsx', ['asset.hero.dashboard']],
-  ['app/(landing)/about/page.tsx', ['asset.about.gallery', 'asset.about.founder', 'asset.hero.dashboard', 'bez podawania karty']],
-  ['app/(landing)/_assets.ts', ['licencja darmowa', 'logo: `${IMG}/oKmGzYlWFu13ruJRasum68wrh5Y.png`']],
+  ['app/(marketing)/about/page.tsx', ['asset.about.gallery', 'asset.about.founder', 'asset.hero.dashboard', 'bez podawania karty']],
   // Ekrany logowania od planu Finora (E10b): auth-page-shell usunięty, znak
   // marki rysuje components/auth/finora/auth-logo.tsx.
   ['components/auth/finora/auth-logo.tsx', ['oKmGzYlWFu13ruJRasum68wrh5Y']],
-  ['app/(landing)/_components/faq.tsx', ['dziesięć lat']],
-  ['app/(landing)/_components/features-strip.tsx', ['i księgujemy']],
   ['app/(dashboard)/settings/billing/_components/plan-cards.tsx', ['PWA mobilna']],
   ['app/layout.tsx', ["title: 'KSeF SaaS'", "applicationName: 'KSeF SaaS'"]],
   ['content/blog/ile-mikrofirma-traci-na-recznym-fakturowaniu.mdx', ['ankiety wśród', 'przeprowadziliśmy']],
@@ -108,8 +108,14 @@ describe('marketing bez fikcyjnych dowodów i obietnic', () => {
     },
   );
 
-  it('formularz kontaktowy przekazuje wiadomość dalej, a nie ją gubi', () => {
-    expect(read('app/(landing)/_components/contact.tsx')).toContain('window.location.href = composeMail(');
+  // Formularz kontaktowy ze strony głównej Zova (composeMail) zniknął razem
+  // z nią 23.10.2026; kontakt prowadzi na /kontakt (adres e-mail, bez formularza).
+  it('stopka wszystkich stron prowadzi do kontaktu na /kontakt', () => {
+    expect(read('components/site/site-footer.tsx')).toContain("href: '/kontakt'");
+  });
+
+  it('kalkulator liczy abonament z cennika', () => {
+    expect(read('components/marketing/savings-calculator-preview.tsx')).toContain('MONTHLY_PRICE_GROSS_GROSZE');
   });
 });
 

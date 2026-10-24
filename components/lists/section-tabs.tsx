@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { SectionTabPending } from '@/components/lists/section-tab-pending';
 import { cn } from '@/lib/utils';
 
 /** Zakładka ekranu z listą — osobna strona z własnym adresem. */
@@ -22,6 +23,14 @@ export interface SectionTab<T extends string = string> {
  * Na telefonie mniejsze wcięcia, żeby trzy zakładki zmieściły się na 375 px.
  *
  * Komponent serwerowy (bez stanu): aktywną zakładkę podaje strona.
+ *
+ * PŁYNNOŚĆ NA TELEFONIE (zgłoszenie Bartosza 23.10.2026). Linki mają pełny
+ * prefetch (`prefetch`), bo domyślny dla stron dynamicznych pobiera tylko
+ * szkielet: przejście z „Wystawione” na „Cykliczne” czekało wtedy na serwer
+ * z podkreśleniem w starym miejscu, a „Po terminie” (inny segment) zamieniało
+ * całą stronę — z kaflami i tym rzędem — na ogólny szkielet. Gdy strona
+ * jeszcze nie przyszła, `SectionTabPending` przenosi podkreślenie na dotkniętą
+ * zakładkę od razu (`.ff-section-tabs` w `globals.css`).
  */
 export function SectionTabs<T extends string>({
   label,
@@ -34,13 +43,14 @@ export function SectionTabs<T extends string>({
   active: T;
 }) {
   return (
-    <nav aria-label={label} className="flex h-11 w-full shrink-0 items-start border-b px-1 pt-[3px] sm:px-4">
+    <nav aria-label={label} className="ff-section-tabs flex h-11 w-full shrink-0 items-start border-b px-1 pt-[3px] sm:px-4">
       {tabs.map((tab) => {
         const current = tab.value === active;
         return (
           <Link
             key={tab.value}
             href={tab.href}
+            prefetch
             aria-current={current ? 'page' : undefined}
             className={cn(
               'relative inline-flex h-[calc(100%-1px)] items-center justify-center px-3 text-sm font-medium whitespace-nowrap transition-all outline-none sm:px-4',
@@ -52,6 +62,7 @@ export function SectionTabs<T extends string>({
             )}
           >
             {tab.label}
+            <SectionTabPending />
           </Link>
         );
       })}

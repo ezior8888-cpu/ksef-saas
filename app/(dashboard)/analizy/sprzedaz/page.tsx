@@ -34,10 +34,12 @@ export default async function AnalizaSprzedazyPage({
 
   return (
     // Ciemny motyw: w naszym `.dark` `--muted` == `--card`, więc Finorowe
-    // `bg-muted` (wiersze, kółka ikon, tor paska, puste pola kalendarza,
-    // szkielety) znikałyby na karcie. Na tej stronie `--muted` dostaje kolor
-    // wnęki (`--background`, jak `--ff-surface-inset`); znaczniki Finory bez zmian.
-    <div className="space-y-6 dark:[--muted:var(--background)]">
+    // `bg-muted` (wiersze, kółka ikon, tor paska, puste pola kalendarza)
+    // znikałyby na karcie. Na tej stronie `--muted` dostaje kolor wnęki
+    // (`--background`, jak `--ff-surface-inset`); znaczniki Finory bez zmian.
+    // Ładowanie jak Pulpit (poprawka Bartosza 23.10.2026): strona czeka na
+    // wszystkie karty i wchodzi RAZ, w całości, z animacją `ff-route-content`.
+    <div className="ff-route-content space-y-6 dark:[--muted:var(--background)]">
       <AnalizyHeader
         mode="sprzedaz"
         demo={demo}

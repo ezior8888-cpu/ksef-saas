@@ -18,7 +18,7 @@ import {
   toSubscriptionItems,
   toTrendData,
 } from './adapters';
-import { AnalizySlot, loadAnalizyCard, type AnalizyCardProps } from './card-slot';
+import { AnalizySiatka, loadAnalizyCard, type AnalizyCardProps, type AnalizyKarta } from './card-slot';
 import CategoryBreakdownChart from './finora-1do1/category-breakdown-chart';
 import CategoryRankedList from './finora-1do1/category-ranked-list';
 import { costCategoryIcon } from './finora-1do1/expense-category-icons';
@@ -39,8 +39,9 @@ import { ksefOd, oknoKalendarzaOd, oknoKosztowOd, podpisKosztow, pobieramy } fro
  * `grid gap-6 md:grid-cols-4` z dziewięcioma kartami Monthly Analytics w tej
  * samej kolejności i z tymi samymi rozpiętościami; karty to kopie
  * z `finora-1do1/`, a dane — prawdziwe, przez czyste adaptery
- * (`./adapters`). Każda karta osobno w `Suspense` + `SectionErrorBoundary`
- * (§2.4 pkt 15); koszty jedną drogą `getCostsWithKsefPurchases` (faktury
+ * (`./adapters`). Każda karta osobno w `SectionErrorBoundary` z własną kartą
+ * błędu (§2.4 pkt 15), strona czeka na wszystkie naraz (`AnalizySiatka`, bez
+ * szkieletów — poprawka 23.10.2026); koszty jedną drogą `getCostsWithKsefPurchases` (faktury
  * zakupu z KSeF + wydatki spoza KSeF, E10), czytane raz na żądanie
  * (`loadCostsWindow`).
  */
@@ -226,36 +227,23 @@ export async function CostHeatmapSlot({ supabase, tenantId, nowIso, tryb, koszty
   });
 }
 
+/**
+ * Siatka `/analizy/koszty`. Dziewięć kart Monthly Analytics Finory w jej kolejności
+ * i rozpiętościach: tytuł karty błędu, klasa siatki, karta.
+ */
+export const SIATKA_KOSZTOW: readonly AnalizyKarta[] = [
+  ['Wydatki miesiąca', 'md:col-span-4', CostStatsSlot],
+  ['Trend wydatków', 'md:col-span-2 2xl:col-span-3', CostTrendSlot],
+  ['Wydatki według kategorii', 'md:max-2xl:col-span-2', CostCategoriesChartSlot],
+  ['Największe kategorie', 'md:col-span-2', CostCategoriesListSlot],
+  ['Ostatnie wydatki', 'md:col-span-2', RecentCostsSlot],
+  ['VAT z wydatków', 'md:col-span-2', CostVatSlot],
+  ['Przychody a koszty', 'md:col-span-2', CostIncomeExpenseSlot],
+  ['Stałe koszty', 'md:col-span-2', RecurringCostsSlot],
+  ['Kalendarz wydatków', 'md:col-span-2', CostHeatmapSlot],
+];
+
+/** Wszystkie karty naraz, bez szkieletów (`AnalizySiatka`, poprawka Bartosza 23.10.2026). */
 export function KosztyGrid(props: AnalizyCardProps) {
-  return (
-    <div className="grid gap-6 md:grid-cols-4">
-      <AnalizySlot title="Wydatki miesiąca" variant="stats" className="md:col-span-4">
-        <CostStatsSlot {...props} className="md:col-span-4" />
-      </AnalizySlot>
-      <AnalizySlot title="Trend wydatków" variant="bar" className="md:col-span-2 2xl:col-span-3">
-        <CostTrendSlot {...props} className="md:col-span-2 2xl:col-span-3" />
-      </AnalizySlot>
-      <AnalizySlot title="Wydatki według kategorii" variant="pie" className="md:max-2xl:col-span-2">
-        <CostCategoriesChartSlot {...props} className="md:max-2xl:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="Największe kategorie" variant="list" className="md:col-span-2">
-        <CostCategoriesListSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="Ostatnie wydatki" variant="feed" className="md:col-span-2">
-        <RecentCostsSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="VAT z wydatków" variant="rows" className="md:col-span-2">
-        <CostVatSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="Przychody a koszty" variant="rows" className="md:col-span-2">
-        <CostIncomeExpenseSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="Stałe koszty" variant="list" className="md:col-span-2">
-        <RecurringCostsSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-      <AnalizySlot title="Kalendarz wydatków" variant="heatmap" className="md:col-span-2">
-        <CostHeatmapSlot {...props} className="md:col-span-2" />
-      </AnalizySlot>
-    </div>
-  );
+  return <AnalizySiatka {...props} karty={SIATKA_KOSZTOW} />;
 }

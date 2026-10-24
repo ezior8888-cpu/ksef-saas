@@ -57,3 +57,22 @@ export function BrandWordmark({
     </Link>
   );
 }
+
+/**
+ * Inicjały „FW” w tych samych barwach co wordmark panelu. Stoją tam, gdzie
+ * pełna nazwa się nie mieści (pasek boczny zwinięty do ikon), dopóki nie ma
+ * nowego logo. Wcześniej stał tu zielony znak marki, zdjęty 23.10.2026.
+ */
+export function BrandMonogram({ className }: { className?: string }) {
+  return (
+    <span
+      aria-label="FaktWay"
+      className={cn(
+        'text-[17px] font-bold leading-none tracking-[-0.02em] text-[var(--ff-on-surface)]',
+        className,
+      )}
+    >
+      F<span className="text-[var(--ff-accent)]">W</span>
+    </span>
+  );
+}
