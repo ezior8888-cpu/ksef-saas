@@ -31,7 +31,7 @@ export async function GET(): Promise<NextResponse> {
     });
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `faktflow-export-${context.user.id.slice(0, 8)}-${timestamp}.json`;
+    const filename = `faktway-export-${context.user.id.slice(0, 8)}-${timestamp}.json`;
     return new NextResponse(JSON.stringify(data, null, 2), {
       status: 200,
       headers: {

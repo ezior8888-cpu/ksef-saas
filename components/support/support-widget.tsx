@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { usePortalContainer } from '@/components/ui/portal-container';
 import { cn } from '@/lib/utils';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/client';
 import { getContextualArticleSlugs } from '@/lib/support/contextual-help';
@@ -60,11 +61,11 @@ const SAMPLE_QUESTIONS = [
 // 5 tutoriali — user nagra je przed launchem (Fazy 41-43). Do tego czasu
 // karty są w stanie "Wkrótce". Po nagraniu wystarczy podmienić `href`.
 const VIDEO_TUTORIALS = [
-  'Pierwsze 5 minut w FaktFlow',
+  'Pierwsze 5 minut w FaktWay',
   'Skanowanie paragonu (OCR)',
   'Pierwsza faktura do KSeF',
   'Eksport KPiR dla księgowego',
-  'Magic Import z Fakturowni',
+  'Import z Fakturowni',
 ];
 
 export function SupportWidget({
@@ -93,6 +94,7 @@ export function SupportWidget({
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const [portalReady, setPortalReady] = useState(false);
+  const kontener = usePortalContainer();
 
   useLayoutEffect(() => {
     setPortalReady(true);
@@ -189,7 +191,7 @@ export function SupportWidget({
 
   const shell = (
     <>
-      {/* Floating button — portal do `body` + z nad banerem zgody (z-[60]),
+      {/* Floating button — portal do kontenera portali panelu (body bez providera) + z nad banerem zgody (z-[60]),
           żeby `fixed` nie był wycinany przez stacking / layout dashboardu
           (localhost z PostHog vs prod bez klucza). */}
       {!open && (
@@ -219,7 +221,12 @@ export function SupportWidget({
           <div className="flex shrink-0 items-center justify-between border-b border-glass-border px-4 py-3">
             <div className="flex items-center gap-2">
               <HelpCircle className="h-5 w-5 text-muted-foreground" />
-              <span className="font-medium">Pomoc FaktFlow</span>
+              <span className="font-medium">Pomoc FaktWay</span>
+              {/* Art. 50 ust. 1 AI Act (od 2.08.2026): rozmówca ma wiedzieć,
+                  że pisze z systemem AI — widoczne przez całą rozmowę. */}
+              <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                Asystent AI
+              </span>
             </div>
             <button
               type="button"
@@ -313,7 +320,15 @@ export function SupportWidget({
     return null;
   }
 
-  return createPortal(shell, document.body);
+  // Ten sam kontener co okna i menu Base UI (wewnątrz `.ff-dashboard`, plan
+  // Finora E2) — inaczej bąbelek maluje się nad oknami, arkuszami i ⌘K.
+  // undefined = brak providera (body); null = kontener jeszcze się montuje.
+  const target = kontener === undefined ? document.body : kontener;
+  if (target === null) {
+    return null;
+  }
+
+  return createPortal(shell, target);
 }
 
 function WelcomeState({
@@ -331,8 +346,18 @@ function WelcomeState({
     <div className="space-y-5">
       <div>
         <p className="text-sm">
-          Cześć! Jestem asystentem FaktFlow. Odpowiem na pytania o KSeF,
-          faktury, OCR i rozliczenia — w kilka sekund.
+          Cześć! Jestem asystentem AI FaktWay — automatycznym programem, nie
+          człowiekiem. Odpowiem na pytania o KSeF, faktury, OCR i rozliczenia
+          w kilka sekund.
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Moje odpowiedzi mogą zawierać błędy i nie są poradą podatkową ani
+          prawną. W każdej chwili możesz poprosić o kontakt z człowiekiem.
+          Treść rozmowy przetwarza dostawca AI (Anthropic) —{' '}
+          <Link href="/legal/polityka-prywatnosci#cele" target="_blank" className="underline underline-offset-2">
+            szczegóły
+          </Link>
+          .
         </p>
       </div>
 

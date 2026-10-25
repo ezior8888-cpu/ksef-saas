@@ -7,8 +7,10 @@ import { logAudit } from '@/lib/audit/log';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { trackServer } from '@/lib/analytics/server';
 import { getClientIp } from '@/lib/auth/get-client-ip';
+import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers';
 import { checkLoginRateLimit } from '@/lib/rate-limit/auth';
-import { verifyTurnstile } from '@/lib/security/turnstile';
+import { isHoneypotTripped } from '@/lib/security/honeypot';
+import { checkBotBeforeGoTrue, isGoTrueCaptchaRejection } from '@/lib/security/bot-check';
 import { createClient } from '@/lib/supabase/server';
 import { signOutCurrentSession } from '@/lib/auth/sign-out';
 
@@ -25,16 +27,19 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
     redirect('/login?error=missing_fields');
   }
 
+  // Pole-pułapka: człowiek go nie widzi, prosty bot wypełnia. Przed
+  // Turnstile, żeby taki bot nie kosztował nawet zapytania do Cloudflare.
+  if (isHoneypotTripped(formData)) {
+    redirect('/login?error=bot_check_failed');
+  }
+
   const ip = await getClientIp();
 
-  // Bot protection PRZED rate-limit i Supabase call.
+  // Bot protection PRZED rate-limit i Supabase call. Przy włączonym
+  // AUTH_CAPTCHA_IN_GOTRUE token sprawdza GoTrue (`captchaToken` niżej).
   // Bypass: LOAD_TEST_MODE=true + nagłówek x-turnstile-bypass (nigdy na prod) — Faza 28.
-  const turnstile = await verifyTurnstile(
-    formData.get('cf-turnstile-response') as string | null,
-    ip,
-    { allowLoadTestBypass: true },
-  );
-  if (!turnstile.success) {
+  const bot = await checkBotBeforeGoTrue(formData, ip, { allowLoadTestBypass: true });
+  if (!bot.ok) {
     redirect('/login?error=bot_check_failed');
   }
 
@@ -49,10 +54,11 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
   const { error } = await supabase.auth.signInWithPassword({
     email,
     password,
+    ...(bot.captchaToken ? { options: { captchaToken: bot.captchaToken } } : {}),
   });
 
   if (error) {
-    redirect('/login?error=invalid_credentials');
+    redirect(isGoTrueCaptchaRejection(error) ? '/login?error=bot_check_failed' : '/login?error=invalid_credentials');
   }
 
   const {
@@ -93,8 +99,14 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
 /**
  * Server Action: inicjacja logowania przez Google.
  * Przekierowuje do Google → Google do /auth/callback.
+ * Przy wyłączonym dostawcy w GoTrue wraca z komunikatem zamiast wysyłać
+ * klienta na błąd JSON z GoTrue (`lib/auth/oauth-providers.ts`).
  */
 export async function loginWithGoogle(): Promise<void> {
+  if (!(await isGoogleLoginEnabled())) {
+    redirect('/login?error=oauth_disabled');
+  }
+
   const headersList = await headers();
   const origin = headersList.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL;
 

@@ -14,7 +14,7 @@ import { jpkFaBlocker } from '@/lib/exports/jpk-fa-readiness';
 /**
  * W9 (C5a): paczka Co-Pilot dla księgowej sprawdza przed utworzeniem
  * eksportów, czy JPK_FA powstanie (jeden nieudany format wywraca paczkę).
- * Faktura z importu ze stawką spoza FaktFlow albo zaimportowana korekta /
+ * Faktura z importu ze stawką spoza FaktWay albo zaimportowana korekta /
  * zaliczka / ROZ zablokuje JPK_FA — paczka ma dostać CSV, z powodem.
  */
 
@@ -48,7 +48,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('jpkFaBlocker — dokumenty, których JPK nie wykaże poprawnie', () => {
-  it('same stawki FaktFlow → brak blokady', async () => {
+  it('same stawki FaktWay → brak blokady', async () => {
     expect(await blocker()).toBeNull();
   });
 
@@ -70,7 +70,7 @@ describe('jpkFaBlocker — dokumenty, których JPK nie wykaże poprawnie', () =>
     expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/BR\/1/);
   });
 
-  it('faktura z aplikacji ze stawką spoza FaktFlow (dane historyczne) → powód z numerem', async () => {
+  it('faktura z aplikacji ze stawką spoza FaktWay (dane historyczne) → powód z numerem', async () => {
     tables.invoices!.push(faktura({ id: 'fv-app', internal_number: 'FV/APP/1', origin: 'app', net_total: 100 }));
     tables.invoice_line_items!.push({ id: 'l-6', invoice_id: 'fv-app', vat_rate: '0 KR', net_amount: 100 });
     expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/APP\/1/);
@@ -88,10 +88,12 @@ describe('jpkFaBlocker — dokumenty, których JPK nie wykaże poprawnie', () =>
     expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/FP\/1.*\(FP\)/);
   });
 
-  it('C5b: faktura zaimportowana przed C5b (bez adnotacji) → powód z numerem i „ponów import”', async () => {
+  // Magiczny import wycofany (decyzja Bartosza 22.10.2026): adnotacje uzupełnia
+  // synchronizacja historii KSeF sama — tekst kieruje do Importu danych i pomocy.
+  it('C5b: faktura zaimportowana przed C5b (bez adnotacji) → powód z numerem i automatyczne uzupełnienie z KSeF', async () => {
     tables.invoices!.push(faktura({ id: 'fv-old', internal_number: 'FV/OLD/1', net_total: 100, fa3_data: { import: { source: 'ksef_history' }, parsed: {} } }));
     tables.invoice_line_items!.push({ id: 'l-9', invoice_id: 'fv-old', vat_rate: '23', net_amount: 100 });
-    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/OLD\/1.*ponów import/);
+    expect(await blocker()).toMatch(/JPK wstrzymany:.*FV\/OLD\/1.*uzupełnia te dane automatycznie.*Historia z KSeF/);
   });
 
   it('C5b: nieczytelne adnotacje z importu (annotationProblems) → powód z numerem', async () => {

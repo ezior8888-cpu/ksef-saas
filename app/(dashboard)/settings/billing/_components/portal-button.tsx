@@ -1,7 +1,7 @@
 'use client';
 
 import { useTransition } from 'react';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { RiExternalLinkLine, RiLoader4Line } from '@remixicon/react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -34,15 +34,14 @@ export function PortalButton({ disabled }: Props) {
 
   return (
     <Button
-      variant="glass"
-      size="sm"
+      variant="outline"
       onClick={handle}
       disabled={disabled || isPending}
     >
       {isPending ? (
-        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+        <RiLoader4Line className="animate-spin" aria-hidden />
       ) : (
-        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+        <RiExternalLinkLine aria-hidden />
       )}
       Zarządzaj subskrypcją
     </Button>

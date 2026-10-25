@@ -46,7 +46,7 @@ function walk(dir: string): string[] {
   });
 }
 
-describe('cena FaktFlow', () => {
+describe('cena FaktWay', () => {
   it('29,99 zł brutto = 24,38 zł netto + 5,61 zł VAT', () => {
     expect(MONTHLY_PRICE_GROSS_GROSZE).toBe(2999);
     expect(MONTHLY_PRICE_NET_GROSZE).toBe(2438);

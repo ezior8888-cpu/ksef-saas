@@ -9,6 +9,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 export interface RefundIssuedProps {
   tenantName: string;
   amountLabel: string;
@@ -29,6 +31,7 @@ export default function RefundIssued({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={headingStyle}>Zwrot przetworzony ✓</Heading>
 
           <Text style={textStyle}>
@@ -51,7 +54,7 @@ export default function RefundIssued({
           <Hr style={hrStyle} />
 
           <Text style={footerStyle}>
-            FaktFlow — faktury KSeF dla mikrofirm. Wiadomość automatyczna.
+            FaktWay — faktury KSeF dla mikrofirm. Wiadomość automatyczna.
           </Text>
         </Container>
       </Body>

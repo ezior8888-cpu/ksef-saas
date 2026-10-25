@@ -27,7 +27,8 @@ export const NO_CODE_FILTER = 'brak';
 export const INVARIANT_LABELS: Record<string, string> = {
   I1: 'queued bez zlecenia w pg-boss (ponad 15 min)',
   I2: 'sending dłużej niż dzierżawa (ponad 30 min) albo bez znacznika przejęcia',
-  I3: 'accepted bez numeru KSeF, środowiska, pliku XML albo UPO',
+  // 00155 (decyzja Bartosza 22.10.2026): UPO wymagane tylko, gdy `ksef_upo_expected`.
+  I3: 'accepted bez numeru KSeF, środowiska, pliku XML albo UPO (UPO tylko dla faktur wysłanych z FaktWay)',
   I4: 'failed / rejected bez kodu z katalogu albo z trzymanym przejęciem',
   I5: 'otwarty wpis sent albo zamiar intent starszy niż 48 h',
   I9: 'failed / rejected z numerem KSeF (stan sprzeczny)',

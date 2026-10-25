@@ -611,7 +611,7 @@ export async function inviteMemberAction(params: {
     }
   }
 
-  // Limit zaproszeń firmy (AUD-32): mail idzie z domeny FaktFlow na dowolny
+  // Limit zaproszeń firmy (AUD-32): mail idzie z domeny FaktWay na dowolny
   // adres, z nazwą firmy, którą wpisuje użytkownik.
   const { count: pending, error: pendingError } = await admin
     .from('organization_invitations')
@@ -689,10 +689,10 @@ export async function inviteMemberAction(params: {
   try {
     await sendEmail({
       to: email,
-      subject: `Zaproszenie do ${orgNameSubject} w FaktFlow`,
+      subject: `Zaproszenie do ${orgNameSubject} w FaktWay`,
       html: `
         <p>Cześć,</p>
-        <p>Zostałeś/aś zaproszony/a do organizacji <strong>${orgNameHtml}</strong> w FaktFlow w roli <strong>${params.role}</strong>.</p>
+        <p>Zostałeś/aś zaproszony/a do organizacji <strong>${orgNameHtml}</strong> w FaktWay w roli <strong>${params.role}</strong>.</p>
         <p><a href="${inviteUrl}">Kliknij aby zaakceptować zaproszenie</a></p>
         <p>Link wygasa za 7 dni.</p>
         <p style="color:#888;font-size:12px">Jeśli nie spodziewałeś/aś się tego maila, zignoruj go.</p>
@@ -1008,20 +1008,6 @@ export async function changeMembershipRoleAction(params: {
 
   revalidatePath('/settings/team');
   return { success: true };
-}
-
-/**
- * Wywoływane po otwarciu modala „import po rejestracji” — miejsce na przyszłą
- * persystencję (np. jednorazowy flag w profilu). Dziś: weryfikacja sesji, bez
- * zmiany stanu (URL `post_register_import` i tak czyści klient).
- */
-export async function markPostRegisterMagicImportConsumedAction(): Promise<void> {
-  try {
-    await requireVerifiedUser();
-  } catch (e) {
-    if (e instanceof ActionAuthError) return;
-    throw e;
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -53,7 +53,7 @@ import {
  * z kopii w dniu wystawienia (decyzja b), a zdanie nad jego przyciskami
  * obiecuje automat tylko tam, gdzie cron naprawdę ponowi — i nigdy nie
  * odsyła do „uzgodni operator” (takiej ścieżki w panelu nie ma; decyzja
- * z 07.10.2026: adres pomocy FaktFlow). Lista ŚLEPYCH ULICZEK jest jawna:
+ * z 07.10.2026: adres pomocy FaktWay). Lista ŚLEPYCH ULICZEK jest jawna:
  * każda pozycja ma sesję albo decyzję, która ją zamknie. Nowa ślepa uliczka
  * (albo zamknięta, a niewykreślona) czerwieni test.
  *

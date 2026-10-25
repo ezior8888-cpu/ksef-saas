@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  CircleAlert,
   CloudOff,
   FileText,
   Inbox,
@@ -58,7 +59,9 @@ export default async function AdminDashboardPage() {
           icon={ShieldCheck}
           label="Aktywne organizacje"
           value={fmt(metrics.activeTenants)}
-          sublabel={`${fmt(metrics.deletedTenants)} oczekuje na hard delete`}
+          // Firm z flagą `deleted_at` nic nie usuwa ani nie blokuje (przegląd 15.10.2026) —
+          // te firmy działają dalej, a ich właściciele mogą myśleć, że je usunęli.
+          sublabel={`${fmt(metrics.deletedTenants)} z flagą „usunięta” — działają dalej`}
           tone="default"
         />
         <Kpi
@@ -119,6 +122,12 @@ export default async function AdminDashboardPage() {
                 : 'Brak naruszeń'
           }
           tone={lifecycleViolations ? 'warning' : 'default'}
+        />
+        <NavTile
+          href="/admin/centrum/bledy"
+          icon={CircleAlert}
+          title="Błędy wysyłki"
+          description="Każda nieudana próba wysyłki do KSeF (dziennik prób A5): incydenty, odmowy przed kolejką, przerwane wykonania, UPO."
         />
         <NavTile
           href="/admin/support"

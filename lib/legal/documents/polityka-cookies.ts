@@ -1,0 +1,74 @@
+import { CONSENT_KEY } from '@/lib/analytics/consent';
+import { LEGAL_ENTITY } from '@/lib/legal/entity';
+import { p, section, table, type LegalDocument } from '@/lib/legal/doc-model';
+import { ACTIVE_ORG_COOKIE } from '@/lib/supabase/active-org';
+import { THEME_STORAGE_KEY } from '@/lib/theme/theme';
+import { COOKIE_POLICY_VERSION } from '@/lib/legal/versions';
+
+const E = LEGAL_ENTITY;
+
+/**
+ * Polityka cookies — art. 399 ustawy Prawo komunikacji elektronicznej
+ * (od 10.11.2024, wcześniej art. 173 Prawa telekomunikacyjnego): przechowywanie
+ * informacji w urządzeniu użytkownika i dostęp do nich wymagają zgody, chyba że
+ * są niezbędne do świadczenia usługi, której użytkownik żąda.
+ *
+ * Lista odpowiada kodowi z 22.10.2026 (spis: memo dla prawnika). Nowe
+ * ciasteczko albo klucz w localStorage → wiersz tutaj w tym samym PR —
+ * pilnuje tego tests/unit/polityka-cookies-kod.test.ts.
+ */
+export const POLITYKA_COOKIES: LegalDocument = {
+  slug: 'cookies',
+  title: 'Polityka plików cookies',
+  version: COOKIE_POLICY_VERSION,
+  summary: [
+    'Bez Twojej zgody zapisujemy w przeglądarce tylko to, bez czego serwis nie zadziała: sesję logowania, wybraną firmę, Twoje ustawienia i Twoją decyzję w sprawie analityki.',
+    'Analityka (PostHog) włącza się dopiero po kliknięciu „Akceptuję” i nie zapisuje plików cookies. Zgodę zmienisz w każdej chwili poniżej.',
+    'Nie używamy cookies reklamowych ani śledzących między stronami.',
+  ],
+  sections: [
+    section(
+      'czym-sa',
+      '1. Czym są pliki cookies i podobne technologie',
+      p('Pliki cookies to małe pliki tekstowe zapisywane przez przeglądarkę. Podobnie działają pamięć lokalna przeglądarki (localStorage, sessionStorage) i pamięć aplikacji instalowanej z przeglądarki (PWA). W tej Polityce wszystkie te technologie nazywamy „cookies”.'),
+      p(`Administratorem danych zbieranych przez cookies jest ${E.name ?? 'usługodawca wskazany w Polityce prywatności'}. Więcej o danych osobowych — w [Polityce prywatności](/legal/polityka-prywatnosci).`),
+    ),
+    section(
+      'niezbedne',
+      '2. Cookies niezbędne (bez zgody)',
+      p('Te technologie są niezbędne do świadczenia usługi, o którą prosisz — bez nich nie zalogujesz się ani nie skorzystasz z serwisu. Nie wymagają zgody (art. 399 ust. 3 Prawa komunikacji elektronicznej).'),
+      table(
+        ['Nazwa', 'Rodzaj', 'Do czego służy', 'Jak długo'],
+        [
+          ['sb-…-auth-token', 'cookie (własne)', 'utrzymanie zalogowanej sesji', 'do wylogowania; odnawiane w trakcie korzystania'],
+          [ACTIVE_ORG_COOKIE, 'cookie (własne, niedostępne dla skryptów)', 'zapamiętanie, w której firmie (Organizacji) pracujesz', 'do 30 dni'],
+          [CONSENT_KEY, 'localStorage', 'zapamiętanie Twojej decyzji w sprawie analityki', 'do zmiany decyzji lub wyczyszczenia danych przeglądarki'],
+          [THEME_STORAGE_KEY, 'localStorage', 'motyw jasny lub ciemny, który wybrałeś', 'jw.'],
+          // Menu boczne panelu (shadcn, plan Finora) — components/ui/sidebar.tsx.
+          ['sidebar_state', 'cookie (własne)', 'zapamiętanie, czy menu boczne panelu jest rozwinięte, czy zwinięte', 'do 7 dni'],
+          ['install-prompt-dismissed-at, klucze zamkniętych komunikatów', 'localStorage / sessionStorage', 'żeby nie pokazywać ponownie komunikatu, który zamknąłeś', 'jw. (sessionStorage — do zamknięcia karty)'],
+          ['pamięć aplikacji (Service Worker)', 'pamięć PWA', 'działanie aplikacji instalowanej z przeglądarki, w tym praca przy słabym połączeniu', 'do odinstalowania aplikacji lub wyczyszczenia danych'],
+          ['Cloudflare Turnstile', 'skrypt dostawcy (challenges.cloudflare.com)', 'sprawdzenie, czy formularz logowania, rejestracji, resetu hasła albo potwierdzenia hasła w ustawieniach wypełnia człowiek', 'na czas weryfikacji'],
+          ['Sentry', 'skrypt w aplikacji (bez cookies)', 'wykrywanie błędów aplikacji; zgłoszenia są oczyszczane z danych osobowych', 'nie zapisuje danych w przeglądarce'],
+        ],
+      ),
+    ),
+    section(
+      'analityczne',
+      '3. Analityka (tylko za zgodą)',
+      p('Za Twoją zgodą korzystamy z PostHog (serwery w UE), żeby rozumieć, których części serwisu używasz, i poprawiać produkt. Analityka nie zapisuje plików cookies ani danych w pamięci przeglądarki (działa wyłącznie w pamięci otwartej karty), nie zbiera adresu IP ani treści dokumentów, a adresy stron skraca do nazwy sekcji. Nie nagrywamy sesji i nie śledzimy kliknięć automatycznie.'),
+      p('Zgoda jest dobrowolna. Możesz ją wycofać w każdej chwili przyciskiem w sekcji „Twoje ustawienia” — wycofanie działa od razu i nie wpływa na zgodność z prawem wcześniejszego przetwarzania.'),
+    ),
+    section(
+      'zewnetrzne',
+      '4. Serwisy zewnętrzne',
+      p('Gdy klikniesz „Zaloguj przez Google” albo przejdziesz do płatności, przekierujemy Cię na stronę Google lub Stripe. Te serwisy stosują własne cookies na swoich stronach, na zasadach swoich polityk prywatności. Nie osadzamy na naszych stronach reklam, przycisków serwisów społecznościowych ani zewnętrznych czcionek.'),
+    ),
+    section(
+      'zarzadzanie',
+      '5. Jak zarządzać cookies',
+      p('Oprócz ustawień poniżej możesz usunąć cookies i dane witryny w ustawieniach przeglądarki lub zablokować ich zapisywanie. Zablokowanie cookies niezbędnych uniemożliwi zalogowanie się.'),
+      p(`Wersja z dnia ${COOKIE_POLICY_VERSION}. Pytania: ${E.email}.`),
+    ),
+  ],
+};

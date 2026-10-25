@@ -46,7 +46,7 @@ describe('U17 strażnik: teksty decyzji przy 440 po przeglądzie prawnika', () =
   it('DUPLICATE_DECISION_TEXTS i DUPLICATE_DECISION_SQL_TEXTS — migawka do przeglądu', async () => {
     const lines: string[] = ['# DUPLICATE_DECISION_TEXTS (klient, 2.11.B–C)'];
     render(DUPLICATE_DECISION_TEXTS, 'TEXTS', lines);
-    lines.push('', '# DUPLICATE_DECISION_SQL_TEXTS (komunikaty P0001/22023/42501 z 00148, 2.11.A, i z 00149, PR C 6.3; % = argument RAISE)');
+    lines.push('', '# DUPLICATE_DECISION_SQL_TEXTS (komunikaty P0001/22023/42501 z 00148, marka FaktWay od 00151, 2.11.A, i z 00156, PR C 6.3; % = argument RAISE)');
     const sql = DUPLICATE_DECISION_SQL_TEXTS as Record<string, { template: string; arity: number }>;
     for (const key of Object.keys(sql).sort()) lines.push(`SQL.${key} [${sql[key]!.arity}] = ${sql[key]!.template}`);
     expect(lines.length).toBeGreaterThan(30);

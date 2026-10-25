@@ -10,10 +10,17 @@
 > [`docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md`](docs/koordynacja/PLAN-ZERO-ZGUBIONYCH-FAKTUR.md),
 > zrób TYLKO wskazaną sesję według „Protokołu naprawy błędu” niżej, a na
 > końcu dopisz wiersz w dzienniku sesji (sekcja 9) z numerem PR.
+>
+> **„Kontynuuj plan Finora”** (nowy wygląd aplikacji na szablonie Finora):
+> przeczytaj [`docs/koordynacja/PLAN-FINORA.md`](docs/koordynacja/PLAN-FINORA.md),
+> zrób checklistę startową (sekcja 0) i pracuj od „Następny krok”
+> w dzienniku (sekcja 12).
 
 ## Projekt
 
 Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (Krajowy System e-Faktur, Polska). Multi-tenant, solo-founder MVP, target: mikroprzedsiębiorcy i księgowi.
+
+**Nazwa produktu: FaktWay** (od 17.10.2026; wcześniej FaktFlow, robocza „KSeF SaaS”). W tekstach dla klienta pisz tylko „FaktWay” — pilnuje tego `tests/unit/nazwa-produktu.test.ts`. Domeny `faktflow.pl`, adresy e-mail, zmienne `FAKTFLOW_*` i identyfikatory techniczne zostają (plan Finora, D8).
 
 ## Stack (NIEZMIENNY)
 
@@ -21,7 +28,7 @@ Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (K
 - Tailwind CSS + shadcn/ui (style: new-york, baseColor: neutral)
 - Supabase **self-hosted** na Hetznerze (`db-1`, NBG1 — Norymberga): Postgres + RLS, GoTrue (logowanie e-mail/hasło + Google OAuth, MFA), PostgREST
 - pg-boss — background jobs (worker = druga aplikacja w Coolify, `lib/jobs/`; lokalnie `pnpm worker:dev` z `DATABASE_URL`). Inngest odpięty 02.10.2026 (etap 10) — bez ścieżki powrotu
-- Magazyn plików przez API S3 (`lib/storage/r2.ts`, zmienne `R2_*`; na produkcji MinIO na `db-1`) — XML FA(3), UPO, zdjęcia
+- Magazyn plików przez API S3 (`lib/storage/r2.ts`, zmienne `R2_*`; na produkcji MinIO na `ops-1`) — XML FA(3), UPO, zdjęcia
 - Hosting: Hetzner + Coolify — jedyny od 14.09.2026 (szczegóły w „Infrastruktura i dostępy”)
 - **pnpm** — menedżer pakietów (`pnpm-lock.yaml`); w root nie używaj `npm install` (brak `package-lock.json`; globalny `.npmrc` z opcjami pnpm potrafi psuć npm).
 
@@ -123,8 +130,12 @@ warstwa, nie dwie.
 | Rola | IP | Co tam działa |
 |---|---|---|
 | `app-1` | `$APP` | aplikacja Next.js + worker pg-boss |
-| `ops-1` | `$OPS` | panel Coolify (port 8000, dostęp filtrowany po IP) |
-| `db-1` | `$DB` | Supabase self-hosted: Postgres, GoTrue, Kong, MinIO |
+| `ops-1` | `$OPS` | panel Coolify (port 8000, dostęp filtrowany po IP), MinIO z plikami aplikacji (`R2_ENDPOINT`) |
+| `db-1` | `$DB` | Supabase self-hosted: Postgres, GoTrue, Kong, Logflare |
+
+Na `db-1` działa też drugi MinIO, z szablonu Supabase (zaplecze Supabase
+Storage, tylko pusty bucket `stub`). Aplikacja go nie używa: XML, UPO
+i zdjęcia leżą na MinIO na `ops-1`.
 
 Klucz SSH w `$K` (`~/.ssh/hetzner_faktflow_ed25519`), użytkownik `root`.
 
@@ -143,6 +154,7 @@ Kontener Postgresa: `$PGC`.
 | wdrożyć kod | `ops-1` (Coolify steruje `app-1`) | „Wdrożenie produkcji" |
 | zobaczyć logi aplikacji / workera | `app-1` | `docker logs` |
 | wejść w panel Coolify z przeglądarki | tunel SSH | pułapki na końcu |
+| zobaczyć błędy wysyłki do KSeF (dashboard) | przeglądarka: `/admin/centrum/bledy` — konto z `ADMIN_EMAILS` + 2FA, bez osobnego hasła; agent: `kontrola-faktur-ksef.sh` | `docs/runbooks/centrum-bledy-wysylki.md` |
 
 **CZTERY RZECZY, KTÓRE ZASKAKUJĄ KAŻDĄ NOWĄ SESJĘ.** Każda kosztowała nas
 realny czas, więc nie są to przestrogi teoretyczne:
@@ -178,7 +190,7 @@ realny czas, więc nie są to przestrogi teoretyczne:
 4. wdrożenie: worker id=2, potem aplikacja id=1 — po kolei, nie naraz
 5. migracje „PO wdrożeniu” (jeśli nagłówek migracji tak mówi)
 6. weryfikacja: kontenery healthy na nowym SHA, /api/health, strona,
-   logi bez błędów, w logu workera „27/27 cronów” (liczba z rejestru jobów)
+   logi bez błędów, w logu workera „29/29 cronów” (liczba z rejestru jobów)
 ```
 
 `pnpm test` to tylko 3 testy tsx — pełny zestaw (typy, lint, XML, Vitest)
@@ -498,8 +510,12 @@ jako problemu.
 - **`proxy.ts` przepuszcza tylko wymienione rozszerzenia.** Czego nie ma we
   wzorcu, leci przez bramkę auth i kończy przekierowaniem na `/login`.
   Dla wideo objawia się to wyłącznie cichym błędem dekodera.
-- **Lokalny `.env.local` celuje w INNĄ bazę** (`$LOCAL_SUPABASE_REF.supabase.co`)
-  niż produkcja. To celowe. Nie podmieniaj bez uzgodnienia.
+- **Lokalny `.env.local` celuje w lokalną bazę** (`http://127.0.0.1:54321`),
+  nie w produkcję. To celowe. Od 23.10.2026 to Supabase w Dockerze (Colima)
+  z migracjami z repo: `pnpm db:local` stawia ją, wgrywa brakujące migracje,
+  zakłada konto `dev@faktway.test` (hasło w `scripts/dev/baza-lokalna.sh`)
+  i ustawia `.env.local` — także w worktree. Dawny projekt Supabase Cloud
+  (`$LOCAL_SUPABASE_REF`) wygasł; nie wracaj do niego i nie celuj devem w db-1.
 - **Build padający z `exit code 137` to zabójca OOM, nie błąd kodu.** `pnpm build`
   na `app-1` potrzebuje więcej pamięci, niż maszyna ma fizycznie: pułap sterty
   w `Dockerfile` to 3072 MB, a realnie wolne jest ~2.2 GB (sam `dockerd` bierze

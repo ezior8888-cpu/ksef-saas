@@ -5,6 +5,7 @@ import { X509Certificate } from 'node:crypto';
 import { getVerifiedMfaState } from '@/lib/auth/verified-mfa';
 import { authenticateWithXades } from '@/lib/ksef/auth';
 import { configuredKsefEnvironment } from '@/lib/ksef/claim-environment';
+import { clearKsefHistoryCertificateErrors } from '@/lib/ksef/history-sync/client-pause';
 import { hasFreshKsefOwnerProof } from '@/lib/ksef/owner-claim';
 import { encryptCredentials } from '@/lib/ksef/credentials-crypto';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -139,20 +140,33 @@ export async function uploadCertificateAction(data: {
         success: false,
         code: 'NIP_ALREADY_CLAIMED',
         error:
-          `Ten NIP jest już zweryfikowany przez inną organizację w FaktFlow. Jeśli uważasz, że to błąd, napisz na ${SUPPORT_EMAIL}`,
+          `Ten NIP jest już zweryfikowany przez inną organizację w FaktWay. Jeśli uważasz, że to błąd, napisz na ${SUPPORT_EMAIL}`,
       };
     }
     if (claimResult !== 'claimed' && claimResult !== 'already_claimed_by_self') {
       return { success: false, error: GENERIC_KSEF_ERROR };
     }
 
+    // Z11: klient właśnie naprawił certyfikat — zapisany błąd historii (wygasł,
+    // brak poświadczeń, brak uprawnień) znika od razu, a nie po najbliższym
+    // cronie. Błąd czyszczenia nie cofa wgrania: nic tu nie rzuca, tylko logujemy.
+    try {
+      const cleared = await clearKsefHistoryCertificateErrors({ tenantId, environment: env });
+      if (!cleared.ok) console.error('[uploadCertificateAction] nie wyczyszczono błędu certyfikatu historii');
+    } catch (error) {
+      console.error('[uploadCertificateAction] czyszczenie błędu certyfikatu historii:', error);
+    }
+
     revalidatePath('/settings/ksef');
     const wasFirstClaim = claimResult === 'claimed';
+    // Decyzja Bartosza 22.10.2026: historię z KSeF pobiera cron
+    // `cron.ksef-history-sync` (sam znajduje zweryfikowaną firmę) — tu bez
+    // zdarzenia joba, tylko informacja dla klienta.
     return {
       success: true,
       wasFirstClaim,
       message: wasFirstClaim
-        ? 'Certyfikat zapisany. Twoja organizacja jest teraz zweryfikowanym właścicielem tego NIP-u w FaktFlow (claim KSeF).'
+        ? 'Certyfikat zapisany. Twoja organizacja jest teraz zweryfikowanym właścicielem tego NIP-u w FaktWay (claim KSeF). W ciągu 30 minut zaczniemy pobierać historię faktur z KSeF — postęp zobaczysz w Imporcie danych.'
         : 'Certyfikat zaktualizowany.',
     };
   } catch (error) {

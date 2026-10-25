@@ -1,6 +1,8 @@
 import { ImageResponse } from 'next/og';
 
-export const alt = 'KSeF SaaS — Faktury KSeF dla mikrofirm';
+import { LOCKUP } from '@/lib/brand/faktway-logo-paths';
+
+export const alt = 'FaktWay: faktury KSeF dla mikrofirm';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -19,40 +21,11 @@ export default function OgImage() {
           padding: '80px',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '20px',
-            marginBottom: '40px',
-          }}
-        >
-          <div
-            style={{
-              width: '80px',
-              height: '80px',
-              background: '#000',
-              color: '#fff',
-              borderRadius: '24px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '48px',
-              fontWeight: 700,
-            }}
-          >
-            K
-          </div>
-          <div
-            style={{
-              fontSize: '40px',
-              fontWeight: 600,
-              letterSpacing: '-0.03em',
-            }}
-          >
-            KSeF SaaS
-          </div>
-        </div>
+        {/* Logo FaktWay z zestawu (docs/brand/logo), te same ścieżki co w aplikacji. */}
+        <svg width="362" height="80" viewBox={LOCKUP.viewBox} style={{ marginBottom: '40px' }}>
+          <path fill="#2463EF" d={LOCKUP.symbol.brand} />
+          <path fill="#0D1936" d={LOCKUP.wordmark.brand} transform={LOCKUP.wordmark.transform} />
+        </svg>
         <div
           style={{
             fontSize: '72px',

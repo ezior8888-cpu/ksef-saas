@@ -1,4 +1,11 @@
-import { type NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
+
+import {
+  isLegacyHostRedirectEnabled,
+  legacyHostRedirectTarget,
+  requestHost,
+} from '@/lib/legacy-host-redirect';
+import { siteUrl } from '@/lib/site';
 import { updateSession } from '@/lib/supabase/middleware';
 
 /**
@@ -18,6 +25,17 @@ import { updateSession } from '@/lib/supabase/middleware';
  *   • Reverse proxy eventów: `next.config.ts` → `/ingest`
  */
 export async function proxy(request: NextRequest) {
+  // Stara domena faktflow.pl → faktway.pl (włączane LEGACY_HOST_REDIRECT=1).
+  if (isLegacyHostRedirectEnabled()) {
+    const target = legacyHostRedirectTarget({
+      method: request.method,
+      host: requestHost(request.headers),
+      pathname: request.nextUrl.pathname,
+      search: request.nextUrl.search,
+      target: siteUrl(),
+    });
+    if (target) return NextResponse.redirect(target, 308);
+  }
   return await updateSession(request);
 }
 

@@ -2,7 +2,7 @@
  * Parser XML faktur FA(3) — ekstrakcja kontrahentów, pozycji i kwot.
  * Dopasowany do emisji z `lib/xml/fa3-generator.ts` (wersja schemy 2025-06-25).
  *
- * C0b (GEN-RUNDA, spec D-A4-1b-3 v3, 5.10): plik z generatora FaktFlow czyta się
+ * C0b (GEN-RUNDA, spec D-A4-1b-3 v3, 5.10): plik z generatora FaktWay czyta się
  * bez strat i bez fałszywych ostrzeżeń (`tests/unit/import-runda-generator.test.ts`).
  * Dwa przypadki brzegowe identyfikatora nabywcy — FA(3) wyraża PESEL i „inny”
  * identyfikator tym samym `KodKraju` + `NrID`, więc `parseParty` odróżnia je
@@ -53,6 +53,13 @@ export interface ParsedInvoice {
   };
 
   paymentDueDate?: string;
+  /**
+   * E11 (D-W): `Platnosc/DataZaplaty` faktury z `Zaplacono = 1` — faktura
+   * wystawiona po zapłacie. Trafia do `fa3_data.parsed`, skąd karty wpływów
+   * biorą prawdziwy dzień zapłaty. Brak pola = plik nie mówi o zapłacie
+   * (albo daty nie dało się odczytać — wtedy ostrzeżenie).
+   */
+  paidDate?: string;
   /** Zmapowana etykieta (np. przelew / gotówka) albo surowy kod z FormaPlatnosci. */
   paymentMethod?: string;
   bankAccount?: string;
@@ -70,7 +77,7 @@ export interface ParsedInvoice {
   ksefAnnotations?: Fa3Annotations;
   /** Adnotacje i oznaczenia z pliku, których nie dało się odczytać. */
   annotationProblems?: string[];
-  /** FP, TP, podmiot upoważniony, GTU, Procedura — JPK FaktFlow ich nie wykazuje. */
+  /** FP, TP, podmiot upoważniony, GTU, Procedura — JPK FaktWay ich nie wykazuje. */
   ksefMarkers?: Fa3Markers;
   /**
    * C5c: surowy tekst sum nagłówka (P_13_x, P_14_1…P_14_5, P_15) — źródło
@@ -84,6 +91,15 @@ export interface ParsedInvoice {
   footerNote?: string;
   /** C0b: surowe `Fa/RodzajFaktury` (przycięte, wielkość liter z pliku); `invoiceType` to jego odwzorowanie. */
   invoiceTypeCode?: string;
+  /**
+   * Chwila nadania numeru w KSeF (`acquisitionDate`, zapasowo
+   * `permanentStorageDate` z metadanych) — podaje synchronizacja historii
+   * KSeF (decyzja Bartosza 22.10.2026; IMP-ACC). Parser XML jej nie ustawia
+   * (plik FA(3) jej nie zawiera). Obecne pole = wywołujący zna ten czas:
+   * poprawna data trafia do `ksef_accepted_at`, niepoprawna albo pusta —
+   * chwila importu z ostrzeżeniem. Brak pola = zachowanie bez zmian.
+   */
+  ksefAcceptedAt?: string;
 
   warnings: string[];
 }
@@ -92,7 +108,7 @@ export interface ParsedParty {
   nip?: string;
   /**
    * PESEL: `NrPESEL` (inne programy) albo `NrID` z `KodKraju` brak/PL, 11 cyframi
-   * i poprawną sumą kontrolną PESEL (C0b, plik z generatora FaktFlow).
+   * i poprawną sumą kontrolną PESEL (C0b, plik z generatora FaktWay).
    */
   pesel?: string;
   /** NrVatUE + KodUE jako „DEXXXXX” (bez spacji). */
@@ -122,7 +138,7 @@ export interface ParsedLine {
   quantity: number;
   unitPriceNet: number;
   /**
-   * Stawka do zapisu: stawka FaktFlow („23”, „0”, „np_ii”…) z P_12, kod FA(3)
+   * Stawka do zapisu: stawka FaktWay („23”, „0”, „np_ii”…) z P_12, kod FA(3)
    * bez odpowiednika („0 WDT”, „0 EX”, „22”, „7”, „4”, „3”) albo „nieznana”
    * (`lib/xml/fa3-p12.ts`, W9). Nigdy surowe „0 KR” / „np I” / „np II”.
    */
@@ -313,7 +329,7 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
       unit: String(w.P_8A ?? 'szt.'),
       quantity: parseNum(w.P_8B),
       unitPriceNet: parseNum(w.P_9A),
-      // W9: stawka FaktFlow zamiast surowego P_12; bez P_12 — z nagłówka albo
+      // W9: stawka FaktWay zamiast surowego P_12; bez P_12 — z nagłówka albo
       // „nieznana”, nigdy domyślne 23%.
       vatRate: importVatRateFromFa3(p12, rateHeader),
       ...(p12 !== undefined ? { p12 } : {}),
@@ -343,7 +359,7 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
   const totals = pickTotals(totalsHeader, totalsFromLines, lines, warnings);
 
   const platnosc = fa.Platnosc;
-  const { paymentDueDate, paymentMethod, bankAccount } = parsePlatnosc(platnosc, warnings);
+  const { paymentDueDate, paidDate, paymentMethod, bankAccount } = parsePlatnosc(platnosc, warnings);
 
   // Jeden literał wyniku — z numerem KSeF i bez (szkic z pliku) te same pola.
   return {
@@ -356,6 +372,7 @@ export function parseFa3Xml(xmlContent: string, options?: { ksefNumber?: string 
     lines,
     totals,
     paymentDueDate,
+    ...(paidDate ? { paidDate } : {}),
     paymentMethod,
     bankAccount,
     ...(formCode ? { formCode } : {}),
@@ -602,8 +619,8 @@ function summarizeTotalsFromLines(lines: ParsedLine[]): {
 }
 
 /**
- * Stawki pozycji bez podatku: stawki FaktFlow (0 KR, zw, oo, np I, np II) i kody FA(3)
- * spoza FaktFlow (0 WDT, 0 EX) — plik z samymi takimi pozycjami nie ma `P_14_x`.
+ * Stawki pozycji bez podatku: stawki FaktWay (0 KR, zw, oo, np I, np II) i kody FA(3)
+ * spoza FaktWay (0 WDT, 0 EX) — plik z samymi takimi pozycjami nie ma `P_14_x`.
  */
 const NO_VAT_LINE_RATES: ReadonlySet<string> = new Set<VatRate | Fa3OnlyVatRate>([
   '0',
@@ -688,7 +705,7 @@ function pickTotals(
 function parsePlatnosc(
   platnosc: unknown,
   warnings: string[],
-): Pick<ParsedInvoice, 'paymentDueDate' | 'paymentMethod' | 'bankAccount'> {
+): Pick<ParsedInvoice, 'paymentDueDate' | 'paidDate' | 'paymentMethod' | 'bankAccount'> {
   if (!platnosc || typeof platnosc !== 'object') {
     return {};
   }
@@ -712,6 +729,15 @@ function parsePlatnosc(
 
   if (paymentDueDate && !/^\d{4}-\d{2}-\d{2}$/.test(paymentDueDate)) {
     warnings.push(`Nieczytelny termin płatności: ${paymentDueDate}`);
+  }
+
+  // E11 (D-W): „Zaplacono = 1” + „DataZaplaty” — faktura opłacona przed wystawieniem.
+  // Daty, której nie da się odczytać, nie zgadujemy: ostrzeżenie i brak pola.
+  let paidDate: string | undefined;
+  if (String(p.Zaplacono ?? '').trim() === '1' && p.DataZaplaty != null) {
+    const raw = String(p.DataZaplaty).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) paidDate = raw;
+    else warnings.push(`Nieczytelna data zapłaty: ${raw}`);
   }
 
   let paymentMethod: string | undefined;
@@ -739,6 +765,7 @@ function parsePlatnosc(
 
   return {
     paymentDueDate,
+    ...(paidDate ? { paidDate } : {}),
     paymentMethod,
     bankAccount,
   };

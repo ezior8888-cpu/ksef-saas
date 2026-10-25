@@ -1,5 +1,6 @@
 import {
   OverdueDashboard,
+  OverdueDashboardError,
   type OverdueInvoice,
 } from '@/components/reminders/overdue-dashboard';
 import { createClient } from '@/lib/supabase/server';
@@ -7,12 +8,13 @@ import { getDashboardOrgSwitcherProps } from '@/lib/dashboard-shell-data';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { isReminderInvoiceChaseable } from '@/lib/reminders/delivery-schema';
 import { amountDueOf } from '@/lib/invoices/amount-due';
+import { countRemindersSentThisMonth, readLatestReminders } from '@/lib/overdue/reminder-overview';
 import type { Database } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
 
 type OverdueViewRow = Database['public']['Views']['invoices_overdue']['Row'];
-type OverdueInvoiceBase = Omit<OverdueInvoice, 'reminder_status'>;
+type OverdueInvoiceBase = Omit<OverdueInvoice, 'reminder_status' | 'latest_reminder'>;
 const PENDING_REVIEW_AFTER_MS = 30 * 60_000;
 const OVERDUE_PAGE_SIZE = 100;
 const MAX_VISIBLE_INVOICES = 100;
@@ -43,7 +45,10 @@ function toOverdueInvoice(row: OverdueViewRow): OverdueInvoiceBase | null {
 export default async function OverduePage() {
   // The dashboard layout already validates membership. Reuse its cached,
   // validated active organization instead of trusting a cookie alone.
-  const { activeOrgId: tenantId } = await getDashboardOrgSwitcherProps();
+  const { activeOrgId: tenantId, memberships } = await getDashboardOrgSwitcherProps();
+  // „Ustawienia przypomnień” prowadzą na stronę tylko dla właściciela
+  // (`getPageContextWithRole('owner')` w /settings/reminders).
+  const isOwner = memberships?.find((membership) => membership.isActive)?.role === 'owner';
   const supabase = await createClient();
   const environment = requireConfiguredKsefEnvironment();
 
@@ -54,6 +59,9 @@ export default async function OverduePage() {
   const seenViewIds = new Set<string>();
   let overdueError: string | null = null;
   let totalCandidates: number | null = null;
+  // Czy pętla przejrzała cały widok. Gdy stanie na limicie wcześniej, dalsze
+  // pozycje są niesprawdzone — nie wiemy, czy któraś by się zmieściła.
+  let scannedAll = false;
   for (let offset = 0; overdueRows.length < MAX_VISIBLE_INVOICES; offset += OVERDUE_PAGE_SIZE) {
     const page = await supabase
       .from('invoices_overdue')
@@ -69,7 +77,7 @@ export default async function OverduePage() {
       break;
     }
     totalCandidates = page.count;
-    if (page.data.length === 0) break;
+    if (page.data.length === 0) { scannedAll = true; break; }
 
     const ids = page.data.map((row) => row.id).filter((id): id is string => id !== null);
     if (ids.length !== page.data.length || ids.some((id) => seenViewIds.has(id)) ||
@@ -167,29 +175,19 @@ export default async function OverduePage() {
       break;
     }
     overdueRows.push(...safeRows);
-    if (offset + page.data.length >= page.count) break;
+    if (offset + page.data.length >= page.count) { scannedAll = true; break; }
   }
 
   if (overdueError) {
-    return (
-      <div className="pb-10 text-[var(--ff-on-surface)]">
-        <div className="mb-10">
-          <h1 className="mb-1 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[var(--ff-text-strong)]">
-            Przeterminowane płatności
-          </h1>
-          <p className="text-sm text-[var(--ff-text-muted)]">
-            Faktury po terminie płatności
-          </p>
-        </div>
-        <div
-          className="ff-glass-pane rounded-[var(--ff-radius-lg)] border border-red-500/25 p-6 text-[15px] text-red-300"
-          role="alert"
-        >
-          Nie udało się pobrać listy: {overdueError}
-        </div>
-      </div>
-    );
+    return <OverdueDashboardError message={overdueError} />;
   }
+
+  // Poprawka Bartosza 21.10.2026: limit 100 pokazujemy tylko wtedy, gdy lista
+  // mogła się w nim nie zmieścić — bezpiecznych pozycji jest więcej (ucięte
+  // na pewno) albo pętla stanęła na setnej przed końcem widoku (dalszych nie
+  // sprawdziliśmy). Dokładnie 100 po przejrzeniu całości to pełna lista.
+  const limitReached = overdueRows.length > MAX_VISIBLE_INVOICES ||
+    (overdueRows.length === MAX_VISIBLE_INVOICES && !scannedAll);
 
   const baseInvoices = overdueRows.slice(0, MAX_VISIBLE_INVOICES).flatMap((row) => {
     const inv = toOverdueInvoice(row);
@@ -236,11 +234,29 @@ export default async function OverduePage() {
       pendingReadFailed = true;
     }
   }
+  // Kolumny „Przypomnienie” i „Status”: ostatni wpis `payment_reminders`
+  // każdej faktury. Odczyt idzie PO odczycie stanu „pending” i nie wpływa na
+  // to, czy wolno przygotować przypomnienie — to rozstrzyga wyłącznie
+  // `reminder_status` powyżej.
+  const latestReminders = baseInvoices.length > 0
+    ? await readLatestReminders(supabase, tenantId, baseInvoices.map((invoice) => invoice.id))
+    : new Map();
   const overdueInvoices: OverdueInvoice[] = baseInvoices.map((invoice) => ({
     ...invoice,
     reminder_status: pendingReadFailed ? 'unavailable'
       : pendingByInvoice.get(invoice.id) ?? 'none',
+    latest_reminder: latestReminders === null ? 'unavailable'
+      : latestReminders.get(invoice.id) ?? null,
   }));
+
+  // Kafel „Przypomnień wysłanych w miesiącu” — osobne źródło, więc jego błąd
+  // zabiera tylko ten kafel („—”), nie listę.
+  let sentThisMonth: number | null = null;
+  try {
+    sentThisMonth = await countRemindersSentThisMonth(supabase, tenantId);
+  } catch {
+    sentThisMonth = null;
+  }
 
   const totalAmountDue = overdueInvoices.reduce((sum, inv) => sum + inv.amount_due, 0);
 
@@ -258,7 +274,11 @@ export default async function OverduePage() {
         totalCount: overdueInvoices.length,
         totalAmount: totalAmountDue,
         avgDaysOverdue,
+        pausedCount: overdueInvoices.filter((invoice) => invoice.reminders_paused).length,
+        sentThisMonth,
       }}
+      limitReached={limitReached}
+      canManageSettings={isOwner}
     />
   );
 }

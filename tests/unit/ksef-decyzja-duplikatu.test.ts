@@ -366,12 +366,12 @@ describe('U1c: widok do decyzji, tabela porównania i „Rozumiem skutki” (dec
     expect(v.needsConfirmation).toEqual(expected);
   });
 
-  it('known-number: knownInvoice {id, internalNumber}, sameContent z porównania; oryginał z FaktFlow nadal do decyzji (decyzja 12)', () => {
+  it('known-number: knownInvoice {id, internalNumber}, sameContent z porównania; oryginał z FaktWay nadal do decyzji (decyzja 12)', () => {
     const v = decidableView(knownNumberFacts(true, { check: { sameContentExceptHeader: true } }));
     expect(v).toMatchObject({ kind: 'decidable', reason: 'known-number', sameContent: true });
     expect(v.knownInvoice).toEqual({ id: DUP_KNOWN_ID, internalNumber: DUP_KNOWN_NUMBER });
     const faktflow = view(knownNumberFacts(true, { check: { summary: { ...(validCheck().summary as object), systemInfo: 'KSeF SaaS v1.0' } } }));
-    expect(faktflow).toMatchObject({ kind: 'decidable', program: 'FaktFlow' });
+    expect(faktflow).toMatchObject({ kind: 'decidable', program: 'FaktWay' });
     const noProgram = view(decisionFacts({ check: validCheck({ summary: { ...(validCheck().summary as object), systemInfo: null } }) }));
     expect(noProgram).toMatchObject({ kind: 'decidable', program: null });
   });
@@ -399,7 +399,7 @@ describe('U1d: baner szkicu wycofanego — każdy rodzaj (decyzja 9)', () => {
   it('zwykła, ta sama sprzedaż: bez przycisku, nie do usunięcia, odmowa wysyłki = TRIGGER_SAME', () => {
     expect(retired('regular', [numberTakenRow('decided', { choice: 'same_sale' })])).toEqual({
       title,
-      body: `Zapisano ${data}: to ta sama sprzedaż co faktura ${DUP_NR} w KSeF (numer KSeF ${DUP_K}), wystawiona w programie „${DUP_PROGRAM}”. Tam ją rozliczasz i korygujesz; FaktFlow nie ujmuje jej w JPK ani w KPiR. Tego dokumentu nie wyślesz do KSeF. Jeśli to jednak inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.`,
+      body: `Zapisano ${data}: to ta sama sprzedaż co faktura ${DUP_NR} w KSeF (numer KSeF ${DUP_K}), wystawiona w programie „${DUP_PROGRAM}”. Tam ją rozliczasz i korygujesz; FaktWay nie ujmuje jej w JPK ani w KPiR. Tego dokumentu nie wyślesz do KSeF. Jeśli to jednak inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.`,
       cta: null,
       knownInvoice: null,
       sendRefusal: fillExpected('TRIGGER_SAME', DUP_NR, DUP_K),
@@ -408,10 +408,10 @@ describe('U1d: baner szkicu wycofanego — każdy rodzaj (decyzja 9)', () => {
     });
   });
 
-  it('zwykła, ta sama sprzedaż przy known-number: dokument Y i odnośnik do niego; zapis operatora — „zapisała pomoc FaktFlow”', () => {
+  it('zwykła, ta sama sprzedaż przy known-number: dokument Y i odnośnik do niego; zapis operatora — „zapisała pomoc FaktWay”', () => {
     const v = retired('regular', [numberTakenRow('decided', { choice: 'same_sale', reason: 'known-number', via: 'operator' })]);
     expect(v).toMatchObject({
-      body: `Zapisano ${data} (zapisała pomoc FaktFlow na Twoją prośbę): to ta sama sprzedaż co faktura ${DUP_NR} w KSeF (numer KSeF ${DUP_K}), którą w FaktFlow ma dokument ${DUP_KNOWN_NUMBER}. Tego dokumentu nie wyślesz do KSeF. Jeśli to jednak inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.`,
+      body: `Zapisano ${data} (zapisała pomoc FaktWay na Twoją prośbę): to ta sama sprzedaż co faktura ${DUP_NR} w KSeF (numer KSeF ${DUP_K}), którą w FaktWay ma dokument ${DUP_KNOWN_NUMBER}. Tego dokumentu nie wyślesz do KSeF. Jeśli to jednak inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.`,
       cta: null,
       deletable: false,
     });
@@ -421,7 +421,7 @@ describe('U1d: baner szkicu wycofanego — każdy rodzaj (decyzja 9)', () => {
   it('zwykła, inna sprzedaż: jedyny przycisk „Wystaw nową fakturę”, odmowa wysyłki = TRIGGER_OTHER', () => {
     expect(retired('regular', [numberTakenRow('decided', { choice: 'other_sale' })])).toEqual({
       title,
-      body: `Zapisano ${data}: to inna sprzedaż niż faktura ${DUP_K} w KSeF. Wystaw ją jako nową fakturę — z nowym numerem i dzisiejszą datą. Tego dokumentu nie wyślesz do KSeF ani nie usuniesz; numer ${DUP_NR} zostaje przy nim, żeby FaktFlow nie podpowiedział go ponownie.`,
+      body: `Zapisano ${data}: to inna sprzedaż niż faktura ${DUP_K} w KSeF. Wystaw ją jako nową fakturę — z nowym numerem i dzisiejszą datą. Tego dokumentu nie wyślesz do KSeF ani nie usuniesz; numer ${DUP_NR} zostaje przy nim, żeby FaktWay nie podpowiedział go ponownie.`,
       cta: regularCta,
       knownInvoice: null,
       sendRefusal: fillExpected('TRIGGER_OTHER', DUP_NR, DUP_K),
@@ -433,7 +433,7 @@ describe('U1d: baner szkicu wycofanego — każdy rodzaj (decyzja 9)', () => {
   it('zwykła, automatyczny „numer zajęty” (decyzja 3): ten sam baner, przycisk i blokada usunięcia', () => {
     expect(retired('regular', [numberTakenRow('automatic'), numberTakenRow('unmarked', { completedAt: '2026-10-04T09:00:00.000Z' })])).toEqual({
       title,
-      body: `KSeF ma już fakturę Twojej firmy o numerze ${DUP_NR} (numer KSeF ${DUP_K}), wystawioną poza FaktFlow — tego dokumentu nie wyślesz do KSeF ani nie usuniesz; numer zostaje przy nim, żeby FaktFlow nie podpowiedział go ponownie. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie (zmiany: korekta tamtej faktury w programie, w którym ją wystawiono). Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.`,
+      body: `KSeF ma już fakturę Twojej firmy o numerze ${DUP_NR} (numer KSeF ${DUP_K}), wystawioną poza FaktWay — tego dokumentu nie wyślesz do KSeF ani nie usuniesz; numer zostaje przy nim, żeby FaktWay nie podpowiedział go ponownie. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie (zmiany: korekta tamtej faktury w programie, w którym ją wystawiono). Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.`,
       cta: regularCta,
       knownInvoice: null,
       sendRefusal: fillExpected('TRIGGER_AUTO', DUP_NR, `fakturę ${DUP_K}`),
@@ -445,7 +445,7 @@ describe('U1d: baner szkicu wycofanego — każdy rodzaj (decyzja 9)', () => {
   it('zwykła bez K (tylko wpisy bez numeru oryginału): bez „(numer KSeF …)”, „inna faktura Twojej firmy” w odmowach', () => {
     const v = retired('regular', [numberTakenRow('unmarked')]);
     expect(v).toMatchObject({
-      body: `KSeF ma już fakturę Twojej firmy o numerze ${DUP_NR}, wystawioną poza FaktFlow — tego dokumentu nie wyślesz do KSeF ani nie usuniesz; numer zostaje przy nim, żeby FaktFlow nie podpowiedział go ponownie. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie (zmiany: korekta tamtej faktury w programie, w którym ją wystawiono). Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.`,
+      body: `KSeF ma już fakturę Twojej firmy o numerze ${DUP_NR}, wystawioną poza FaktWay — tego dokumentu nie wyślesz do KSeF ani nie usuniesz; numer zostaje przy nim, żeby FaktWay nie podpowiedział go ponownie. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie (zmiany: korekta tamtej faktury w programie, w którym ją wystawiono). Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.`,
       sendRefusal: fillExpected('TRIGGER_AUTO', DUP_NR, 'inną fakturę Twojej firmy'),
       deleteRefusal: fillExpected('TRIGGER_DELETE', DUP_NR, 'inna faktura Twojej firmy'),
       deletable: false,
@@ -455,7 +455,7 @@ describe('U1d: baner szkicu wycofanego — każdy rodzaj (decyzja 9)', () => {
   it('ZAL (automatycznie): nie do usunięcia, przycisk „Wystaw nową fakturę zaliczkową”', () => {
     expect(retired('advance', [numberTakenRow('automatic')])).toEqual({
       title,
-      body: `KSeF ma już dokument Twojej firmy o numerze ${DUP_NR} (numer KSeF ${DUP_K}), wystawiony poza FaktFlow — tej faktury zaliczkowej nie wyślesz do KSeF ani nie usuniesz; numer zostaje przy niej, żeby FaktFlow nie podpowiedział go ponownie. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw nową fakturę zaliczkową z nowym numerem.`,
+      body: `KSeF ma już dokument Twojej firmy o numerze ${DUP_NR} (numer KSeF ${DUP_K}), wystawiony poza FaktWay — tej faktury zaliczkowej nie wyślesz do KSeF ani nie usuniesz; numer zostaje przy niej, żeby FaktWay nie podpowiedział go ponownie. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw nową fakturę zaliczkową z nowym numerem.`,
       cta: { href: '/invoices/new/advance', label: 'Wystaw nową fakturę zaliczkową' },
       knownInvoice: null,
       sendRefusal: fillExpected('TRIGGER_AUTO', DUP_NR, `fakturę ${DUP_K}`),
@@ -468,7 +468,7 @@ describe('U1d: baner szkicu wycofanego — każdy rodzaj (decyzja 9)', () => {
     ['correction', 'korekty', 'korektę'],
     ['final', 'faktury rozliczeniowej', 'fakturę rozliczeniową'],
   ] as const)('%s (automatycznie): usuwalny szkic — bez przycisku na banerze, „Usuń szkic” w tekście; rodzaj wstrzymany — „po zdjęciu blokady”', (kind, G, A) => {
-    const lead = `KSeF ma już dokument Twojej firmy o numerze ${DUP_NR} (numer KSeF ${DUP_K}), wystawiony poza FaktFlow — tego szkicu ${G} nie wyślesz do KSeF. Jeśli w KSeF jest ten sam dokument — nie wystawiaj go ponownie. Jeśli inny — `;
+    const lead = `KSeF ma już dokument Twojej firmy o numerze ${DUP_NR} (numer KSeF ${DUP_K}), wystawiony poza FaktWay — tego szkicu ${G} nie wyślesz do KSeF. Jeśli w KSeF jest ten sam dokument — nie wystawiaj go ponownie. Jeśli inny — `;
     expect(retired(kind, [numberTakenRow('automatic')])).toEqual({
       title,
       body: `${lead}usuń ten szkic („Usuń szkic”) i wystaw ${A} od nowa z nowym numerem.`,
@@ -615,7 +615,7 @@ describe('U1f: teksty klienta (przegląd prawnika, decyzje A i 8)', () => {
   });
 
   it('zdanie o wstrzymanych korektach tylko przy heldCorrections (KSeF produkcyjny)', () => {
-    expect(collectTexts(DUPLICATE_DECISION_TEXTS).some((t) => t.includes('Korekty do produkcyjnego KSeF są teraz wstrzymane przez FaktFlow.'))).toBe(true);
+    expect(collectTexts(DUPLICATE_DECISION_TEXTS).some((t) => t.includes('Korekty do produkcyjnego KSeF są teraz wstrzymane przez FaktWay.'))).toBe(true);
     expect(decidableView(decisionFacts()).heldCorrections).toBe(false);
     expect(decidableView(decisionFacts({ check: validCheck({ env: 'production' }) }), { environment: 'production' }).heldCorrections).toBe(true);
   });
@@ -645,7 +645,7 @@ describe('U1g (C1): teksty SQL 00148 — wzorce RAISE z % i fillSqlText', () => 
   it('TRIGGER_AUTO bez K: „przez inną fakturę Twojej firmy wystawioną” (poprawka v3)', () => {
     const t = (DUPLICATE_DECISION_SQL_TEXTS as Record<string, { template: string }>).TRIGGER_AUTO!.template;
     expect(fillSqlText(t, DUP_NR, 'inną fakturę Twojej firmy')).toContain('przez inną fakturę Twojej firmy wystawioną');
-    expect(fillSqlText(t, DUP_NR, `fakturę ${DUP_K}`)).toContain(`przez fakturę ${DUP_K} wystawioną poza FaktFlow`);
+    expect(fillSqlText(t, DUP_NR, `fakturę ${DUP_K}`)).toContain(`przez fakturę ${DUP_K} wystawioną poza FaktWay`);
   });
 });
 

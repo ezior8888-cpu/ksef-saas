@@ -30,7 +30,6 @@ export const EVENT_QUEUE_MAP = {
   'exports/co-pilot.send-package': ['exports.co-pilot.send-package'],
   'exports/generate.requested': ['exports.generate.requested'],
   'import/file.uploaded': ['import.file.uploaded'],
-  'import/ksef-history.requested': ['import.ksef-history.requested'],
   'inbox/invoice-received': ['inbox.invoice-received'],
   // Brak odbiorcy — na Inngest też nikt tego nie słucha. Pusta lista =
   // wysyłka nic nie publikuje (pg-boss rzuca na kolejce bez `createQueue`).
@@ -49,6 +48,8 @@ export const EVENT_QUEUE_MAP = {
     'invoice.submit.succeeded.offline-queue',
   ],
   'invoice/upo.requested': ['invoice.upo.requested'],
+  // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026): fan-out z crona.
+  'ksef/history-sync.tenant': ['ksef.history-sync.tenant'],
   'ocr/process-photo': ['ocr.process-photo'],
   'reminders/send.requested': ['reminders.send.requested'],
   'user/registered': ['user.registered'],
@@ -84,7 +85,7 @@ export interface CronJobDef {
 
 const TZ = 'Europe/Warsaw';
 
-/** 22 crony z inwentaryzacji (17 sie 2026, 1:1 z Inngest) + pg-bossowe: puls FLO, tryb cichy, heartbeat. */
+/** 22 crony z inwentaryzacji (17 sie 2026, 1:1 z Inngest) + pg-bossowe: puls FLO, tryb cichy, heartbeat, historia KSeF. */
 export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.archive-old-invoices', cron: '0 3 * * *', tz: TZ },
   { queue: 'cron.cert-expiry-alert', cron: '0 8 * * *', tz: TZ },
@@ -108,6 +109,10 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.inbox-backfill', cron: '7,22,37,52 * * * *', tz: TZ },
   { queue: 'cron.jobs-watchdog', cron: '*/15 * * * *', tz: TZ },
   { queue: 'cron.ksef-health-check', cron: '* * * * *', tz: TZ },
+  // Historia KSeF (decyzja Bartosza 22.10.2026): co 15 min, przesunięty o 4 min
+  // od skrzynki (:07 backfill, :15 skrzynka) — wybór firm i fan-out; same
+  // pobrania mają własny budżet i ustępują skrzynce i wysyłce. 96 przebiegów na dobę.
+  { queue: 'cron.ksef-history-sync', cron: '11,26,41,56 * * * *', tz: TZ },
   // Cykl życia faktury (PR 4b): co 15 min — I1 (queued bez zlecenia),
   // automatyczne ponowienia klasy transient (co godzinę, 24 h), wznowienie
   // po hamulcu. 96 lekkich przebiegów na dobę.
@@ -121,6 +126,9 @@ export const CRON_JOBS: readonly CronJobDef[] = [
   { queue: 'cron.process-offline-queue', cron: '*/5 * * * *', tz: TZ },
   { queue: 'cron.reminder-scheduler', cron: '0 * * * *', tz: TZ },
   { queue: 'cron.retention-delete', cron: '0 4 * * *', tz: TZ },
+  // Retencja czatu pomocy: „do 24 miesięcy od ostatniej wiadomości” (polityka
+  // prywatności). Codziennie — przy kadencji miesięcznej rozmowa żyłaby 25.
+  { queue: 'cron.support-chat-retention', cron: '30 3 * * *', tz: TZ },
   { queue: 'cron.trial-countdown-emails', cron: '0 9 * * *', tz: TZ },
   { queue: 'cron.upo-retry-stale', cron: '5 * * * *', tz: TZ },
   { queue: 'cron.verify-backup', cron: '0 3 * * 0', tz: TZ },
@@ -149,6 +157,9 @@ export const RETIRED_QUEUES = [
   'invoice.submit.failed',
   'invoice.submit.succeeded',
   'cron.refresh-materialized-views',
+  // Magiczny import wycofany 22.10.2026 (decyzja Bartosza) — historię pobiera
+  // `ksef.history-sync.tenant`. Przed wdrożeniem: `ksef-historia.sh stare-importy` = 0.
+  'import.ksef-history.requested',
 ] as const;
 
 /** Kolejka testowa smoke (Etap 1/2 — weryfikacja fundamentu i połączenia). */

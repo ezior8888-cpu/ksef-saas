@@ -11,8 +11,10 @@ import { getClientIp } from '@/lib/auth/get-client-ip';
 import { validatePassword } from '@/lib/auth/password';
 import { isSignupClosed } from '@/lib/feature-flags/signups';
 import { checkRegisterRateLimit } from '@/lib/rate-limit/auth';
-import { verifyTurnstile } from '@/lib/security/turnstile';
+import { isHoneypotTripped } from '@/lib/security/honeypot';
+import { checkBotBeforeGoTrue, isGoTrueCaptchaRejection } from '@/lib/security/bot-check';
 import { userRegistered } from '@/lib/jobs/events';
+import { recordTermsAcceptance } from '@/lib/legal/record';
 import { createClient } from '@/lib/supabase/server';
 
 /**
@@ -33,14 +35,24 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
     redirect('/register?error=signups_disabled');
   }
 
+  // Akceptacja regulaminu i umowy powierzenia — `required` w formularzu to
+  // tylko wygoda; formularz można wysłać z pominięciem przeglądarki.
+  if (formData.get('terms') !== 'on') {
+    redirect('/register?error=terms_required');
+  }
+  const marketingConsent = formData.get('marketing') === 'on';
+
+  // Pole-pułapka przed Turnstile (jak w logowaniu).
+  if (isHoneypotTripped(formData)) {
+    redirect('/register?error=bot_check_failed');
+  }
+
   const ip = await getClientIp();
 
-  // Bot protection — pierwsza linia obrony przed spam signup.
-  const turnstile = await verifyTurnstile(
-    formData.get('cf-turnstile-response') as string | null,
-    ip,
-  );
-  if (!turnstile.success) {
+  // Bot protection — pierwsza linia obrony przed spam signup. Przy
+  // włączonym AUTH_CAPTCHA_IN_GOTRUE token sprawdza GoTrue (`captchaToken`).
+  const bot = await checkBotBeforeGoTrue(formData, ip);
+  if (!bot.ok) {
     redirect('/register?error=bot_check_failed');
   }
 
@@ -69,14 +81,31 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
     options: {
       data: { full_name: name },
       emailRedirectTo: `${origin}/auth/callback`,
+      ...(bot.captchaToken ? { captchaToken: bot.captchaToken } : {}),
     },
   });
 
   if (error) {
+    if (isGoTrueCaptchaRejection(error)) redirect('/register?error=bot_check_failed');
     redirect(`/register?error=${encodeURIComponent(error.message)}`);
   }
 
   const authUser = data.user;
+
+  // Dowód akceptacji. Tylko dla NOWEGO konta: przy zajętym adresie GoTrue
+  // zwraca konto bez tożsamości (ochrona przed sprawdzaniem, kto ma konto) —
+  // cudzemu kontu nie dopisujemy akceptacji z cudzego formularza. Błąd zapisu
+  // nie blokuje rejestracji: bramka (/onboarding/zgody) poprosi o akceptację
+  // ponownie, gdy dokumenty będą finalne.
+  if (authUser?.id && (authUser.identities?.length ?? 0) > 0) {
+    const recorded = await recordTermsAcceptance({
+      userId: authUser.id,
+      method: 'register_form',
+      marketingConsent,
+    }).catch(() => ({ ok: false }));
+    if (!recorded.ok) console.error('[register] legal acceptance not recorded');
+  }
+
   if (authUser?.id && authUser.email) {
     const firstName =
       name.trim().split(/\s+/)[0] || email.split('@')[0] || 'użytkowniku';

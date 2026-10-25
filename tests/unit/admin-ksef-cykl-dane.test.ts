@@ -297,7 +297,7 @@ function decidable(reason: 'no-own-file' | 'known-number') {
       { label: 'Nabywca', ksef: 'Nabywca Testowy Sp. z o.o.', ours: 'Nabywca Testowy Sp. z o.o.', same: true },
       { label: 'NIP nabywcy', ksef: '1234567890', ours: '1234567890', same: true },
       { label: 'Kwota brutto', ksef: '1230.00 PLN', ours: '1230.00 PLN', same: true },
-      { label: 'Program', ksef: DUP_PROGRAM, ours: 'FaktFlow', same: null },
+      { label: 'Program', ksef: DUP_PROGRAM, ours: 'FaktWay', same: null },
     ],
     sameContent: reason === 'known-number' ? false : null,
     needsConfirmation: { same_sale: false, other_sale: true },

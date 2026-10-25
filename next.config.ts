@@ -86,7 +86,13 @@ const nextConfig: NextConfig = {
   },
 
   experimental: {
-    optimizePackageImports: ['radix-ui', 'lucide-react'],
+    // Build na app-1 (20.10.2026): po ekranach Finory `next build --webpack`
+    // przekroczył pułap sterty 3072 MB (exit 134). Mniejsze zużycie pamięci
+    // webpacka kosztem kilku sekund builda; razem z pułapem 3584 MB
+    // w Dockerfile (tests/unit/build-pamiec-sterty.test.ts).
+    webpackMemoryOptimizations: true,
+    // Plan Finora: prymitywy Base UI, ikony Remix, wykresy recharts (E1), paleta ⌘K cmdk (E2).
+    optimizePackageImports: ['lucide-react', '@base-ui/react', '@remixicon/react', 'recharts', 'cmdk'],
   },
 
   images: {
@@ -124,11 +130,30 @@ const nextConfig: NextConfig = {
   },
 
   // Redesign: `/vs/fakturownia` → `/vs/inni` (SEO 308).
+  // Zmiana marki: artykuły pomocy z nazwą w slugu (stare linki z maili i zakładek).
   async redirects() {
     return [
       {
         source: '/vs/fakturownia',
         destination: '/vs/inni',
+        permanent: true,
+      },
+      {
+        source: '/pomoc/pierwsze-kroki-w-faktflow',
+        destination: '/pomoc/pierwsze-kroki-w-faktway',
+        permanent: true,
+      },
+      {
+        source: '/pomoc/platnosci-i-faktury-za-faktflow',
+        destination: '/pomoc/platnosci-i-faktury-za-faktway',
+        permanent: true,
+      },
+      // Decyzja Bartosza 22.10.2026: Magiczny import znika — historię z KSeF
+      // FaktWay pobiera sam, a postęp i import plików są w Imporcie danych.
+      // Stare linki (zakładki, maile) nie kończą się 404.
+      {
+        source: '/onboarding/magic-import',
+        destination: '/import-danych',
         permanent: true,
       },
     ];
@@ -172,8 +197,11 @@ export default withSentryConfig(withSerwist(withMDX(nextConfig)), {
   // For all available options, see:
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
 
-  // Upload a larger set of source maps for prettier stack traces (increases build time)
-  widenClientFileUpload: true,
+  // Bez rozszerzonego zestawu map źródłowych: z @sentry/nextjs 10.75.2 (łatka
+  // GHSA-mchm-gjx6-7h55 dla `tunnelRoute`) build rośnie ponad 3584 MB sterty;
+  // pułap podniesiony do 4096 MB (Dockerfile), a to oszczędza zapas na app-1.
+  // Mapy stron i chunków dalej idą.
+  widenClientFileUpload: false,
 
   bundleSizeOptimizations: {
     excludeReplayShadowDom: true,
@@ -193,7 +221,8 @@ export default withSentryConfig(withSerwist(withMDX(nextConfig)), {
     // See the following for more information:
     // https://docs.sentry.io/product/crons/
     // https://vercel.com/docs/cron-jobs
-    automaticVercelMonitors: true,
+    // Vercela nie ma od 14.09.2026 (Hetzner) — instrumentacja cronów Vercela tylko obciąża build.
+    automaticVercelMonitors: false,
 
     // Tree-shaking options for reducing bundle size
     treeshake: {

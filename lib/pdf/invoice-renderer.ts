@@ -3,6 +3,7 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 
 import type { Invoice, InvoiceLineItem, VatRate } from '@/types/invoice';
+import { MARK } from '@/lib/brand/faktway-logo-paths';
 import {
   CASH_METHOD_LABEL,
   hasReverseChargeLine,
@@ -599,13 +600,21 @@ function drawFooter(
     .lineTo(left + width, footY)
     .strokeColor('#eeeeee')
     .stroke();
+  const footer = 'Wygenerowano w FaktWay — faktury KSeF dla mikrofirm.';
+  doc.font('body').fontSize(7);
+  // Znak FaktWay tylko w stopce: nagłówek faktury należy do sprzedawcy.
+  drawFaktWayMark(doc, left + (width - doc.widthOfString(footer)) / 2 - 9, footY + 4.6, 5.4);
   doc.font('body').fontSize(7).fillColor('#aaaaaa');
-  doc.text(
-    'Wygenerowano w FaktFlow — faktury KSeF dla mikrofirm.',
-    left,
-    footY + 4,
-    { width, align: 'center' },
-  );
+  doc.text(footer, left, footY + 4, { width, align: 'center' });
+}
+
+/** Znak FaktWay (wektor) o wysokości `h` z lewym górnym rogiem w (x, y). */
+function drawFaktWayMark(doc: Doc, x: number, y: number, h: number): void {
+  const [, , , markHeight] = MARK.viewBox.split(' ').map(Number);
+  doc.save();
+  doc.translate(x, y).scale(h / markHeight!);
+  doc.path(MARK.brand).fill('#2463EF');
+  doc.restore();
 }
 
 /** Półprzezroczysty napis po przekątnej — dla środowiska testowego KSeF. */

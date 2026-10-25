@@ -1,17 +1,16 @@
 import { createHash } from 'node:crypto';
 
+import * as Sentry from '@sentry/nextjs';
+
 import { requireInvoiceTenant } from './tenant-boundary';
 import {
   invoiceSubmitFailed,
   invoiceSubmitSucceeded,
 } from '../events';
 import type { JobContext } from '@/lib/jobs/registry';
+import { parseDurationMs } from '@/lib/jobs/duration';
 import { RetryAfterError } from '@/lib/jobs/errors';
-import {
-  getTenantAdminEmail,
-  getTenantOwnerUserId,
-  readTenantOwnerContact,
-} from '@/lib/supabase/admin-queries';
+import { readTenantOwnerContact } from '@/lib/supabase/admin-queries';
 import {
   sendInvoiceAcceptedEmail,
   sendInvoiceDuplicateDecisionEmail,
@@ -45,7 +44,67 @@ import { buildKsefFixProposal } from '@/lib/flo/functions/ksef-fix';
  *     listenery tych samych eventów
  *
  * retries=2 bo email lepiej nie dostarczyć niż wysłać 4 razy.
+ *
+ * Powiadomienie nie ginie po cichu (A5, luka #3): karta FLO nie zatrzymuje
+ * e-maila ani pusha; właściciel i adres ścisłym odczytem (błąd bazy albo
+ * GoTrue = ponowienie, nie „brak adresu”); błąd Resend nie zatrzymuje pusha;
+ * ponowienia po 5 i 30 min (`notifyRetryDelayMs`); po wyczerpaniu prób
+ * `onNotifyExhausted` nazywa fakturę w logu i Sentry.
  */
+
+/**
+ * Odstępy ponowień kolejek notify (`getDelayMs` w package-b.ts, `maxRetries: 2`)
+ * zamiast domyślnych 10 s / 30 s: awaria Resend, bazy albo GoTrue trwa zwykle
+ * dłużej niż ~40 s, a po ostatniej próbie tego powiadomienia nic nie ponowi.
+ * Klucz idempotencji Resend (24 h) chroni przed dublem e-maila. Jawny
+ * `RetryAfterError` z runnera ma pierwszeństwo (`decideRetry`).
+ */
+export const NOTIFY_RETRY_DELAYS = ['5m', '30m'] as const;
+
+export function notifyRetryDelayMs(attempt: number): number {
+  return parseDurationMs(NOTIFY_RETRY_DELAYS[Math.min(attempt, NOTIFY_RETRY_DELAYS.length - 1)]!);
+}
+
+/** Karta agenta to dodatek: jej błąd idzie do logu i Sentry, e-mail i push wychodzą dalej. */
+async function floCard(
+  { step, logger }: JobContext,
+  name: 'flo-status-card' | 'flo-fix-card',
+  ids: { tenantId: string; invoiceId: string },
+  fn: () => Promise<void>,
+): Promise<void> {
+  try {
+    await step.run(name, fn);
+  } catch (e) {
+    logger.warn('Karta FLO nieudana — powiadomienie idzie dalej', { ...ids, step: name, error: e instanceof Error ? e.message : String(e) });
+    Sentry.captureException(e, { tags: { job: 'notify-user', step: name }, extra: ids });
+  }
+}
+
+/**
+ * Po wyczerpaniu prób kolejki notify (rejestracja: package-b.ts). Ogólny
+ * Sentry workera (`reportExhaustedJob`) nie ma numeru faktury — ten nazywa
+ * fakturę i firmę, żeby operator mógł dać znać klientowi.
+ */
+export function onNotifyExhausted(queue: string) {
+  return async (
+    error: Error,
+    data: { invoiceId?: unknown; tenantId?: unknown } | null | undefined,
+    { logger }: JobContext,
+  ): Promise<void> => {
+    const context = {
+      invoiceId: typeof data?.invoiceId === 'string' ? data.invoiceId : null,
+      tenantId: typeof data?.tenantId === 'string' ? data.tenantId : null,
+      queue,
+      error: error.message,
+    };
+    logger.error('Powiadomienie o wyniku wysyłki faktury nie doszło do klienta — wyczerpane próby', context);
+    Sentry.captureMessage('Powiadomienie o wyniku wysyłki faktury nie doszło do klienta', {
+      level: 'error',
+      tags: { job: 'notify-user', queue },
+      extra: context,
+    });
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════
 // SUKCES: faktura zaakceptowana przez KSeF
@@ -55,14 +114,15 @@ import { buildKsefFixProposal } from '@/lib/flo/functions/ksef-fix';
  * Runner joba (worker pg-boss).
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
  */
-export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucceeded.create>[0], { step, logger }: JobContext) {
+export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucceeded.create>[0], ctx: JobContext) {
+    const { step, logger } = ctx;
     const { tenantId, invoiceId, ksefNumber } = data;
     await requireInvoiceTenant(invoiceId, tenantId);
 
     // Karta agenta (X-01). Powiadomienie znika, karta zostaje — i mówi
     // prawdę o tym, czy poświadczenie odbioru już jest. Przy kontroli
     // różnica między „wysłałem" a „mam UPO" jest całą różnicą.
-    await step.run('flo-status-card', async () => {
+    await floCard(ctx, 'flo-status-card', { tenantId, invoiceId }, async () => {
       const supabase = createAdminClient();
       const { data: invoice } = await supabase
         .from('invoices')
@@ -94,10 +154,14 @@ export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucc
       if (proposal) await createProposal(proposal);
     });
 
-    const email = await step.run('get-admin-email', () =>
-      getTenantAdminEmail(tenantId),
+    // Ścisły odczyt: błąd bazy albo GoTrue ponawia zadanie zamiast udawać
+    // „firma bez adresu”; prawdziwy brak właściciela albo adresu = null.
+    const { ownerUserId, email } = await step.run('get-owner-contact', () =>
+      readTenantOwnerContact(tenantId),
     );
 
+    // Błąd Resend nie zatrzymuje pusha (osobny kanał) — rzucamy go po pushu.
+    const emailFailure: { error?: unknown } = {};
     const result = await step.run('send-email', async () => {
       if (!email) {
         return {
@@ -111,6 +175,9 @@ export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucc
         { ksefNumber, invoiceId },
         { idempotencyKey: `invoice-accepted/${invoiceId}` },
       );
+    }).catch((e: unknown) => {
+      emailFailure.error = e;
+      return { sent: false as const, reason: 'email-error' as const };
     });
 
     if (!email) {
@@ -121,8 +188,7 @@ export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucc
     }
 
     const pushResult = await step.run('send-push', async () => {
-      const ownerId = await getTenantOwnerUserId(tenantId);
-      if (!ownerId) {
+      if (!ownerUserId) {
         return { skipped: true as const, reason: 'no-owner' as const };
       }
 
@@ -138,13 +204,18 @@ export async function runNotifySuccess(data: Parameters<typeof invoiceSubmitSucc
         ? inv.internal_number
         : invoiceId.slice(0, 8);
 
-      return sendPushToUser(ownerId, 'invoice_accepted', {
+      return sendPushToUser(ownerUserId, 'invoice_accepted', {
         title: '✅ Faktura zaakceptowana',
         body: `Faktura ${label} przeszła walidację KSeF`,
         url: `/invoices/${invoiceId}`,
         tag: `invoice-${invoiceId}`,
       });
     });
+
+    if ('error' in emailFailure) {
+      logger.warn('E-mail o przyjęciu faktury nie wyszedł — push wysłany, e-mail ponowimy', { tenantId, invoiceId, pushResult });
+      throw emailFailure.error;
+    }
 
     logger.info('notify-success zakończone', {
       tenantId,
@@ -195,6 +266,9 @@ type DuplicateDecisionNotice =
  *     deduplikuje 24 h; push z tagiem `invoice-{faktura}` zastępuje poprzedni;
  *   - zapis śladu: błąd rzuca, ponowienie wysyła z tym samym kluczem i zapisuje;
  *     po zapisie każde kolejne zdarzenie o (fakturze, K) jest pomijane.
+ * Błąd Resend nie zatrzymuje pusha (A5 #3): push doszedł → powiadomienie
+ * dostarczone (ślad z `emailed: false`, e-mail już nie wraca); nic nie doszło
+ * → błąd Resend rzuca i ponowienie wysyła z tym samym kluczem.
  * Niedostarczone (bez e-maila i pusha: adres na liście odbić, brak właściciela
  * albo adresu, push bez subskrypcji) nie zostawia śladu (precedens
  * `cert-expiry-alert.ts`: zapis tylko po dostarczeniu) i NIKT go automatycznie
@@ -204,7 +278,11 @@ type DuplicateDecisionNotice =
  * w `/admin/ksef/<id>`; tabela I5D i karta faktury pokazują, ile powiadomień
  * o tym K doszło (0 × = klient nie wie).
  */
-async function notifyDuplicateDecision(invoiceId: string, tenantId: string): Promise<DuplicateDecisionNotice> {
+async function notifyDuplicateDecision(
+  invoiceId: string,
+  tenantId: string,
+  logger: JobContext['logger'],
+): Promise<DuplicateDecisionNotice> {
   const supabase = createAdminClient();
   // 1. Blokada z bazy (00148) — autorytatywna, obejmuje też wiersze `payments`.
   if (await readDuplicateDecisionBlocker(supabase, invoiceId, tenantId)) return { pending: false };
@@ -255,13 +333,17 @@ async function notifyDuplicateDecision(invoiceId: string, tenantId: string): Pro
   }
   const { ownerUserId: ownerId, email } = contact;
 
-  // 5. E-mail do właściciela.
+  // 5. E-mail do właściciela. Błąd Resend nie zatrzymuje pusha (krok 6).
+  const mailFailure: { error?: unknown } = {};
   const mail = email
     ? await sendInvoiceDuplicateDecisionEmail(
         email,
         { invoiceId, invoiceNumber, ksefNumber, reminder: false },
         { idempotencyKey },
-      )
+      ).catch((e: unknown) => {
+        mailFailure.error = e;
+        return { sent: false as const, reason: 'email-error' };
+      })
     : { sent: false as const, reason: 'no-admin-email' };
   const emailed = mail.sent === true;
 
@@ -276,8 +358,14 @@ async function notifyDuplicateDecision(invoiceId: string, tenantId: string): Pro
     : { skipped: true as const, reason: 'no-owner' as const };
   const pushSent = 'sent' in push ? push.sent : 0;
 
-  // 7. Ślad tylko po dostarczeniu.
+  // 7. Ślad tylko po dostarczeniu. Nic nie doszło, a Resend padł — ponowienie od zera (ten sam klucz).
   const delivered = emailed || pushSent > 0;
+  if ('error' in mailFailure) {
+    if (!delivered) throw mailFailure.error;
+    logger.warn('E-mail „czeka na Twoją decyzję” nie wyszedł — push doszedł, powiadomienie dostarczone', {
+      tenantId, invoiceId, error: mailFailure.error instanceof Error ? mailFailure.error.message : String(mailFailure.error),
+    });
+  }
   if (delivered) {
     await recordDuplicateNotice({
       tenantId,
@@ -297,7 +385,8 @@ async function notifyDuplicateDecision(invoiceId: string, tenantId: string): Pro
  * Runner joba (worker pg-boss).
  * Rejestracja pg-boss: lib/jobs/handlers/package-b.ts
  */
-export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFailed.create>[0], { step, logger }: JobContext) {
+export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFailed.create>[0], ctx: JobContext) {
+    const { step, logger } = ctx;
     const { tenantId, invoiceId, error, fromOfflineQueue } = data;
     await requireInvoiceTenant(invoiceId, tenantId);
 
@@ -305,7 +394,7 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
     // jedno powiadomienie „czeka na Twoją decyzję” zamiast milczenia (decyzja 5).
     // Bez karty FLO i maila „odrzucona”: faktura nie jest odrzucona.
     if (data.errorCode === SEND_ERROR_CODES.KSEF_DUPLICATE_RECONCILE) {
-      const notice = await step.run('duplicate-decision-notice', () => notifyDuplicateDecision(invoiceId, tenantId));
+      const notice = await step.run('duplicate-decision-notice', () => notifyDuplicateDecision(invoiceId, tenantId, logger));
       if (!('pending' in notice)) {
         logger.info('notify-failure: decyzja klienta przy duplikacie 440', { tenantId, invoiceId, ...notice });
         return notice;
@@ -324,7 +413,7 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
 
     // Karta agenta (X-02). Tłumaczy odrzucenie i — gdy rozwiązanie jest
     // jedno — pokazuje gotową poprawkę z podglądem różnicy.
-    await step.run('flo-fix-card', async () => {
+    await floCard(ctx, 'flo-fix-card', { tenantId, invoiceId }, async () => {
       if (await failureNotificationSuppression(invoiceId, tenantId)) return;
       const supabase = createAdminClient();
       const { data: invoice } = await supabase
@@ -368,10 +457,13 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
       };
     }
 
-    const email = await step.run('get-admin-email', () =>
-      getTenantAdminEmail(tenantId),
+    // Ścisły odczyt — jak przy przyjęciu.
+    const { ownerUserId, email } = await step.run('get-owner-contact', () =>
+      readTenantOwnerContact(tenantId),
     );
 
+    // Błąd Resend nie zatrzymuje pusha (osobny kanał) — rzucamy go po pushu.
+    const emailFailure: { error?: unknown } = {};
     const result = await step.run('send-email', async () => {
       const suppression = await failureNotificationSuppression(invoiceId, tenantId);
       if (suppression) {
@@ -392,6 +484,9 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
         { invoiceId, errorMessage: error },
         { idempotencyKey: `invoice-failed/${invoiceId}/${errorDigest}` },
       );
+    }).catch((e: unknown) => {
+      emailFailure.error = e;
+      return { sent: false as const, reason: 'email-error' as const };
     });
 
     if (!email) {
@@ -406,8 +501,7 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
       if (suppression) {
         return { skipped: true as const, reason: suppression };
       }
-      const ownerId = await getTenantOwnerUserId(tenantId);
-      if (!ownerId) {
+      if (!ownerUserId) {
         return { skipped: true as const, reason: 'no-owner' as const };
       }
 
@@ -425,13 +519,18 @@ export async function runNotifyFailure(data: Parameters<typeof invoiceSubmitFail
       const errShort =
         error.length > 140 ? `${error.slice(0, 137)}…` : error;
 
-      return sendPushToUser(ownerId, 'invoice_rejected', {
+      return sendPushToUser(ownerUserId, 'invoice_rejected', {
         title: 'Faktura odrzucona przez KSeF',
         body: `${label}: ${errShort}`,
         url: `/invoices/${invoiceId}`,
         tag: `invoice-${invoiceId}`,
       });
     });
+
+    if ('error' in emailFailure) {
+      logger.warn('E-mail o odrzuceniu faktury nie wyszedł — push wysłany, e-mail ponowimy', { tenantId, invoiceId, pushResult });
+      throw emailFailure.error;
+    }
 
     logger.info('notify-failure zakończone', {
       tenantId,

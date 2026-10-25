@@ -9,11 +9,13 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
 
 /**
  * „Faktura … czeka na Twoją decyzję” (D-A4-1b-3 PR B, spec §2.8, teksty 2.11.C):
- * KSeF ma już fakturę firmy o numerze tego dokumentu, a FaktFlow nie
+ * KSeF ma już fakturę firmy o numerze tego dokumentu, a FaktWay nie
  * rozstrzygnął, czy to ta sama sprzedaż. Teksty: `DUPLICATE_DECISION_TEXTS.NOTICE`
  * (przegląd prawnika przed KSeF PROD — decyzje Bartosza 07.10.2026 (A), (8)).
  */
@@ -39,6 +41,7 @@ export default function InvoiceDuplicateDecision({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={headingStyle}>
             {reminder ? T.REMINDER_SUBJECT(invoiceNumber) : T.SUBJECT(invoiceNumber)}
           </Heading>
@@ -51,7 +54,7 @@ export default function InvoiceDuplicateDecision({
 
           <Hr style={hrStyle} />
 
-          <Text style={footerStyle}>Wiadomość automatyczna z systemu KSeF SaaS.</Text>
+          <Text style={footerStyle}>Wiadomość automatyczna z systemu FaktWay.</Text>
         </Container>
       </Body>
     </Html>

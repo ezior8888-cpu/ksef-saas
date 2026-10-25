@@ -3,7 +3,7 @@
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Loader2, Send, Trash2 } from 'lucide-react';
+import { RiDeleteBinLine, RiLoader4Line, RiUploadCloud2Line } from '@remixicon/react';
 
 import { Button } from '@/components/ui/button';
 import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
@@ -71,13 +71,13 @@ export function DraftInvoiceActions({ invoiceId, invoiceType, retired = null }: 
     <>
       {canSend && (
         <Button onClick={handleSend} disabled={busy}>
-          {isSending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+          {isSending ? <RiLoader4Line className="animate-spin" /> : <RiUploadCloud2Line />}
           Wyślij do KSeF
         </Button>
       )}
       {canDelete && (
         <Button variant="outline" onClick={handleDelete} disabled={busy}>
-          {isDeleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+          {isDeleting ? <RiLoader4Line className="animate-spin" /> : <RiDeleteBinLine />}
           Usuń szkic
         </Button>
       )}

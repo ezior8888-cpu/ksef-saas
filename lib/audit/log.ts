@@ -73,6 +73,19 @@ export type AuditAction =
   | 'invoice.ksef_duplicate_decision_notified'
   | 'invoice.emailed'
   | 'invoice.resubmit_requested'
+  // Faktury cykliczne (plan Finora N1) — pozycja tylko przypomina, fakturę
+  // wystawia człowiek „Wystaw i wyślij do KSeF” (`components/invoices/actions.ts`).
+  | 'recurring_invoice.created'
+  | 'recurring_invoice.updated'
+  | 'recurring_invoice.paused'
+  | 'recurring_invoice.resumed'
+  | 'recurring_invoice.deleted'
+  /** Faktura z pozycji zajęła okres; metadane: invoiceId, recurringPeriod, from/toNextRunDate, nextRunDateAdvanced. */
+  | 'recurring_invoice.issued'
+  /** Samonaprawa po 23505: za okres była już faktura, `next_run_date` przesunięta dopiero teraz. */
+  | 'recurring_invoice.run_date_repaired'
+  /** Usunięto szkic, który zajmował okres — `next_run_date` cofnięta o ten okres. */
+  | 'recurring_invoice.run_date_restored'
   | 'ksef.credentials_uploaded'
   | 'ksef.credentials_removed'
   | 'ksef.environment_changed'
@@ -87,6 +100,15 @@ export type AuditAction =
   | 'ksef.upo.download'
   | 'ksef.inbox.poll'
   | 'ksef.auth.token'
+  // Synchronizacja historii KSeF (decyzja Bartosza 22.10.2026): zapytanie
+  // o metadane (każde, przez ksefFetch), jeden zbiorczy wiersz pobrań na
+  // przebieg (liczba + do 10 numerów KSeF) i wyłącznik właściciela firmy.
+  | 'ksef.history.query'
+  | 'ksef.history.download'
+  | 'ksef.history.paused'
+  | 'ksef.history.resumed'
+  // Zapis operatora skryptem `scripts/ops/ksef-historia.sh` (odblokuj, wznow, wstrzymaj-wszystko) — SQL, nie aplikacja.
+  | 'ksef.history.operator'
   // Faza 24 — admin panel actions.
   | 'admin.user.suspended'
   | 'admin.user.unsuspended'
@@ -127,7 +149,13 @@ export type AuditAction =
   | 'join_request.approved'
   | 'join_request.denied'
   | 'membership.revoked'
-  | 'membership.role_changed';
+  | 'membership.role_changed'
+  // Dokumenty prawne i zgody (lib/legal/record.ts). Metadane niosą wersję
+  // dokumentu i wersję brzmienia oświadczenia (lib/legal/versions.ts).
+  | 'legal.terms_accepted'
+  | 'legal.checkout_statement_accepted'
+  | 'legal.email_consent_granted'
+  | 'legal.email_consent_withdrawn';
 
 export interface AuditLogEntry {
   action: AuditAction;

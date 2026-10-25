@@ -6,6 +6,8 @@ import type { PageContext } from '@/lib/supabase/page-context';
 import { requireConfiguredKsefEnvironment } from '@/lib/ksef/claim-environment';
 import { readCompletePages } from '@/lib/accounting/read-complete-pages';
 import { assertOutgoingInvoicesInPln } from '@/lib/exports/currency-guard';
+import { todayInWarsaw } from '@/lib/format/warsaw-date';
+import { roundToCents } from '@/lib/xml/invoice-calculator';
 import type { KsefEnvironment } from '@/types/ksef';
 
 /**
@@ -76,18 +78,52 @@ type InvoiceSummary = {
   currency: string | null;
 };
 
-/** Local calendar dates must not shift to the previous day in European time zones. */
+/**
+ * Pierwszy dzień miesiąca jako RRRR-MM-DD. Arytmetyka w UTC na polach
+ * kalendarza (`monthIndex` może wyjść poza 0–11), więc wynik nie zależy od
+ * strefy procesu.
+ */
 function monthStartIso(year: number, monthIndex: number): string {
-  const date = new Date(year, monthIndex, 1);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+  const date = new Date(Date.UTC(year, monthIndex, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-01`;
+}
+
+/**
+ * Rok i miesiąc (0–11) „dziś” w Polsce. Plan Finora §2.4 pkt 10: serwer
+ * i worker chodzą w UTC, więc `now.getMonth()` 1. dnia miesiąca między
+ * 00:00 a 02:00 czasu polskiego dawał jeszcze poprzedni miesiąc — faktura
+ * z dziś wypadała z liczb miesiąca, a termin VAT był o miesiąc za wcześnie.
+ */
+function warsawCalendar(now: Date): { today: string; year: number; monthIndex: number } {
+  const today = todayInWarsaw(now);
+  return {
+    today,
+    year: Number(today.slice(0, 4)),
+    monthIndex: Number(today.slice(5, 7)) - 1,
+  };
+}
+
+/** Dni kalendarzowe między dwiema datami RRRR-MM-DD (bez stref i zmian czasu). */
+function daysBetweenIsoDates(fromIso: string, toIso: string): number {
+  const utc = (iso: string) =>
+    Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
+  return Math.round((utc(toIso) - utc(fromIso)) / 86_400_000);
+}
+
+/** Pierwszy dzień miesiąca jako `Date` w UTC — tylko do podpisów z `timeZone: 'UTC'`. */
+function monthStartUtc(year: number, monthIndex: number): Date {
+  return new Date(Date.UTC(year, monthIndex, 1));
 }
 
 /**
  * An accepted invoice with no stored environment could belong to TEST or
  * production. A zero-only dashboard would hide that historical ambiguity.
  * Known invoices in another environment are excluded by the monetary query.
+ *
+ * Eksport dla kart Pulpitu (plan Finora §2.4 pkt 2 i 15): każda karta
+ * sprzedaży zatrzymuje się tym samym komunikatem.
  */
-async function assertAcceptedEnvironmentKnown(
+export async function assertAcceptedEnvironmentKnown(
   supabase: PageContext['supabase'],
   tenantId: string,
   start: string,
@@ -171,11 +207,11 @@ export async function getMonthlyFigures(
   tenantId: string,
   now: Date = new Date(),
 ): Promise<MonthlyFigures> {
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfMonthIso = monthStartIso(now.getFullYear(), now.getMonth());
-  const prevMonthStartIso = monthStartIso(now.getFullYear(), now.getMonth() - 1);
-  const nextMonthStartIso = monthStartIso(now.getFullYear(), now.getMonth() + 1);
-  const yearStartIso = monthStartIso(now.getFullYear(), 0);
+  const { today, year, monthIndex } = warsawCalendar(now);
+  const startOfMonthIso = monthStartIso(year, monthIndex);
+  const prevMonthStartIso = monthStartIso(year, monthIndex - 1);
+  const nextMonthStartIso = monthStartIso(year, monthIndex + 1);
+  const yearStartIso = monthStartIso(year, 0);
   const readStartIso = prevMonthStartIso < yearStartIso ? prevMonthStartIso : yearStartIso;
   const environment = requireConfiguredKsefEnvironment();
 
@@ -234,25 +270,16 @@ export async function getMonthlyFigures(
   const zmiana = (teraz: number, przedtem: number): number | null =>
     przedtem > 0 ? Math.round(((teraz - przedtem) / przedtem) * 100) : null;
 
-  const vatDueDate = new Date(now.getFullYear(), now.getMonth() + 1, 25);
-  /** Dni do terminu VAT liczone po dobach kalendarzowych, nie po milisekundach. */
-  const daysToVatDue = Math.max(
-    0,
-    Math.round(
-      (new Date(
-        vatDueDate.getFullYear(),
-        vatDueDate.getMonth(),
-        vatDueDate.getDate(),
-      ).getTime() -
-        new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) /
-        86_400_000,
-    ),
-  );
+  // Termin VAT: 25. dzień miesiąca po polskim „dziś”. Dni po dobach
+  // kalendarzowych od polskiej daty, nie po milisekundach od `now`.
+  const vatDueIso = `${nextMonthStartIso.slice(0, 8)}25`;
+  const daysToVatDue = Math.max(0, daysBetweenIsoDates(today, vatDueIso));
 
   return {
-    monthName: startOfMonth.toLocaleDateString('pl-PL', {
+    monthName: monthStartUtc(year, monthIndex).toLocaleDateString('pl-PL', {
       month: 'long',
       year: 'numeric',
+      timeZone: 'UTC',
     }),
     prevAcceptedCount,
     acceptedCount,
@@ -263,11 +290,7 @@ export async function getMonthlyFigures(
     momCountPct: zmiana(acceptedCount, prevAcceptedCount) ?? 0,
     momGrossPct: zmiana(totalGross, prevGross) ?? 0,
     hasPrevMonth: prevAcceptedCount > 0,
-    vatDueLabel: vatDueDate.toLocaleDateString('pl-PL', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }),
+    vatDueLabel: `${vatDueIso.slice(8, 10)}.${vatDueIso.slice(5, 7)}.${vatDueIso.slice(0, 4)}`,
     daysToVatDue,
     isBestMonthOfYear:
       totalGross > 0 &&
@@ -278,24 +301,63 @@ export async function getMonthlyFigures(
 
 export interface SalesSeries {
   months: { key: string; label: string }[];
+  /** Sprzedaż BRUTTO per miesiąc okna (ROZ bez rozliczonych zaliczek), w groszach. */
   currentSeries: number[];
+  /** Brutto tego samego okna rok wcześniej; `[]` przy `withPrevYear: false`. */
   prevSeries: number[];
+  /**
+   * NETTO tego samego okna rok wcześniej (te same wiersze co `prevSeries`);
+   * `[]` przy `withPrevYear: false`. Karta „Przychód netto” Pulpitu
+   * (PLAN-PRAWDZIWE-DANE E5) porównuje netto z netto.
+   */
+  prevNetSeries: number[];
   currentMonthKey: string;
+  /** Sprzedaż NETTO per miesiąc okna — te same wiersze co `currentSeries`. */
+  netSeries: number[];
+  /**
+   * VAT należny per miesiąc okna — te same wiersze co `currentSeries`.
+   * Bieżący miesiąc równa się `roundToCents(getMonthlyFigures().totalVat)`.
+   * Wszystkie serie są zaokrąglone do groszy per miesiąc.
+   */
+  vatSeries: number[];
 }
 
-/** Sześć miesięcy kalendarzowych + to samo okno rok wcześniej (linia odniesienia). */
+export interface SalesSeriesOptions {
+  /** Długość okna w miesiącach kalendarzowych, z bieżącym. Domyślnie 6. */
+  months?: number;
+  /**
+   * Czy czytać to samo okno rok wcześniej (linia odniesienia). Domyślnie
+   * `true`. Przy `false` nie ma ani zapytania o faktury, ani strażnika
+   * środowiska za rok wcześniej, a `prevSeries` to `[]`.
+   */
+  withPrevYear?: boolean;
+}
+
+/**
+ * Miesiące kalendarzowe (domyślnie sześć, z bieżącym) + to samo okno rok
+ * wcześniej (linia odniesienia). Wywołanie bez `options` zwraca dokładnie
+ * to, co przed planem Finora E4 (6 miesięcy, brutto, z rokiem wcześniej),
+ * plus `netSeries` i `vatSeries`.
+ */
 export async function getSalesSeries(
   supabase: PageContext['supabase'],
   tenantId: string,
   now: Date = new Date(),
+  options: SalesSeriesOptions = {},
 ): Promise<SalesSeries> {
+  const monthCount = options.months ?? 6;
+  const withPrevYear = options.withPrevYear ?? true;
+  if (!Number.isSafeInteger(monthCount) || monthCount < 1) {
+    throw new Error('Okno wykresu sprzedaży musi mieć co najmniej jeden miesiąc');
+  }
+  const { today, year, monthIndex } = warsawCalendar(now);
   const months: { key: string; prevKey: string; label: string }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const prevKey = `${d.getFullYear() - 1}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  for (let i = monthCount - 1; i >= 0; i--) {
+    const d = monthStartUtc(year, monthIndex - i);
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    const prevKey = `${d.getUTCFullYear() - 1}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
     const raw = d
-      .toLocaleDateString('pl-PL', { month: 'short' })
+      .toLocaleDateString('pl-PL', { month: 'short', timeZone: 'UTC' })
       .replace(/\./g, '')
       .trim();
     months.push({
@@ -307,51 +369,72 @@ export async function getSalesSeries(
 
   const windowStartIso = `${months[0]!.key}-01`;
   const prevYearStartIso = `${months[0]!.prevKey}-01`;
-  const nextMonthStartIso = monthStartIso(now.getFullYear(), now.getMonth() + 1);
-  const prevYearEndIso = monthStartIso(now.getFullYear() - 1, now.getMonth() + 1);
+  const nextMonthStartIso = monthStartIso(year, monthIndex + 1);
+  const prevYearEndIso = monthStartIso(year - 1, monthIndex + 1);
   const environment = requireConfiguredKsefEnvironment();
   await Promise.all([
     assertAcceptedEnvironmentKnown(
       supabase, tenantId, windowStartIso, nextMonthStartIso,
     ),
-    assertAcceptedEnvironmentKnown(
-      supabase, tenantId, prevYearStartIso, prevYearEndIso,
-    ),
+    ...(withPrevYear
+      ? [assertAcceptedEnvironmentKnown(
+          supabase, tenantId, prevYearStartIso, prevYearEndIso,
+        )]
+      : []),
   ]);
   const [current, previous] = await Promise.all([
     fetchAcceptedInvoices(
       supabase, tenantId, environment, windowStartIso, nextMonthStartIso,
       'Nie można odczytać wykresu sprzedaży',
     ),
-    fetchAcceptedInvoices(
-      supabase, tenantId, environment, prevYearStartIso, prevYearEndIso,
-      'Nie można odczytać wykresu sprzedaży',
-    ),
+    withPrevYear
+      ? fetchAcceptedInvoices(
+          supabase, tenantId, environment, prevYearStartIso, prevYearEndIso,
+          'Nie można odczytać wykresu sprzedaży',
+        )
+      : Promise.resolve<InvoiceSummary[]>([]),
   ]);
 
   const settled = await fetchSettledAdvancesTotals(supabase, tenantId, [
-    ...(current ?? []),
-    ...(previous ?? []),
+    ...current,
+    ...previous,
   ]);
 
   const sumByMonth = (
     rows: InvoiceSummary[],
+    pick: (inv: InvoiceSummary) => number,
   ) => {
     const map = new Map<string, number>();
     rows.forEach((inv) => {
       const key = inv.issue_date.slice(0, 7);
-      map.set(key, (map.get(key) ?? 0) + remainder(settled, inv, inv.gross_total, 'gross'));
+      map.set(key, (map.get(key) ?? 0) + pick(inv));
     });
     return map;
   };
 
-  const currentByMonth = sumByMonth(current);
-  const prevByMonth = sumByMonth(previous);
+  const gross = (inv: InvoiceSummary) => remainder(settled, inv, inv.gross_total, 'gross');
+  const currentByMonth = sumByMonth(current, gross);
+  const prevByMonth = sumByMonth(previous, gross);
+  const netByMonth = sumByMonth(current, (inv) => remainder(settled, inv, inv.net_total, 'net'));
+  const prevNetByMonth = sumByMonth(previous, (inv) => remainder(settled, inv, inv.net_total, 'net'));
+  const vatByMonth = sumByMonth(current, (inv) => remainder(settled, inv, inv.vat_total, 'vat'));
+
+  /**
+   * Suma miesiąca w groszach. 10,10 + 20,20 − 30,30 w double daje −3,55e-15:
+   * bez zaokrąglenia karta pokazywała „-0 zł”, liczyła miesiąc jako „z danymi”,
+   * a procent zmiany przy podstawie 5,55e-17 wybuchał. `|| 0` zamienia −0
+   * z `roundToCents` na 0, bo `Intl` formatuje −0 jako „-0 zł”.
+   */
+  const cents = (byMonth: Map<string, number>, key: string) =>
+    roundToCents(byMonth.get(key) ?? 0) || 0;
 
   return {
     months: months.map(({ key, label }) => ({ key, label })),
-    currentSeries: months.map((m) => currentByMonth.get(m.key) ?? 0),
-    prevSeries: months.map((m) => prevByMonth.get(m.prevKey) ?? 0),
-    currentMonthKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+    currentSeries: months.map((m) => cents(currentByMonth, m.key)),
+    prevSeries: withPrevYear ? months.map((m) => cents(prevByMonth, m.prevKey)) : [],
+    prevNetSeries: withPrevYear ? months.map((m) => cents(prevNetByMonth, m.prevKey)) : [],
+    currentMonthKey: today.slice(0, 7),
+    netSeries: months.map((m) => cents(netByMonth, m.key)),
+    vatSeries: months.map((m) => cents(vatByMonth, m.key)),
   };
 }

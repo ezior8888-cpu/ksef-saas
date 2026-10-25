@@ -18,6 +18,8 @@ import { describe, expect, it } from 'vitest';
 
 const M148 = 'supabase/migrations/00148_ksef_duplicate_decision.sql';
 const M136 = 'supabase/migrations/00136_ksef_submission_intent.sql';
+/** Te same funkcje decyzji i wyzwalacza z tekstami w marce FaktWay (zmiana marki 10.2026). */
+const M151 = 'supabase/migrations/00151_faktway_duplicate_decision_texts.sql';
 
 const read = (path: string): string => readFileSync(path, 'utf8');
 
@@ -150,6 +152,28 @@ function functionBodies(sql: string): Map<string, string[]> {
 const normBody = (body: string): string => tight(lex(body).filter((p) => p.kind !== 'comment').map((p) => p.text).join(' '));
 /** Kod ciała bez komentarzy i literałów (skan zakazanych operacji). */
 const bodyCode = (body: string): string => lex(body).filter((p) => p.kind === 'code').map((p) => p.text).join(' ');
+
+/**
+ * Ciała funkcji z 00148 w wersji, która obowiązuje po wszystkich migracjach:
+ * funkcja zdefiniowana ponownie w 00151 ma ciało z 00151.
+ */
+function currentBodies(): Map<string, string[]> {
+  const bodies = functionBodies(read(M148));
+  for (const [name, list] of functionBodies(read(M151))) bodies.set(name, list);
+  return bodies;
+}
+
+/** Zmiana marki w literale: adres pomocy i nazwa produktu, nic więcej. */
+const rebrand = (literal: string): string => literal.replaceAll('pomoc@faktflow.pl', 'pomoc@faktway.pl').replaceAll('FaktFlow', 'FaktWay');
+
+/** Ciało z podmienioną marką wyłącznie w literałach `'…'` — kod i komentarze bez zmian. */
+const rebrandLiterals = (body: string): string => lex(body).map((p) => (p.kind === 'literal' ? rebrand(p.text) : p.text)).join('');
+
+/** Funkcje, które 00151 definiuje ponownie (te z marką w tekstach RAISE 00148). */
+const REBRANDED_FUNCTIONS = [
+  ['decide_ksef_duplicate', 'uuid, uuid, uuid, text, text, text, text, text, text'],
+  ['guard_ksef_retired_draft', ''],
+] as const;
 
 const NEW_FUNCTIONS = [
   ['ksef_duplicate_check_allows', 'jsonb, text'],
@@ -336,7 +360,7 @@ describe('strażnik tekstu migracji 00148 (D-A4-1b-3 PR B)', () => {
 
   it('U16f (rewizja PR B #0): w gałęzi wyzwalacza numeru zmiana kierunku dostaje TRIGGER_DIRECTION przed TRIGGER_RENUMBER; obejście roli serwisu bez zmian', async () => {
     const { DUPLICATE_DECISION_SQL_TEXTS } = await import('@/lib/ksef/duplicate-decision');
-    const bodies = functionBodies(read(M148)).get('guard_ksef_retired_draft');
+    const bodies = currentBodies().get('guard_ksef_retired_draft');
     expect(bodies).toHaveLength(1);
     const body = normBody(bodies![0]!);
 
@@ -357,7 +381,7 @@ describe('strażnik tekstu migracji 00148 (D-A4-1b-3 PR B)', () => {
   });
 
   it('U16g (rewizja PR B #7): decyzja blokuje (krok 4) i zamyka (a) ten sam zbiór otwartych wpisów — intent, sent i duplicate', () => {
-    const bodies = functionBodies(read(M148)).get('decide_ksef_duplicate');
+    const bodies = currentBodies().get('decide_ksef_duplicate');
     expect(bodies).toHaveLength(1);
     const body = normBody(bodies![0]!);
     const open = "s.status IN ('intent', 'sent', 'duplicate')";
@@ -373,6 +397,7 @@ describe('strażnik tekstu migracji 00148 (D-A4-1b-3 PR B)', () => {
 
   it('U16e (C1): każdy szablon 00148 z DUPLICATE_DECISION_SQL_TEXTS stoi dosłownie po RAISE EXCEPTION z kodem z 2.11.A, nigdy w format(); CATALOG w UPDATE katalogu (klucze 00149 — U16e-00149)', async () => {
     const m148 = read(M148);
+    const m151 = read(M151);
     const { DUPLICATE_DECISION_SQL_TEXTS } = await import('@/lib/ksef/duplicate-decision');
     const all = Object.entries(DUPLICATE_DECISION_SQL_TEXTS) as Array<[string, { template: string; arity: number }]>;
     expect(all.map(([key]) => key)).toEqual(expect.arrayContaining(SQL_TEXT_KEYS_00148));
@@ -381,9 +406,12 @@ describe('strażnik tekstu migracji 00148 (D-A4-1b-3 PR B)', () => {
     const entries = all.filter(([key]) => SQL_TEXT_KEYS_00148.includes(key));
     expect(entries).toHaveLength(SQL_TEXT_KEYS_00148.length);
 
-    const bodies = [...functionBodies(m148).values()].flat();
+    // Od 00151 decyzja i wyzwalacz mają teksty w marce FaktWay — szablony stoją w ciałach po wszystkich migracjach.
+    const bodies = [...currentBodies().values()].flat();
     for (const [key, { template }] of entries) {
-      expect(m148, `${key}: format()`).not.toMatch(new RegExp(`format\\s*\\(\\s*'${escapeRegExp(template)}`));
+      for (const sql of [m148, m151]) {
+        expect(sql, `${key}: format()`).not.toMatch(new RegExp(`format\\s*\\(\\s*'${escapeRegExp(template)}`));
+      }
 
       if (key.startsWith('CATALOG')) {
         const update = statements(m148).find((s) => /^UPDATE public\.ksef_error_codes\b/i.test(s.bare));
@@ -411,5 +439,68 @@ describe('strażnik tekstu migracji 00148 (D-A4-1b-3 PR B)', () => {
       expect(codes.length, `${key}: brak RAISE EXCEPTION '<szablon>'`).toBeGreaterThan(0);
       expect(new Set(codes), key).toEqual(new Set([errcodeFor(key)]));
     }
+  });
+});
+
+describe('strażnik tekstu migracji 00151 (marka FaktWay w tekstach 00148)', () => {
+  it('U16h: jedna transakcja — tylko CREATE OR REPLACE dwóch funkcji, ich REVOKE i GRANT; bez DROP i DML', () => {
+    const stmts = statements(read(M151));
+    const first = (s: Statement) => s.bare.split(' ')[0]!.toUpperCase();
+
+    expect(first(stmts[0]!)).toBe('BEGIN');
+    expect(first(stmts[stmts.length - 1]!)).toBe('COMMIT');
+    const allowed = new Set(['BEGIN', 'COMMIT', 'CREATE', 'REVOKE', 'GRANT']);
+    expect(stmts.filter((s) => !allowed.has(first(s))).map((s) => s.bare)).toEqual([]);
+    expect(stmts.filter((s) => /\b(DROP|TRUNCATE|DELETE|UPDATE|INSERT|ALTER)\b/i.test(s.bare)).map((s) => s.bare)).toEqual([]);
+
+    const created = stmts.filter((s) => first(s) === 'CREATE')
+      .map((s) => /^CREATE OR REPLACE FUNCTION public\.(\w+)\s*\(/i.exec(s.bare)?.[1] ?? s.bare);
+    expect(created).toEqual(REBRANDED_FUNCTIONS.map(([fn]) => fn));
+  });
+
+  it('U16h: nagłówek każdej funkcji (parametry, RETURNS, LANGUAGE, SECURITY, search_path) słowo w słowo jak w 00148', () => {
+    const header = (sql: string, fn: string) => statements(sql)
+      .filter((s) => new RegExp(`^CREATE OR REPLACE FUNCTION public\\.${fn}\\s*\\(`, 'i').test(s.bare))
+      .map((s) => tight(s.text));
+    for (const [fn] of REBRANDED_FUNCTIONS) {
+      const old = header(read(M148), fn);
+      expect(old, fn).toHaveLength(1);
+      expect(header(read(M151), fn), fn).toEqual(old);
+    }
+  });
+
+  it('U16h: ciało = ciało z 00148 z marką podmienioną tylko w literałach (kod i komentarze znak w znak), bez „faktflow”', () => {
+    const before = functionBodies(read(M148));
+    const after = functionBodies(read(M151));
+    expect([...after.keys()]).toEqual(REBRANDED_FUNCTIONS.map(([fn]) => fn));
+    for (const [fn] of REBRANDED_FUNCTIONS) {
+      expect(before.get(fn), fn).toHaveLength(1);
+      expect(after.get(fn), fn).toHaveLength(1);
+      const old = before.get(fn)![0]!;
+      const next = after.get(fn)![0]!;
+      expect(next, fn).not.toBe(old);
+      expect(next, fn).toBe(rebrandLiterals(old));
+      expect(next, fn).not.toMatch(/faktflow/i);
+    }
+  });
+
+  it('U16h: 00151 obejmuje każdą funkcję 00148 z marką w literale; katalog KSEF_NUMBER_TAKEN marki nie ma', () => {
+    const m148 = read(M148);
+    const withBrand = [...functionBodies(m148)]
+      .filter(([, bodies]) => bodies.some((b) => lex(b).some((p) => p.kind === 'literal' && /faktflow/i.test(p.text))))
+      .map(([fn]) => fn);
+    expect(withBrand).toEqual(REBRANDED_FUNCTIONS.map(([fn]) => fn));
+    const update = statements(m148).find((s) => /^UPDATE public\.ksef_error_codes\b/i.test(s.bare));
+    expect(update?.text).not.toMatch(/faktflow/i);
+  });
+
+  it('U16h: REVOKE od PUBLIC, anon, authenticated i GRANT jak w 00148', () => {
+    const stmts = statements(read(M151)).map((s) => tight(s.bare));
+    for (const [fn, args] of REBRANDED_FUNCTIONS) {
+      expect(stmts, fn).toContain(tight(`REVOKE ALL ON FUNCTION public.${fn}(${args}) FROM PUBLIC, anon, authenticated`));
+    }
+    expect(stmts.filter((s) => s.startsWith('GRANT'))).toEqual([
+      tight('GRANT EXECUTE ON FUNCTION public.decide_ksef_duplicate(uuid, uuid, uuid, text, text, text, text, text, text) TO service_role'),
+    ]);
   });
 });

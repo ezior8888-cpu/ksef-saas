@@ -15,12 +15,11 @@ import {
   OPERATOR_MESSAGES,
   operatorDuplicateDecisionButton,
   operatorDuplicateRefusalReason,
-  operatorIssueDateMessage,
-  operatorKindHeldMessage,
-  operatorLegacyDataMessage,
-  operatorReconcileButton,
+  operatorReconcileRefusal,
   operatorRemindButton,
-  operatorRequeueButton,
+  operatorRequeueEventRefusal,
+  operatorRequeueRefusal,
+  type OperatorRefusal,
 } from '@/lib/admin/ksef-operator-policy';
 import { buildKsefRequeueEvent, KSEF_RESEND_SOURCE_COLUMNS, ksefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { describeResetError } from '@/lib/invoices/ksef-send-policy';
@@ -50,6 +49,7 @@ import {
   readDuplicateDecisionBlocker,
   type DuplicateRpcError,
 } from '@/lib/ksef/duplicate-decision-rpc';
+import { recordSendRefusal, type SendRefusalCode } from '@/lib/ksef/send-attempt-ledger';
 import { isKsefSubmissionPaused } from '@/lib/ksef/submission-holds';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { readTenantOwnerContact } from '@/lib/supabase/admin-queries';
@@ -105,6 +105,17 @@ async function loadRow(invoiceId: string): Promise<OperatorRow | null> {
   return (data as unknown as OperatorRow | null) ?? null;
 }
 
+/** Decyzja „Wyślij ponownie” / „Tylko uzgodnij” razem ze zleceniem; odmowa jako dane (kod do dziennika prób). */
+type OperatorRequeueDecision =
+  | { ok: true; sendAttemptId: string }
+  | { ok: false; refusal: OperatorRefusal };
+
+/**
+ * A5: każda odmowa po odczycie faktury zostawia wiersz `refused` / `enqueue`
+ * w dzienniku prób (`ksef_send_attempts`, 00150) z operatorem w `user_id` —
+ * jak odmowa klienta przed kolejką (`ksef-submit-enqueue.ts`). Zapis fail-open:
+ * awaria dziennika nie zmienia odpowiedzi dla operatora.
+ */
 export async function operatorRequeueAction(
   invoiceId: string,
   options: { reconcileOnly: boolean },
@@ -112,62 +123,19 @@ export async function operatorRequeueAction(
   const admin = await requireAdmin();
   const row = await loadRow(invoiceId);
   if (!row) return { success: false, error: OPERATOR_MESSAGES.notFound };
-  const environment = configuredKsefEnvironment();
-  const facts = ksefResendFacts(row, environment);
-  const common = {
-    direction: row.direction, status: row.ksef_status, invoiceKind: row.invoice_kind,
-    facts, environmentKnown: environment !== null,
-  };
+  const refusal = (code: SendRefusalCode, message: string) =>
+    recordSendRefusal({ tenantId: row.tenant_id, invoiceId: row.id, userId: admin.userId, code, message });
 
-  // Ta sama decyzja co przycisk (A4): klasa, środowisko, dane z kopii, rodzaj, data (decyzja b).
-  const supabase = createAdminClient();
-  let decision;
-  if (options.reconcileOnly) {
-    const { data: open, error } = await supabase
-      .from('ksef_submissions')
-      .select('id')
-      .eq('invoice_id', invoiceId)
-      .eq('tenant_id', row.tenant_id)
-      .in('status', [...OPEN_SUBMISSION_STATUSES])
-      .limit(1);
-    if (error) throw new Error(`ksef_submissions: ${error.message}`);
-    decision = operatorReconcileButton({ ...common, openSent: (open ?? []).length > 0 });
-  } else {
-    decision = operatorRequeueButton({ ...common, errorCode: row.last_error_code });
-  }
-  if (!decision.enabled) return { success: false, error: decision.reason ?? OPERATOR_MESSAGES.reconcileClass };
-  if (!environment) return { success: false, error: OPERATOR_MESSAGES.envUnknown };
-
-  // Hamulec operatora — fail-closed, jak przy kolejkowaniu z akcji klienta.
+  let decision: OperatorRequeueDecision;
   try {
-    if (await isKsefSubmissionPaused()) return { success: false, error: OPERATOR_MESSAGES.paused };
-  } catch {
-    return { success: false, error: OPERATOR_MESSAGES.pausedUnknown };
-  }
-
-  // Zdarzenie z kopii na wierszu — ta sama definicja co cron (A4b PR2a).
-  const built = buildKsefRequeueEvent(row, environment, randomUUID(), { reconcileOnly: options.reconcileOnly });
-  if (!built.ok) {
-    // Zwykle nieosiągalne po decyzji przycisku — chyba że minęła północ między krokami.
-    const refusal = built.reason === 'missing-special-data' || built.reason === 'incomplete'
-      ? operatorLegacyDataMessage(row.invoice_kind)
-      : built.reason === 'kind-held'
-        ? operatorKindHeldMessage(row.invoice_kind)
-        : built.reason === 'issue-date'
-          ? operatorIssueDateMessage(row.invoice_kind)
-          : OPERATOR_MESSAGES.noNip;
-    return { success: false, error: refusal };
-  }
-  const mode: KsefSendMode = { kind: 'requeue', actorUserId: admin.userId, reconcileOnly: options.reconcileOnly };
-  const sendAttemptId = built.sendAttemptId;
-
-  try {
-    await sendJobEvent(
-      built.event,
-      { inTransaction: ksefSendTransactionStep(mode, { invoiceId: row.id, tenantId: row.tenant_id, attemptId: sendAttemptId }) },
-    );
+    decision = await decideOperatorRequeue(row, admin.userId, options);
   } catch (e) {
-    return { success: false, error: describeKsefSendError(e, mode) };
+    await refusal('ENQUEUE_ERROR', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    throw e;
+  }
+  if (!decision.ok) {
+    await refusal(decision.refusal.code, decision.refusal.reason);
+    return { success: false, error: decision.refusal.reason };
   }
 
   await logAuditSystem({
@@ -181,11 +149,66 @@ export async function operatorRequeueAction(
       internalNumber: row.internal_number,
       previousStatus: row.ksef_status,
       previousCode: row.last_error_code,
-      sendAttemptId,
+      sendAttemptId: decision.sendAttemptId,
     },
   });
   revalidateViews(row.id);
   return { success: true, message: options.reconcileOnly ? OPERATOR_MESSAGES.reconcileQueued : OPERATOR_MESSAGES.requeued };
+}
+
+async function decideOperatorRequeue(
+  row: OperatorRow,
+  actorUserId: string,
+  options: { reconcileOnly: boolean },
+): Promise<OperatorRequeueDecision> {
+  const environment = configuredKsefEnvironment();
+  const facts = ksefResendFacts(row, environment);
+  const common = {
+    direction: row.direction, status: row.ksef_status, invoiceKind: row.invoice_kind,
+    facts, environmentKnown: environment !== null,
+  };
+
+  // Ta sama decyzja co przycisk (A4): klasa, środowisko, dane z kopii, rodzaj, data (decyzja b).
+  let refused: OperatorRefusal | null;
+  if (options.reconcileOnly) {
+    const { data: open, error } = await createAdminClient()
+      .from('ksef_submissions')
+      .select('id')
+      .eq('invoice_id', row.id)
+      .eq('tenant_id', row.tenant_id)
+      .in('status', [...OPEN_SUBMISSION_STATUSES])
+      .limit(1);
+    if (error) throw new Error(`ksef_submissions: ${error.message}`);
+    refused = operatorReconcileRefusal({ ...common, openSent: (open ?? []).length > 0 });
+  } else {
+    refused = operatorRequeueRefusal({ ...common, errorCode: row.last_error_code });
+  }
+  if (refused) return { ok: false, refusal: refused };
+  if (!environment) return { ok: false, refusal: { code: 'ENV_UNKNOWN', reason: OPERATOR_MESSAGES.envUnknown } };
+
+  // Hamulec operatora — fail-closed, jak przy kolejkowaniu z akcji klienta.
+  try {
+    if (await isKsefSubmissionPaused()) {
+      return { ok: false, refusal: { code: 'KSEF_PAUSED', reason: OPERATOR_MESSAGES.paused } };
+    }
+  } catch {
+    return { ok: false, refusal: { code: 'PAUSE_UNKNOWN', reason: OPERATOR_MESSAGES.pausedUnknown } };
+  }
+
+  // Zdarzenie z kopii na wierszu — ta sama definicja co cron (A4b PR2a).
+  const built = buildKsefRequeueEvent(row, environment, randomUUID(), { reconcileOnly: options.reconcileOnly });
+  if (!built.ok) return { ok: false, refusal: operatorRequeueEventRefusal(built.reason, row.invoice_kind) };
+  const mode: KsefSendMode = { kind: 'requeue', actorUserId, reconcileOnly: options.reconcileOnly };
+
+  try {
+    await sendJobEvent(
+      built.event,
+      { inTransaction: ksefSendTransactionStep(mode, { invoiceId: row.id, tenantId: row.tenant_id, attemptId: built.sendAttemptId }) },
+    );
+  } catch (e) {
+    return { ok: false, refusal: { code: 'ENQUEUE_REFUSED', reason: describeKsefSendError(e, mode) } };
+  }
+  return { ok: true, sendAttemptId: built.sendAttemptId };
 }
 
 export async function operatorResetAction(invoiceId: string): Promise<OperatorActionResult> {
