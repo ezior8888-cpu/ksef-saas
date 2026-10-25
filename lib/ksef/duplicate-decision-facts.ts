@@ -15,12 +15,17 @@
  * `paid_amount`; wiersze wpłat sprawdza RPC (odmowa z nazwą dokumentu).
  *
  * Każdy błąd odczytu rzuca (fail-closed): „nie wiem” to nie „można decydować”.
+ * Wyjątek (PR C, 5.4): blokada SQL przy `faktflow-original` (`facts.sqlBlocker`)
+ * — błąd jej odczytu zostawia `undefined`, a polityka odmawia `state-unknown`.
  */
 
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import type { createAdminClient } from '@/lib/supabase/admin';
+
+import { readDuplicateDecisionBlocker, readDuplicateDecisionBlockerForSession } from './duplicate-decision-rpc';
 import {
   duplicateMarker,
   type DuplicateDecisionFacts,
@@ -92,8 +97,6 @@ export async function loadDuplicateDecisionFacts(
   invoiceRow?: DuplicateDecisionInvoiceRow | null,
   options?: DuplicateDecisionFactsOptions,
 ): Promise<DuplicateDecisionFacts> {
-  // PR C kontrakt (commit 1): odczyt blokady dochodzi w commicie 6 (grupa C).
-  if (options?.sqlBlocker) throw new Error('PR C: nie zaimplementowane');
   let invoice: DuplicateDecisionInvoiceRow | null;
   if (invoiceRow) {
     invoice = checkedInvoiceRow(invoiceRow);
@@ -116,7 +119,41 @@ export async function loadDuplicateDecisionFacts(
   if (rowsError) throw readFailure('historii wysyłki', rowsError);
   const submissions = (rows ?? []) as DuplicateDecisionSubmissionRow[];
 
-  return { invoice, submissions, knownInvoice: await loadKnownInvoice(client, tenantId, invoiceId, submissions) };
+  const knownInvoice = await loadKnownInvoice(client, tenantId, invoiceId, submissions);
+  const facts: DuplicateDecisionFacts = { invoice, submissions, knownInvoice };
+  // PR C (5.4): blokada SQL tylko przy znaczniku `faktflow-original` — powody PR B bez dodatkowego odczytu.
+  if (options?.sqlBlocker && invoice && isFaktflowOriginalMarker(submissions)) {
+    facts.sqlBlocker = await loadSqlBlocker(client, tenantId, invoiceId, options.sqlBlocker);
+  }
+  return facts;
+}
+
+/** Znacznik 440 (ten sam wybór co SQL, `duplicateMarker`) z powodem `faktflow-original`. */
+function isFaktflowOriginalMarker(submissions: DuplicateDecisionSubmissionRow[]): boolean {
+  const marker = duplicateMarker(submissions);
+  return Boolean(marker && isRecord(marker.original_check) && marker.original_check.reason === 'faktflow-original');
+}
+
+/**
+ * Blokada SQL dla `faktflow-original` (5.4): `session` — 4.9 klientem sesji
+ * (firma z `x-active-org`); `admin` — `ksef_duplicate_decision_blocker`
+ * kluczem serwisowym (operator, worker). Błąd odczytu → `undefined`: polityka
+ * odmawia wtedy `state-unknown` z tekstem `FAKTFLOW.READ_FAILED` (fail-closed,
+ * tak samo dla obu źródeł) zamiast przerywać ładowanie widoku.
+ */
+async function loadSqlBlocker(
+  client: SupabaseClient,
+  tenantId: string,
+  invoiceId: string,
+  source: 'session' | 'admin',
+): Promise<string | null | undefined> {
+  if (source === 'session') return readDuplicateDecisionBlockerForSession(client, invoiceId);
+  try {
+    // Klient serwisowy przekazany przez wołającego (operator, worker) — ten sam obiekt, inny typ w sygnaturze.
+    return await readDuplicateDecisionBlocker(client as unknown as ReturnType<typeof createAdminClient>, invoiceId, tenantId);
+  } catch {
+    return undefined;
+  }
 }
 
 /**

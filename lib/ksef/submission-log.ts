@@ -641,11 +641,38 @@ export async function findTenantInvoiceByKsefNumber(
   return data ? { id: data.id as string, internalNumber: (data.internal_number as string | null) ?? null } : null;
 }
 
+/** Ile razy `recordKsefDuplicateCheck` scala od nowa, gdy SQL zmienił znacznik między odczytem a zapisem. */
+const DUPLICATE_CHECK_WRITE_ATTEMPTS = 3;
+
+/**
+ * Klucze `original_check`, które dopisuje SQL pod blokadą wiersza, gdy runner
+ * nie trzyma wysyłki (00156): `importGate.release` (`release_ksef_original_review`,
+ * 4.7 krok 8) i `recheckNeeded` (`flag_ksef_original_recheck`, 4.7b krok 5).
+ * Oba tylko dochodzą (raz zapisane — `already_released` / `already`), więc
+ * „wiersz bez klucza w chwili zapisu” znaczy „wiersz bez zmian od odczytu”.
+ * Ścieżki PostgREST (`->`, `->>`): brak klucza i JSON `null` dają SQL-owy NULL.
+ */
+const SQL_WRITTEN_CHECK_PATHS = [
+  { path: 'original_check->importGate->>release', present: (c: Record<string, unknown>) => isRecord(c.importGate) && c.importGate.release != null },
+  { path: 'original_check->>recheckNeeded', present: (c: Record<string, unknown>) => c.recheckNeeded != null },
+] as const;
+
 /**
  * D-A4-1b-3 (00144): dane oryginału przy duplikacie 440, którego automat nie
  * rozstrzygnął — na otwartym wpisie próby ze znacznikiem 440 tego numeru KSeF.
  * Zamknięte wpisy (decyzja, `number_taken`, akceptacja) nie są nadpisywane.
  * Rzuca przy błędzie bazy (fail-closed: bez danych nie ma werdyktu).
+ *
+ * PR C (rozstrzygnięcia commitu 3, fix 5; INV-25, INV-26): zapis warunkowy.
+ * Runner trzyma wysyłkę (00124), ale `release_ksef_original_review`
+ * i `flag_ksef_original_recheck` (operator, akcja klienta) piszą znacznik bez
+ * przejęcia. Zapis bez warunku nadpisałby je starszym obrazem — zgubione
+ * oddanie decyzji albo zgubiony `recheckNeeded`. Dlatego UPDATE trafia tylko
+ * w wiersz, który nadal nie ma kluczy nieobecnych przy odczycie; gdy znacznik
+ * się zmienił (zero zapisanych wierszy, a wiersz jest), ponowny odczyt
+ * i ponowne scalenie `mergeDuplicateCheck` — ono decyduje, co z oddania
+ * i znacznika przechodzi do nowego zapisu. Postgres sprawdza warunek UPDATE
+ * jeszcze raz po zdjęciu blokady wiersza, więc zapis nie mija się z SQL.
  */
 export async function recordKsefDuplicateCheck(params: {
   tenantId: string;
@@ -656,26 +683,41 @@ export async function recordKsefDuplicateCheck(params: {
   const supabase = createAdminClient();
   // Sprawdzenie, które nie pobrało oryginału, nie kasuje danych z wcześniejszego
   // udanego (`mergeDuplicateCheck`) — odczyt bieżącego zapisu przed nadpisaniem.
-  // Jedna próba naraz (przejęcie wysyłki, 00124), więc odczyt i zapis się nie mijają.
-  const { data: current, error: readError } = await supabase
-    .from('ksef_submissions')
-    // `original_check` z 00144 — typy bazy dogenerujemy z produkcji po wgraniu.
-    .select('original_check')
-    .eq('tenant_id', params.tenantId)
-    .eq('invoice_id', params.invoiceId)
-    .eq('original_ksef_number', params.originalKsefNumber)
-    .in('status', ['intent', 'sent'])
-    .order('attempted_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (readError) throw new Error('Nie można odczytać danych oryginału duplikatu KSeF');
-  const previous = parseDuplicateCheck((current as { original_check?: unknown } | null)?.original_check);
-  const { error } = await supabase
-    .from('ksef_submissions')
-    .update({ original_check: mergeDuplicateCheck(previous, params.check) } as Record<string, unknown>)
-    .eq('tenant_id', params.tenantId)
-    .eq('invoice_id', params.invoiceId)
-    .eq('original_ksef_number', params.originalKsefNumber)
-    .in('status', ['intent', 'sent']);
-  if (error) throw new Error('Nie można zapisać danych oryginału duplikatu KSeF');
+  for (let attempt = 1; attempt <= DUPLICATE_CHECK_WRITE_ATTEMPTS; attempt++) {
+    const { data: current, error: readError } = await supabase
+      .from('ksef_submissions')
+      // `original_check` z 00144 — typy bazy dogenerujemy z produkcji po wgraniu.
+      .select('id, original_check')
+      .eq('tenant_id', params.tenantId)
+      .eq('invoice_id', params.invoiceId)
+      .eq('original_ksef_number', params.originalKsefNumber)
+      .in('status', ['intent', 'sent'])
+      .order('attempted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (readError) throw new Error('Nie można odczytać danych oryginału duplikatu KSeF');
+    const row = current as { id?: unknown; original_check?: unknown } | null;
+    // Brak otwartego wpisu (decyzja albo werdykt go zamknęły) — nic do zapisu, jak dotąd.
+    if (!row) return;
+    const raw = isRecord(row.original_check) ? row.original_check : {};
+    const previous = parseDuplicateCheck(row.original_check);
+
+    let update = supabase
+      .from('ksef_submissions')
+      .update({ original_check: mergeDuplicateCheck(previous, params.check) } as Record<string, unknown>)
+      .eq('tenant_id', params.tenantId)
+      .eq('invoice_id', params.invoiceId)
+      .eq('original_ksef_number', params.originalKsefNumber)
+      .in('status', ['intent', 'sent']);
+    for (const { path, present } of SQL_WRITTEN_CHECK_PATHS) {
+      if (!present(raw)) update = update.is(path, null);
+    }
+    const { data: written, error } = await update.select('id');
+    if (error) throw new Error('Nie można zapisać danych oryginału duplikatu KSeF');
+    const ids = Array.isArray(written) ? (written as Array<{ id?: unknown }>).map((r) => r.id) : [];
+    // Odczytany znacznik dostał nasz zapis — reszta otwartych wpisów tego numeru (jeśli są) też, o ile się nie zmieniły.
+    if (ids.includes(row.id)) return;
+  }
+  // SQL zmieniał znacznik przy każdej próbie — fail-closed, runner ponowi werdykt od zera.
+  throw new Error('Nie można zapisać danych oryginału duplikatu KSeF — znacznik zmieniał się w trakcie zapisu');
 }

@@ -741,7 +741,8 @@ describe('D-A4-1b-3 PR C: runner zapisuje bramę pochodzenia na znaczniku faktfl
   const K = '5260001246-20260928-0100A0B0C0D0-1A';
   /** NIP sprzedawcy w pliku z `faktura()` — brama porównuje go z NIP firmy ZE ZDARZENIA (F3). */
   const SELLER_NIP = '5260001246';
-  const PROVENANCE_MESSAGE = 'KSeF: plik z oznaczeniem FaktFlow do przeglądu operatora';
+  // PR C: brzmienie po zmianie marki (merge 3451a72e); spec 5.1 ma nazwę sprzed zmiany, a nazwa-produktu.test.ts zabrania „FaktFlow” w lib/.
+  const PROVENANCE_MESSAGE = 'KSeF: plik z oznaczeniem FaktWay do przeglądu operatora';
   const OPERATOR_MESSAGE = 'KSeF: duplikat 440 do uzgodnienia przez operatora';
   const ARCHIVE_KEY = `${T}/ksef-import/${K}.xml`;
   const RELEASE = {

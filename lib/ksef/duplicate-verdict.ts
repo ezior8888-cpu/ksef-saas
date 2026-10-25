@@ -176,7 +176,6 @@ export function knownNumberVerdictMessage(
     : DUPLICATE_DECISION_TEXTS.KNOWN_NUMBER_LAST_ERROR(ksefNumber, y);
 }
 
-/* eslint-disable @typescript-eslint/no-unused-vars -- PR C kontrakt (commit 1): sygnatura bez ciała, wyłącznik znika z ciałem */
 /**
  * D-A4-1b-3 PR C (5.1 punkt 3): `last_error` werdyktu `faktflow-original` —
  * `DUPLICATE_DECISION_TEXTS.FAKTFLOW.LAST_ERROR(K)` przy bramie `importable`,
@@ -185,9 +184,9 @@ export function knownNumberVerdictMessage(
  * zostaje dla `same-content-other-program`.
  */
 export function faktflowOriginalVerdictMessage(ksefNumber: string, gateKind: 'importable' | 'review'): string {
-  throw new Error('PR C: nie zaimplementowane');
+  const FF = DUPLICATE_DECISION_TEXTS.FAKTFLOW;
+  return gateKind === 'review' ? FF.LAST_ERROR_REVIEW(ksefNumber) : FF.LAST_ERROR(ksefNumber);
 }
-/* eslint-enable @typescript-eslint/no-unused-vars */
 
 /** Komunikat werdyktu „operator” (trafia do `last_error`; przy panelu duplikatu klient go nie widzi — karta błędu jest ukryta). */
 export function operatorVerdictMessage(ksefNumber: string, cmp: DuplicateComparison): string {
