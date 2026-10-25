@@ -104,7 +104,8 @@ describe('układ logowania (AuthSplitLayout)', () => {
       </AuthSplitLayout>,
     );
     expect(html).toContain('href="/"');
-    expect(html).toContain('Fakt<span class="text-primary">Way</span>');
+    // Logo FaktWay z zestawu (25.10.2026): wbudowany SVG z etykietą dla czytników ekranu.
+    expect(html).toContain('role="img" aria-label="FaktWay"');
     expect(html).toMatch(new RegExp(`<p class="[^"]*lg:hidden[^"]*">${AUTH_SLOGAN_TITLE} ${AUTH_SLOGAN_TEXT}</p>`));
     expect(html).toContain('<p>Treść strony</p>');
   });
@@ -129,7 +130,7 @@ describe('układ logowania (AuthSplitLayout)', () => {
     expect(html).not.toContain('#000000');
     expect(html).toContain('Wysłana do KSeF');
     expect(html).toContain('Potwierdzenie UPO pobrane');
-    // Bez obrazków (zielony znak marki zdjęty 23.10.2026, nowe logo osobno).
+    // Bez plików graficznych: logo jest wbudowanym SVG (zielony znak zdjęty 23.10.2026).
     expect(html).not.toContain('<img');
     expect(html).not.toMatch(/text-foreground[^"]*xl:text-5xl/);
     expect(html).not.toMatch(OLD_LOOK);
