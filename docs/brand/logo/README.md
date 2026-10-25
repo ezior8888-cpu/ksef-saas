@@ -6,12 +6,15 @@
 
 | Gdzie | Plik |
 |---|---|
-| strona, aplikacja, maile (jasne tło) | `zestaw/svg/faktway-logo.svg` |
+| w kodzie aplikacji (React) | `components/brand/faktway-logo.tsx`: `FaktWayLogo` i `FaktWayMark` (jasny i ciemny motyw same) |
+| strona, materiały (jasne tło) | `zestaw/svg/faktway-logo.svg` |
 | tryb ciemny, ciemne tła | `zestaw/svg/faktway-logo-negatyw.svg` |
-| na niebieskim tle | `zestaw/svg/faktway-logo-biale.svg` |
-| PDF faktury, dokumenty | `zestaw/svg/faktway-logo.svg` (w generatorze PDF), poza kodem `zestaw/png/faktway-logo-na-bialym-1200.png` |
+| na niebieskim tle | `zestaw/svg/faktway-logo-biale.svg` (w kodzie `tone="inverse"`) |
+| PDF faktury | tylko znak w stopce (nagłówek faktury należy do sprzedawcy), rysowany w `lib/pdf/invoice-renderer.ts` |
+| maile do użytkowników | `public/brand/faktway-logo-email.png` (komponent `EmailLogo`) |
+| dokumenty biurowe | `zestaw/png/faktway-logo-na-bialym-1200.png` |
 | drukarnia | `zestaw/pdf/*.pdf` (wektorowe) i ta instrukcja |
-| favicon, ikona PWA, iPhone | cały katalog `zestaw/web/` (gotowy fragment `<head>` w `head-snippet.html`) |
+| favicon, ikony PWA, iPhone, powiadomienia | w aplikacji: `public/favicon.ico`, `public/icon.svg`, `public/icons/`; poza nią: `zestaw/web/` |
 | awatar w mediach społecznościowych | `zestaw/web/icon-512.png` (biały znak na niebieskim) |
 | kwadratowe miejsca (okładka, prezentacja) | `zestaw/svg/faktway-logo-pionowe.svg` |
 | tam, gdzie nazwa pada obok (np. ikona przy przycisku) | `zestaw/svg/faktway-znak.svg` |
@@ -102,13 +105,13 @@ docs/brand/logo/
   zestaw/pdf/          PDF wektorowe do druku (RGB)
   zestaw/web/          favicon.ico i .svg, ikony PWA, apple-touch-icon, site.webmanifest, head-snippet.html
   zestaw/instrukcja/   ilustracje do tej instrukcji
-  zrodla/              generatory (Python 3, bez zależności) i spec planszy
+  zrodla/              generatory (Python 3, bez zależności) i spec planszy; aplikacja.py zapisuje pliki aplikacji
 ```
 
 Po zmianie geometrii (z katalogu `docs/brand/logo/zrodla`):
 
 ```bash
-python3 kit.py ../zestaw/svg && python3 instrukcja.py ../zestaw && ./eksport.sh
+python3 kit.py ../zestaw/svg && python3 instrukcja.py ../zestaw && ./eksport.sh && python3 aplikacja.py
 ```
 
 `eksport.sh` potrzebuje `rsvg-convert` (`brew install librsvg`). Katalog `zestaw/web/` wygenerował skrypt `export_variants.py` ze skilla logo-design (ikony z białej wersji znaku na `#2463EF`), a favicony 16/32/48 px i `favicon.svg` (z przełączeniem na jasny niebieski w trybie ciemnym) są renderowane prosto z `faktway-znak-maly.svg`, żeby trzymały siatkę pikseli.
@@ -128,4 +131,4 @@ python3 kit.py ../zestaw/svg && python3 instrukcja.py ../zestaw && ./eksport.sh
 - CMYK i Pantone do potwierdzenia na próbnym wydruku.
 - PDF są w RGB. Jeśli drukarnia zażąda CMYK albo AI/EPS, trzeba je zrobić w programie graficznym z plików SVG.
 - Napis to nakładające się kształty w jednej ścieżce: na ekranie i w druku wyglądają jak jeden kształt, ale do ploterów, wycinania folii i haftu trzeba je scalić w programie graficznym (Scal / Unite).
-- Logo nie jest jeszcze podpięte w aplikacji: nagłówek strony i aplikacji, `public/favicon/`, manifest PWA, maile, PDF faktury.
+- Maile logowania i resetu hasła wysyła GoTrue z szablonami na serwerze `db-1`, poza repozytorium: logo trzeba tam dodać osobno.
