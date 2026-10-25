@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { SectionTabPending } from '@/components/lists/section-tab-pending';
+import { LinkPendingMark } from '@/components/navigation/link-pending-mark';
 import { cn } from '@/lib/utils';
 
 /** Zakładka ekranu z listą — osobna strona z własnym adresem. */
@@ -29,7 +29,7 @@ export interface SectionTab<T extends string = string> {
  * szkielet: przejście z „Wystawione” na „Cykliczne” czekało wtedy na serwer
  * z podkreśleniem w starym miejscu, a „Po terminie” (inny segment) zamieniało
  * całą stronę — z kaflami i tym rzędem — na ogólny szkielet. Gdy strona
- * jeszcze nie przyszła, `SectionTabPending` przenosi podkreślenie na dotkniętą
+ * jeszcze nie przyszła, `LinkPendingMark` przenosi podkreślenie na dotkniętą
  * zakładkę od razu (`.ff-section-tabs` w `globals.css`).
  */
 export function SectionTabs<T extends string>({
@@ -62,7 +62,7 @@ export function SectionTabs<T extends string>({
             )}
           >
             {tab.label}
-            <SectionTabPending />
+            <LinkPendingMark />
           </Link>
         );
       })}
