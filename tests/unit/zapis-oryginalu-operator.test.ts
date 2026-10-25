@@ -66,6 +66,8 @@ const m = vi.hoisted(() => ({
   decideReply: null as unknown,
   releaseReply: null as unknown,
   flagReply: null as unknown,
+  /** Wstrzyknięta odmowa suchego przebiegu (`not-buildable` przy pair/record, której plik z generatora nie wywoła); `null` — prawdziwy przebieg. */
+  prepareOverride: null as null | ((input: unknown) => Promise<unknown>),
 }));
 
 vi.mock('@/lib/auth/admin-guard', () => ({ requireAdmin: m.requireAdmin }));
@@ -99,6 +101,17 @@ vi.mock('@/lib/storage/r2-client', () => ({
   getR2Config: () => ({ bucketName: 'bucket', accountId: 'a', accessKeyId: 'k', secretAccessKey: 's', endpoint: 'http://r2.test' }),
   getR2Client: () => ({ send: m.s3Send }),
 }));
+// Suchy przebieg: domyślnie prawdziwy; `m.prepareOverride` wstrzykuje odmowę `not-buildable` przy ofercie pair/record
+// (brama „importable” i lustro 4.8 liczą z tych samych wejść, więc z prawdziwego pliku jej nie wywołamy).
+// Mapowanie rodzaju znacznika (`originalRecheckKindFor`) zostaje prawdziwe.
+vi.mock('@/lib/ksef/duplicate-original-import', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/ksef/duplicate-original-import')>();
+  return {
+    ...real,
+    prepareOriginalImport: (input: Parameters<typeof real.prepareOriginalImport>[0]) =>
+      m.prepareOverride ? m.prepareOverride(input) : real.prepareOriginalImport(input),
+  };
+});
 vi.mock('@sentry/nextjs', () => ({
   captureException: m.captureException,
   captureMessage: m.captureMessage,
@@ -373,6 +386,7 @@ beforeEach(() => {
   m.decideReply = { data: decideData(), error: null };
   m.releaseReply = { data: { invoice_id: ID, original_ksef_number: K, already_released: false, release_at: RELEASE_AT }, error: null };
   m.flagReply = { data: { flagged: true }, error: null };
+  m.prepareOverride = null;
   m.rpc.mockImplementation(async (fn: string) => {
     switch (fn) {
       case 'ksef_duplicate_decision_blocker': return { data: m.blocker, error: null };
@@ -559,6 +573,134 @@ describe('D-A4-1b-3 PR C: operator zapisuje decyzję — oferta pair (FO-PARA)',
       expect(alarmsOf(KSEF_ORIGINAL_ALARM_KINDS.importRefused)).toEqual([alarm(KSEF_ORIGINAL_ALARM_KINDS.importRefused)]);
       expect(m.audit).not.toHaveBeenCalled();
     });
+  });
+});
+
+// Finding 4 (recenzja commitów 6–8): `not-buildable` przy ofercie pair/record oznacza błąd programu (brama mówiła
+// „importable”, a projekcja nie przechodzi) — faktura jest oznaczona do ponownego sprawdzenia. Tekst `notBuildable`
+// ("przy review-pair oddaj decyzję…; przy review-record zgłoś Bartoszowi") dotyczy ofert przeglądu i tu mylił operatora.
+describe('D-A4-1b-3 PR C: not-buildable przy ofercie pair/record — tekst o błędzie programu (finding 4)', () => {
+  const NOT_BUILDABLE: Array<[detail: string, kind: string]> = [
+    ['lines', 'not-buildable'],
+    ['totals', 'not-buildable'],
+    ['number', 'import-mismatch'],
+    ['seller', 'import-mismatch'],
+  ];
+
+  it('brzmienie tekstu: błąd programu, oznaczone do ponownego sprawdzenia, zgłoś Bartoszowi (runbook)', () => {
+    expect(OPERATOR_DUPLICATE_MESSAGES.notBuildableProgram('lines')).toBe(
+      'Nie da się zapisać faktury z pliku (lines) mimo oceny „importable” — błąd programu; oznaczone do ponownego sprawdzenia (cron „Tylko uzgodnij”), zgłoś Bartoszowi (runbook „Zapis oryginału odmówiony”).',
+    );
+  });
+
+  it.each(NOT_BUILDABLE)('pair, not-buildable:%s → notBuildableProgram; znacznik %s, jeden alarm recheck z tagiem detail; bez RPC decyzji i audytu', async (detail, kind) => {
+    m.prepareOverride = async () => ({ ok: false, kind: 'not-buildable', detail });
+
+    const result = await operatorDecideDuplicateAction(ID, decideInput());
+
+    expect(result).toEqual({ success: false, error: OPERATOR_DUPLICATE_MESSAGES.notBuildableProgram(detail) });
+    expect(rpcCallsOf('flag_ksef_original_recheck')).toHaveLength(1);
+    expect(rpcCallsOf('flag_ksef_original_recheck')[0]![1]).toMatchObject({ p_kind: kind, p_actor_user_id: OPERATOR.userId, p_original_ksef_number: K });
+    expect(alarmsOf(KSEF_ORIGINAL_ALARM_KINDS.recheck)).toEqual([alarm(KSEF_ORIGINAL_ALARM_KINDS.recheck)]);
+    expect(rpcCallsOf('decide_ksef_duplicate_original')).toEqual([]);
+    expect(m.audit).not.toHaveBeenCalled();
+  });
+
+  it('record, not-buildable:lines → ten sam tekst o błędzie programu (nie tekst przeglądu); znacznik not-buildable', async () => {
+    seedRecord('json');
+    m.prepareOverride = async () => ({ ok: false, kind: 'not-buildable', detail: 'lines' });
+
+    const result = await operatorDecideDuplicateAction(ID, decideInput());
+
+    expect(result).toEqual({ success: false, error: OPERATOR_DUPLICATE_MESSAGES.notBuildableProgram('lines') });
+    expect(rpcCallsOf('flag_ksef_original_recheck')[0]![1]).toMatchObject({ p_kind: 'not-buildable' });
+    expect(rpcCallsOf('decide_ksef_duplicate_original')).toEqual([]);
+  });
+
+  it('review-pair zostaje przy tekście przeglądu (notBuildable): bez znacznika, bez nowego tekstu', async () => {
+    seedReview('review-pair');
+    m.prepareOverride = async () => ({ ok: false, kind: 'not-buildable', detail: 'currency' });
+
+    const result = await operatorDecideDuplicateAction(ID, decideInput());
+
+    expect(result).toEqual({ success: false, error: OPERATOR_DUPLICATE_MESSAGES.notBuildable('currency') });
+    expect(rpcCallsOf('flag_ksef_original_recheck')).toEqual([]);
+  });
+});
+
+// Finding 5: `flag_ksef_original_recheck` odpowiada `{flagged:false, reason:'stale'|'not-pending'}`, gdy stan zmienił się
+// od kliknięcia (np. operator zdecydował w międzyczasie). Tekst „sprawdź ponownie” i alarm byłyby wtedy nieprawdziwe.
+describe('D-A4-1b-3 PR C: flag recheck odpowiada stale / not-pending → STALE, bez alarmu (finding 5)', () => {
+  const REASONS = ['stale', 'not-pending'] as const;
+  const staleFlag = (reason: (typeof REASONS)[number]) => { m.flagReply = { data: { flagged: false, reason }, error: null }; };
+
+  it.each(REASONS)('suchy przebieg (brak pliku w archiwum), flag: %s → STALE; jedno wywołanie flag, bez alarmu recheck, RPC decyzji i audytu', async (reason) => {
+    objects.delete(ARCHIVE);
+    staleFlag(reason);
+
+    const result = await operatorDecideDuplicateAction(ID, decideInput());
+
+    expect(result).toEqual({ success: false, error: DUPLICATE_DECISION_TEXTS.STALE });
+    expect(rpcCallsOf('flag_ksef_original_recheck')).toHaveLength(1);
+    expect(rpcCallsOf('decide_ksef_duplicate_original')).toEqual([]);
+    expect(alarmsOf(KSEF_ORIGINAL_ALARM_KINDS.recheck)).toEqual([]);
+    expect(m.audit).not.toHaveBeenCalled();
+  });
+
+  it('oferta przeglądu (review-pair), brak pliku w archiwum, flag: stale → STALE bez alarmu', async () => {
+    seedReview('review-pair');
+    objects.delete(ARCHIVE);
+    staleFlag('stale');
+
+    const result = await operatorDecideDuplicateAction(ID, decideInput());
+
+    expect(result).toEqual({ success: false, error: DUPLICATE_DECISION_TEXTS.STALE });
+    expect(alarmsOf(KSEF_ORIGINAL_ALARM_KINDS.recheck)).toEqual([]);
+  });
+
+  it.each(REASONS)('pair, not-buildable:lines, flag: %s → STALE bez alarmu recheck', async (reason) => {
+    m.prepareOverride = async () => ({ ok: false, kind: 'not-buildable', detail: 'lines' });
+    staleFlag(reason);
+
+    const result = await operatorDecideDuplicateAction(ID, decideInput());
+
+    expect(result).toEqual({ success: false, error: DUPLICATE_DECISION_TEXTS.STALE });
+    expect(alarmsOf(KSEF_ORIGINAL_ALARM_KINDS.recheck)).toEqual([]);
+  });
+
+  it.each(REASONS)('baza odmawia (P0001 import-mismatch:number), flag: %s → STALE bez alarmu import-refused', async (reason) => {
+    m.decideReply = {
+      data: null,
+      error: { code: 'P0001', message: fillSqlText(DUPLICATE_DECISION_SQL_TEXTS.IMPORT_MISMATCH.template, K, NR), details: 'import-mismatch:number' },
+    };
+    staleFlag(reason);
+
+    const result = await operatorDecideDuplicateAction(ID, decideInput());
+
+    expect(result).toEqual({ success: false, error: DUPLICATE_DECISION_TEXTS.STALE });
+    expect(rpcCallsOf('flag_ksef_original_recheck')).toHaveLength(1);
+    expect(alarmsOf(KSEF_ORIGINAL_ALARM_KINDS.importRefused)).toEqual([]);
+    expect(m.audit).not.toHaveBeenCalled();
+  });
+
+  it.each(REASONS)('baza odmawia (22023 import-projection:lines), flag: %s → STALE bez alarmu import-refused', async (reason) => {
+    m.decideReply = { data: null, error: { code: '22023', message: 'KSeF original import projection is invalid', details: 'import-projection:lines' } };
+    staleFlag(reason);
+
+    const result = await operatorDecideDuplicateAction(ID, decideInput());
+
+    expect(result).toEqual({ success: false, error: DUPLICATE_DECISION_TEXTS.STALE });
+    expect(alarmsOf(KSEF_ORIGINAL_ALARM_KINDS.importRefused)).toEqual([]);
+  });
+
+  it('kontrola: znacznik już był (already) albo oznaczono (flagged) → dotychczasowy tekst i alarm', async () => {
+    objects.delete(ARCHIVE);
+    m.flagReply = { data: { flagged: false, already: true }, error: null };
+
+    const result = await operatorDecideDuplicateAction(ID, decideInput());
+
+    expect(result).toEqual({ success: false, error: OPERATOR_DUPLICATE_MESSAGES.archive(ARCHIVE, 'missing') });
+    expect(alarmsOf(KSEF_ORIGINAL_ALARM_KINDS.recheck)).toHaveLength(1);
   });
 });
 
@@ -1043,6 +1185,39 @@ describe('D-A4-1b-3 PR C: operatorReleaseOriginalReviewAction — oddanie decyzj
       expect(m.duplicateEmail).not.toHaveBeenCalled();
     });
 
+    // Finding 6: 22023 z RPC oddania to też zły id/SHA/środowisko (rozjazd programu), nie tylko notatka.
+    const NOTE_RPC_MESSAGE = 'KSeF original release requires a note of 10 to 1000 characters';
+
+    it('22023 z komunikatem o notatce (baza policzyła notatkę krócej niż akcja) → noteError; bez Sentry, e-maila i audytu', async () => {
+      m.releaseReply = { data: null, error: { code: '22023', message: NOTE_RPC_MESSAGE } };
+
+      const result = await release(ID, releaseInput());
+
+      expect(result).toEqual({ success: false, error: OPERATOR_DUPLICATE_MESSAGES.noteError });
+      expect(m.captureException).not.toHaveBeenCalled();
+      expect(m.duplicateEmail).not.toHaveBeenCalled();
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'KSeF original release requires an invoice, a tenant and an actor',
+      'KSeF original release requires the original KSeF number',
+      'KSeF original release requires a lowercase hex SHA-256 of the original',
+      'KSeF original release environment must be test, demo or production',
+    ])('inny 22023 (%s) → tekst ogólny i zgłoszenie do Sentry operator-release, nie noteError', async (message) => {
+      m.releaseReply = { data: null, error: { code: '22023', message } };
+
+      const result = await release(ID, releaseInput());
+
+      expect(result).toEqual({ success: false, error: DUPLICATE_DECISION_TEXTS.GENERIC });
+      expect(m.captureException).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ tags: expect.objectContaining({ area: 'ksef.duplicate-decision', kind: 'operator-release' }) }),
+      );
+      expect(m.duplicateEmail).not.toHaveBeenCalled();
+      expect(m.audit).not.toHaveBeenCalled();
+    });
+
     it('XX000 (stan po zapisie niezgodny — baza wycofała oddanie) → releaseFailed i jedno zgłoszenie Sentry release-failed; bez e-maila i audytu', async () => {
       m.releaseReply = { data: null, error: { code: 'XX000', message: 'Original review release left an inconsistent state' } };
 
@@ -1087,6 +1262,74 @@ describe('D-A4-1b-3 PR C: operatorReleaseOriginalReviewAction — oddanie decyzj
       expect(notices()).toHaveLength(1);
       expect(m.audit).not.toHaveBeenCalled();
     });
+
+    // INV-21, spec 5.13 wiersz 7: po commicie oddania baza nie ma już przeglądu. Znacznik niesie `importGate.release`,
+    // blokada SQL jest NULL, więc widok to `decidable` z ofertą `released` — nie `review`. Drugie kliknięcie MUSI dojść
+    // do RPC (odpowiedź `already_released`), inaczej e-mail po zgubionej odpowiedzi nigdy nie wyjdzie z kluczem …/oddanie-{release_at}.
+    describe('prawdziwy znacznik po oddaniu (importGate.release zapisane, blokada NULL → widok released)', () => {
+      beforeEach(() => seedReleased());
+
+      it('bez śladu rodziny decision od release_at → RPC, potem e-mail z kluczem z ZAPISANEGO release_at; bez audytu oddania', async () => {
+        const result = await release(ID, releaseInput());
+
+        expect(result).toEqual({ success: true, message: OPERATOR_DUPLICATE_MESSAGES.releaseSuccess(OWNER_EMAIL) });
+        expect(rpcCallsOf('release_ksef_original_review')).toEqual([['release_ksef_original_review', {
+          p_invoice_id: ID, p_tenant_id: T, p_actor_user_id: OPERATOR.userId, p_original_ksef_number: K,
+          p_original_sha256: sha256Hex(EUR_XML), p_env: 'test', p_note: RELEASE_NOTE,
+        }]]);
+        expect(m.duplicateEmail).toHaveBeenCalledTimes(1);
+        expect(m.duplicateEmail).toHaveBeenCalledWith(
+          OWNER_EMAIL, expect.objectContaining({ variant: 'released', reminder: false }), expect.objectContaining({ idempotencyKey: RELEASE_KEY }),
+        );
+        expect(notices()).toHaveLength(1);
+        expect(m.audit).not.toHaveBeenCalled();
+      });
+
+      it('jest ślad rodziny decision od release_at → RPC, ale bez drugiego e-maila; releaseAlreadyEmailed z datą śladu', async () => {
+        const lastAt = '2026-10-08T11:40:00.000Z';
+        seedReleased({ notices: [notice(lastAt, { variant: 'released', idempotency_key: RELEASE_KEY })] });
+
+        const result = await release(ID, releaseInput());
+
+        expect(messageOf(result)).toBe(OPERATOR_DUPLICATE_MESSAGES.releaseAlreadyEmailed(formatWarsawDateTime(lastAt)));
+        expect(rpcCallsOf('release_ksef_original_review')).toHaveLength(1);
+        expect(m.duplicateEmail).not.toHaveBeenCalled();
+        expect(m.audit).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['inny numer KSeF', { originalKsefNumber: '5260001246-20261002-0200A0B0C0D0-2B' }],
+        ['inny skrót pliku', { originalSha256: 'cc'.repeat(32) }],
+      ])('%s niż w widoku → releaseStale; bez RPC i e-maila (wiązanie z plikiem zostaje)', async (_label, patch) => {
+        const result = await release(ID, releaseInput(patch));
+
+        expect(result).toEqual({ success: false, error: OPERATOR_DUPLICATE_MESSAGES.releaseStale });
+        expect(rpcCallsOf('release_ksef_original_review')).toEqual([]);
+        expect(m.duplicateEmail).not.toHaveBeenCalled();
+      });
+
+      it('notatka za krótka → noteError; bez RPC i e-maila (sprawdzenie notatki zostaje)', async () => {
+        const result = await release(ID, releaseInput({ note: 'krótko' }));
+
+        expect(result).toEqual({ success: false, error: OPERATOR_DUPLICATE_MESSAGES.noteError });
+        expect(rpcCallsOf('release_ksef_original_review')).toEqual([]);
+        expect(m.duplicateEmail).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  it('e-mail wyszedł, ale ślad nie zapisał się (audit_logs odmawia) → releaseSentNotRecorded: „Przypomnij klientowi” wyśle drugi e-mail, użyj go dopiero po potwierdzeniu klienta', async () => {
+    m.failInsertInto = ['audit_logs'];
+
+    const result = await release(ID, releaseInput());
+
+    expect(result).toEqual({ success: false, error: OPERATOR_DUPLICATE_MESSAGES.releaseSentNotRecorded });
+    // Finding 7: przypomnienie ma inny klucz (…/przypomnienie-n), więc Resend go nie zdeduplikuje — tekst nie może tego obiecywać.
+    expect(OPERATOR_DUPLICATE_MESSAGES.releaseSentNotRecorded).toBe(
+      'Oddano decyzję klientowi i e-mail wyszedł, ale nie zapisaliśmy śladu w audit_logs — „Przypomnij klientowi” wyśle drugi e-mail; użyj go dopiero, gdy klient potwierdzi, że e-maila nie ma.',
+    );
+    expect(m.duplicateEmail).toHaveBeenCalledTimes(1);
+    expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'invoice.operator_original_release' }));
   });
 
   it('e-mail niewysłany (Resend nieskonfigurowany) nie cofa oddania → releaseSentNoEmail z powodem; ślad nie powstaje, audyt oddania jest', async () => {

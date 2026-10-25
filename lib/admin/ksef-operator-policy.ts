@@ -23,6 +23,12 @@
  * decyduje sam) i „Przypomnij klientowi” (najwyżej raz na 24 h). O obu
  * decyduje widok polityki `duplicateDecisionOptions` (actor operator) — te
  * same reguły co RPC `decide_ksef_duplicate` i blokada z 00148.
+ *
+ * D-A4-1b-3 PR C (00156, spec v3 6.6): przy powodzie `faktflow-original` dochodzi
+ * przegląd pliku (widok `review`, I5R): „Zapisz fakturę z KSeF w FaktWay” (tylko
+ * gdy suchy przebieg strony mówi, że plik da się zapisać) i — przy `review-pair` —
+ * „Oddaj decyzję klientowi”. Zapisywalność liczy strona (`prepareOriginalImport`,
+ * odczyt magazynu); ta polityka jest czysta i dostaje jej wynik jako dane.
  */
 
 import type { KsefRequeueRefusal, KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
@@ -88,7 +94,7 @@ export const OPERATOR_MESSAGES = {
   rejectedToDraft: 'Odrzuconej treści nie wysyła się ponownie — powrót do szkicu.',
   terminal: 'Błąd treści dokumentu — powrót do szkicu, nie ponowienie.',
   reconcileClass: 'Klasa reconcile: nie wysyłaj od nowa — użyj „Tylko uzgodnij” albo zostaw.',
-  duplicateRequeue: 'KSeF ma już fakturę o tym numerze — ponowienie powtórzy 440. Powody no-own-file i known-number z danymi oryginału: decyzja klienta („Zapisz decyzję klienta” po rozmowie z klientem, „Przypomnij klientowi”). Pobranie oryginału nieudane (download-*, storage-pending, archive-pending), known-number bez danych albo known-stale: „Tylko uzgodnij” przy otwartym wpisie. faktflow-original, same-content-other-program, archive-conflict: runbook KSEF_DUPLICATE_RECONCILE.',
+  duplicateRequeue: 'KSeF ma już fakturę o tym numerze — ponowienie powtórzy 440. Powody no-own-file, known-number i faktflow-original z oceną pliku: decyzja klienta („Zapisz decyzję klienta” po rozmowie z klientem, „Przypomnij klientowi”). faktflow-original w przeglądzie (I5R): „Zapisz fakturę z KSeF w FaktWay” albo „Oddaj decyzję klientowi”. faktflow-original bez oceny pliku albo „do ponownego sprawdzenia” (recheck-needed), pobranie oryginału nieudane (download-*, storage-pending, archive-pending), known-number bez danych, known-stale, known-now: cron „Tylko uzgodnij” po 48 h (możesz od razu „Tylko uzgodnij” przy otwartym wpisie). same-content-other-program, archive-conflict, cross-tenant: runbook KSEF_DUPLICATE_RECONCILE.',
   envMismatchRequeue: 'Faktura była zlecona w innym środowisku KSeF — ponowienie wysłałoby ją w bieżącym. Bez dowodu kontaktu: „Wróć do szkicu”, klient zdecyduje, czy wysłać ją tutaj. Otwarty wpis: „Tylko uzgodnij” uzgadnia w BIEŻĄCYM środowisku — wpisu sprzed przełączenia środowiska nie uzgadniaj tak (runbook: ENV_MISMATCH).',
   issueDatePassedRequeue: 'Dokument specjalny z datą wystawienia sprzed dzisiaj — worker nie wysyła go z wcześniejszą datą (decyzja 06.10.2026, 00147; do B2). Ten kod powstaje bez otwartego wpisu (worker odmawia po uzgodnieniu, przed plikiem i zamiarem), więc nie ma czego uzgadniać. Bez dowodu kontaktu: „Wróć do szkicu” (klient usuwa szkic i wystawia dokument od nowa z dzisiejszą datą). Z dowodem kontaktu brak wyjścia w panelu do B2 — sprawdź dokument w KSeF i zgłoś go Bartoszowi (runbook ksef-error-codes, „Dokumenty specjalne”).',
   notFailedOrRejected: 'Dostępne tylko dla failed / rejected.',
@@ -101,6 +107,21 @@ export interface OperatorButton {
   reason: string | null;
 }
 
+/**
+ * PR C (6.6): przycisk przeglądu pliku z etykietą. `reason: null` przy wyłączonym przycisku
+ * znaczy „nie dotyczy tej faktury” (widok inny niż `review`) — karta go wtedy nie pokazuje.
+ */
+export interface OperatorReviewButton extends OperatorButton {
+  label: string;
+}
+
+/**
+ * Wynik suchego przebiegu strony operatora (`prepareOriginalImport`, bez alarmów i zapisów — INV-13):
+ * plik z przeglądu da się zapisać w FaktWay jako fakturę K albo nie (`detail` = problem bramy / kod 4.8 /
+ * rodzaj błędu odczytu). Polityka jest czysta i magazynu nie czyta — dostaje to jako dane.
+ */
+export type OperatorRecordable = { ok: true } | { ok: false; detail: string };
+
 export interface OperatorButtons {
   requeue: OperatorButton;
   reconcile: OperatorButton;
@@ -109,6 +130,10 @@ export interface OperatorButtons {
   decide: OperatorButton;
   /** „Przypomnij klientowi” — najwyżej raz na 24 h (decyzja 12). */
   remind: OperatorButton;
+  /** PR C: „Zapisz fakturę z KSeF w FaktWay” — tylko widok `review` i plik zapisywalny. */
+  record: OperatorReviewButton;
+  /** PR C: „Oddaj decyzję klientowi” — tylko widok `review` z ofertą `review-pair`. */
+  release: OperatorReviewButton;
 }
 
 /** Ślad powiadomień klienta o decyzji (`findDuplicateNotices`) — do „Przypomnij klientowi”. */
@@ -137,6 +162,11 @@ export interface OperatorButtonsInput {
   duplicateDecision?: DuplicateDecisionView | null;
   /** Ślad powiadomień o (fakturze, K); brak — bez powiadomienia. */
   duplicateNotice?: DuplicateNoticeSummary | null;
+  /**
+   * PR C: suchy przebieg strony przy widoku `review` — czy plik da się zapisać. Brak (strona go nie
+   * policzyła) = zapis wyłączony: fail-closed, nigdy „zapisywalny z domysłu”.
+   */
+  originalRecordable?: OperatorRecordable | null;
   /** Chwila odczytu (24 h przypomnienia); domyślnie teraz. */
   now?: Date;
 }
@@ -183,7 +213,7 @@ export const OPERATOR_DUPLICATE_MESSAGES = {
   // Powody wyłączenia „Zapisz decyzję klienta” i „Przypomnij klientowi”.
   notPending: 'Faktura nie czeka na decyzję klienta (stan albo kod inny niż failed / KSEF_DUPLICATE_RECONCILE).',
   reason: (r: string) =>
-    `Powód ${r}: decyzji klienta w panelu jeszcze nie ma (faktflow-original — PR C; same-content-other-program — D-A4-1b-2; archive-conflict — runbook; download-*/storage-pending/archive-pending i known-number bez danych — „Tylko uzgodnij”; ownHistory — runbook).`,
+    `Powód ${r}: decyzji klienta w panelu nie ma (same-content-other-program — D-A4-1b-2; archive-conflict — runbook; download-*/storage-pending/archive-pending i known-number bez danych — „Tylko uzgodnij”; ownHistory przy no-own-file albo known-number — runbook; faktflow-original bez SystemInfo FaktWay albo z niepełnymi danymi — runbook).`,
   knownStale: (y: string, k: string) =>
     `known-stale: dokument ${y} nie ma już numeru KSeF ${k} albo nie jest przyjęty w KSeF — „Tylko uzgodnij” powtórzy werdykt; dokument ${y} w stanie failed z numerem KSeF to I9 — najpierw I9.`,
   payments: (paidAmount: string) =>
@@ -194,9 +224,8 @@ export const OPERATOR_DUPLICATE_MESSAGES = {
   runbook: (code: string) => `${code}: runbook KSEF_DUPLICATE_RECONCILE — sprawdź w KSeF i zgłoś Bartoszowi.`,
   /** Alarm monitora i podpowiedź w tabeli I5D `/admin/ksef` (2.7.4). */
   i5dEnv: 'I5D-env: faktura czeka na decyzję klienta, ale dane oryginału sprawdzono w innym środowisku KSeF niż obecne — klient nie zapisze decyzji (runbook KSEF_DUPLICATE_RECONCILE, przełączenie środowiska).',
-  // ── PR C (00156, spec v3 6.6; bez przeglądu prawnika). Nowe klucze; zmienione `reason`
-  // i `OPERATOR_MESSAGES.duplicateRequeue` dostają brzmienie 6.6 razem z zachowaniem (grupa E,
-  // przypięte `admin-ksef-cykl-dane.test.ts`).
+  // ── PR C (00156, spec v3 6.6; bez przeglądu prawnika). Nowe klucze; `reason`
+  // i `OPERATOR_MESSAGES.duplicateRequeue` mają brzmienie 6.6 (przypięte `admin-ksef-cykl-dane.test.ts`).
   knownNow: (k: string) =>
     `known-now: numer KSeF ${k} ma już inna faktura sprzedaży tej firmy — „Tylko uzgodnij” (werdykt będzie known-number, decyzja klienta jak w PR B).`,
   crossTenant: (k: string) =>
@@ -229,6 +258,10 @@ export const OPERATOR_DUPLICATE_MESSAGES = {
   releaseStale: 'Dane oryginału zmieniły się od otwarcia karty — odśwież kartę.',
   notBuildable: (reason: string) =>
     `Nie da się zapisać tej faktury w FaktWay z pliku z KSeF (${reason}) — przy review-pair oddaj decyzję klientowi; przy review-record zgłoś Bartoszowi (runbook „Zapis oryginału odmówiony”).`,
+  // Odmowa zapisu przy ofercie `pair` / `record`, czyli po ocenie „importable”: to błąd programu (nie decyzja operatora),
+  // a faktura jest już oznaczona do ponownego sprawdzenia. `notBuildable` dotyczy ofert przeglądu (`review-*`).
+  notBuildableProgram: (detail: string) =>
+    `Nie da się zapisać faktury z pliku (${detail}) mimo oceny „importable” — błąd programu; oznaczone do ponownego sprawdzenia (cron „Tylko uzgodnij”), zgłoś Bartoszowi (runbook „Zapis oryginału odmówiony”).`,
   archive: (path: string, detail: string) =>
     `Archiwum oryginału ${path}: ${detail === 'missing' ? 'brak pliku' : 'inny SHA-256 albo rozmiar niż w original_check'} — oznaczone do ponownego sprawdzenia (cron „Tylko uzgodnij”; runner zapisze plik, gdy go brak; inny plik pod tym kluczem = archive-conflict, runbook).`,
   gateDrift: 'Bieżący kod ocenia plik inaczej (inny wynik albo inne problemy) niż ocena zapisana na wpisie — oznaczone do ponownego sprawdzenia; nowy werdykt zapisze nową ocenę.',
@@ -247,6 +280,11 @@ export const OPERATOR_DUPLICATE_MESSAGES = {
     `Zapisano fakturę ${nrK} z KSeF w FaktWay; dokument wycofany bez numeru.`,
   remindReview: 'provenance-review: klient nie zdecyduje, dopóki nie przejrzysz pliku — przypomnienie nic nie da.',
   i5r72h: 'I5R-72h: plik z oznaczeniem FaktWay czeka na przegląd operatora dłużej niż 72 h — klient usłyszał „damy znać”.',
+  // Dodatkowe odmowy zapisu oryginału (spec 5.6 krok 9, `read-failed`; e-mail po oddaniu decyzji) — brzmienie operatora.
+  archiveReadFailed: (path: string) =>
+    `Nie udało się teraz odczytać archiwum oryginału ${path} (błąd magazynu, nic nie oznaczono) — spróbuj ponownie za chwilę; jeśli wraca, zgłoś Bartoszowi.`,
+  // „Przypomnij klientowi” ma inny klucz Resend (…/przypomnienie-n) niż e-mail po oddaniu, więc nie jest deduplikowane — wyśle drugi e-mail.
+  releaseSentNotRecorded: 'Oddano decyzję klientowi i e-mail wyszedł, ale nie zapisaliśmy śladu w audit_logs — „Przypomnij klientowi” wyśle drugi e-mail; użyj go dopiero, gdy klient potwierdzi, że e-maila nie ma.',
 } as const;
 
 /**
@@ -271,6 +309,16 @@ export const ORIGINAL_GATE_PROBLEM_LABELS: Readonly<Record<OriginalGateProblem, 
   markers: 'FP/TP/GTU/procedura/podmiot upoważniony',
   'sale-date': 'OkresFa, P_6A albo nieczytelna data sprzedaży',
 };
+
+/**
+ * Problemy bramy po polsku, po przecinku. Kod spoza słownika (nowa wersja reguł bramy
+ * zapisana przez nowszy program, zła wartość w jsonb) zostaje kodem — etykieta nigdy nie
+ * pada na `undefined` (M3).
+ */
+export function gateProblemsText(problems: readonly string[]): string {
+  const labels: Readonly<Record<string, string | undefined>> = ORIGINAL_GATE_PROBLEM_LABELS;
+  return problems.map((problem) => labels[problem] ?? problem).join(', ');
+}
 
 /** Etykiety dokumentów specjalnych w komunikatach operatora. */
 export const OPERATOR_KIND_LABEL = {
@@ -454,6 +502,23 @@ export function operatorDuplicateRefusalReason(
       return M.reason(detail?.reason ?? 'nieznany');
     case 'no-check':
       return M.noCheck;
+    // PR C (6.6): kody blokady 00156 i odmowy aplikacji; `none` i `no-marker` to DETAIL odmowy `release:not-review`.
+    case 'known-now':
+      return M.knownNow(detail?.originalKsefNumber ?? '(brak)');
+    case 'cross-tenant':
+      return M.crossTenant(detail?.originalKsefNumber ?? '(brak)');
+    case 'recheck-needed':
+    case 'recheck':
+      return M.recheckPending(detail?.recheckKind ?? null, detail?.recheckAt ?? null);
+    case 'provenance-review':
+      // Widok `review` niesie problemy bramy; sam kod z bazy (wyścig) ich nie zna.
+      return M.provenanceReview('stan zmienił się od odczytu — odśwież kartę');
+    case 'state-unknown':
+      return M.stateUnknown;
+    case 'not-buildable':
+      return M.notBuildable('brak szczegółów');
+    case 'none':
+      return M.releaseNotReview;
     default:
       return M.runbook(refusal);
   }
@@ -463,10 +528,37 @@ export function operatorDuplicateRefusalReason(
 export function operatorDuplicateDecisionButton(view: DuplicateDecisionView | null | undefined): OperatorButton {
   if (!view || view.kind === 'decided') return off(OPERATOR_DUPLICATE_MESSAGES.notPending);
   if (view.kind === 'decidable') return { enabled: true, reason: null };
-  // PR C kontrakt: widok `review` (przegląd pliku) powstaje dopiero z polityką PR C; w przeglądzie
-  // „Zapisz decyzję klienta” zastępują `recordButton` i `releaseButton` (6.6, grupa E).
-  if (view.kind === 'review') return off(OPERATOR_DUPLICATE_MESSAGES.provenanceReview(view.problems.join(', ')));
+  // PR C: w przeglądzie pliku „Zapisz decyzję klienta” zastępują „Zapisz fakturę z KSeF” i „Oddaj decyzję
+  // klientowi” (`operatorReviewButtons`); tu zostaje powód, dla którego klient jeszcze nie decyduje.
+  if (view.kind === 'review') return off(OPERATOR_DUPLICATE_MESSAGES.provenanceReview(gateProblemsText(view.problems)));
   return off(operatorDuplicateRefusalReason(view.refusal, view.detail));
+}
+
+/**
+ * Zapis i oddanie w przeglądzie pliku (spec v3 6.6, T8). Zapis („Zapisz fakturę z KSeF w FaktWay”):
+ * tylko gdy suchy przebieg strony mówi, że plik da się zapisać; inaczej wyłączony z `notBuildable(powód)`
+ * (przy `review-pair` zostaje oddanie, przy `review-record` — runbook, Bartosz). Oddanie („Oddaj decyzję
+ * klientowi”): tylko `review-pair`; plik w historii dokumentu albo o tej samej treści to plik z FaktWay
+ * (`reviewRecordOnly`, INV-19). Poza widokiem `review` oba przyciski są wyłączone bez powodu.
+ */
+export function operatorReviewButtons(
+  view: DuplicateDecisionView | null | undefined,
+  recordable: OperatorRecordable | null | undefined,
+): { record: OperatorReviewButton; release: OperatorReviewButton } {
+  const M = OPERATOR_DUPLICATE_MESSAGES;
+  if (!view || view.kind !== 'review') {
+    return {
+      record: { enabled: false, reason: null, label: M.recordButton },
+      release: { enabled: false, reason: null, label: M.releaseButton },
+    };
+  }
+  const record: OperatorReviewButton = recordable?.ok === true
+    ? { enabled: true, reason: null, label: M.recordButton }
+    : { enabled: false, reason: M.notBuildable(recordable?.ok === false ? recordable.detail : 'plik nie został sprawdzony'), label: M.recordButton };
+  const release: OperatorReviewButton = view.releasable
+    ? { enabled: true, reason: null, label: M.releaseButton }
+    : { enabled: false, reason: M.reviewRecordOnly, label: M.releaseButton };
+  return { record, release };
 }
 
 /**
@@ -509,7 +601,11 @@ export function operatorInvoiceButtons(input: OperatorButtonsInput): OperatorBut
           : { enabled: true, reason: null };
 
   const decide = operatorDuplicateDecisionButton(input.duplicateDecision);
-  const remind = operatorRemindButton(decide, input.duplicateNotice, input.now ?? new Date());
+  // W przeglądzie pliku klient nie zdecyduje, dopóki operator nie przejrzy pliku — przypomnienie nic nie da.
+  const remind = input.duplicateDecision?.kind === 'review'
+    ? off(OPERATOR_DUPLICATE_MESSAGES.remindReview)
+    : operatorRemindButton(decide, input.duplicateNotice, input.now ?? new Date());
+  const { record, release } = operatorReviewButtons(input.duplicateDecision, input.originalRecordable);
 
-  return { requeue, reconcile, reset, decide, remind };
+  return { requeue, reconcile, reset, decide, remind, record, release };
 }

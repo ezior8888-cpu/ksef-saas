@@ -243,33 +243,34 @@ function clientExit(s: Scenario): boolean {
   return b.resend || (b.reset && resetAllowedByRpc(s)) || duplicateViewOf(s, 'client')?.kind === 'decidable';
 }
 
-/** Przyciski operatora z prawdziwej polityki — widok decyzji (actor operator) jak na karcie. */
+/**
+ * Przyciski operatora z prawdziwej polityki — widok decyzji (actor operator) jak na karcie. PR C: `originalRecordable`
+ * to wynik suchego przebiegu strony (zapisywalność pliku z przeglądu); domyślnie plik da się zapisać.
+ */
 function operatorButtonsOf(s: Scenario) {
   return operatorInvoiceButtons({
     direction: 'outgoing', status: 'failed', errorCode: s.code, invoiceKind: s.kind,
     openSent: s.openSubmission, evidence: s.evidence, facts: factsOf(s), environmentKnown: true,
     duplicateDecision: duplicateViewOf(s, 'operator'), duplicateNotice: null, now: NOW,
+    originalRecordable: s.recordable === false ? { ok: false, detail: 'currency' } : { ok: true },
   });
 }
 
 /**
- * PR C (5.5, 6.6): widok `review` (przegląd pliku, I5R) — wyjście operatora to
- * oddanie decyzji klientowi (`review-pair`, `releasable`) albo zapis K, gdy plik
- * da się zapisać (suchy przebieg strony, `recordable`). `review-record` bez
- * zapisywalnego pliku nie ma wyjścia w panelu: runbook (Bartosz).
+ * PR C: widok `review` (przegląd pliku, I5R; spec 5.5 i 6.6) — wyjście operatora to „Oddaj decyzję klientowi”
+ * (`review-pair`) albo „Zapisz fakturę z KSeF w FaktWay”, gdy plik da się zapisać (suchy przebieg strony,
+ * `recordable`). Liczone z PRAWDZIWYCH przycisków przeglądu (`operatorReviewButtons`), nie z `view.releasable`
+ * i flagi scenariusza (kontrakt I5) — `review-record` bez zapisywalnego pliku nie ma wyjścia w panelu: runbook (Bartosz).
  */
 function reviewExit(s: Scenario): boolean {
-  const view = duplicateViewOf(s, 'operator');
-  return view?.kind === 'review' && (view.releasable || s.recordable !== false);
+  const b = operatorButtonsOf(s);
+  return b.record.enabled || b.release.enabled;
 }
 
 function operatorExit(s: Scenario): boolean {
   const b = operatorButtonsOf(s);
-  // Widok `review`: „Zapisz decyzję klienta” zastępują zapis i oddanie (6.6) — wyjście liczy `reviewExit`,
-  // niezależnie od tego, jak polityka przycisków nazwie i włączy te dwa przyciski.
-  const decide = duplicateViewOf(s, 'operator')?.kind === 'review' ? false : b.decide.enabled;
   return b.requeue.enabled || (b.reconcile.enabled && reconcileIsExit(s)) || (b.reset.enabled && resetAllowedByRpc(s))
-    || decide || reviewExit(s);
+    || b.decide.enabled || reviewExit(s);
 }
 
 const KINDS: readonly Kind[] = ['regular', 'correction', 'advance', 'final'];
