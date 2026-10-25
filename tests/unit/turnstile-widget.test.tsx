@@ -27,7 +27,7 @@ vi.mock('next/script', () => ({
   },
 }));
 
-const { TurnstileWidget } = await import('@/components/auth/turnstile-widget');
+const { TurnstileWidget, refreshTurnstileToken } = await import('@/components/auth/turnstile-widget');
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -192,6 +192,16 @@ describe('TurnstileWidget', () => {
 
     expect(requestSubmit).toHaveBeenCalledTimes(1);
     expect(submit().defaultPrevented).toBe(false);
+  });
+
+  it('na żądanie bierze nowy token (akcja wysłana przyciskiem, nie przez submit)', () => {
+    setTurnstile(turnstile);
+    mount();
+    turnstile.solve('w1', 'token-1');
+
+    refreshTurnstileToken(form);
+
+    expect(turnstile.reset).toHaveBeenCalledWith('w1');
   });
 
   it('bez wczytanego skryptu (np. zablokowany) nie blokuje wysyłki', () => {

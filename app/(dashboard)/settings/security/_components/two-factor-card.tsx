@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TurnstileWidget } from '@/components/auth/turnstile-widget';
 import {
   enrollTotpAction,
   unenrollTotpAction,
@@ -108,9 +109,10 @@ export function TwoFactorCard({ isEnabled }: Props) {
 
   const onUnenrollSubmit = (formData: FormData) => {
     const password = String(formData.get('password') ?? '');
+    const captchaToken = formData.get('cf-turnstile-response');
     setError(null);
     startTransition(async () => {
-      const r = await unenrollTotpAction(password);
+      const r = await unenrollTotpAction(password, typeof captchaToken === 'string' ? captchaToken : undefined);
       if (!r.ok) {
         setError(
           MFA_ERROR_MESSAGES[r.error] ??
@@ -192,6 +194,7 @@ export function TwoFactorCard({ isEnabled }: Props) {
           />
           {error && <ErrorText>{error}</ErrorText>}
         </Field>
+        <TurnstileWidget action="reauth" theme="auto" />
         <div className="flex gap-3">
           <Button type="submit" variant="destructive" disabled={isPending}>
             {isPending ? 'Wyłączanie...' : 'Wyłącz aplikację TOTP'}
