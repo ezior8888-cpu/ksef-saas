@@ -14,14 +14,12 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import {
-  RiAlarmWarningLine,
   RiCheckboxCircleLine,
   RiCheckLine,
   RiCloseLine,
   RiErrorWarningLine,
   RiLoader4Line,
   RiMailSendLine,
-  RiPauseCircleLine,
   RiPauseLine,
   RiPlayLine,
   RiQuestionLine,
@@ -33,8 +31,7 @@ import { toast } from 'sonner';
 
 import { ReminderConsentDialog } from './reminder-consent-dialog';
 import { toggleInvoiceRemindersAction } from '@/app/actions/reminders';
-import StatsCards from '@/components/dashboard/stats-cards';
-import { InvoicesTabs } from '@/components/invoices/invoices-tabs';
+import { PanelStats } from '@/components/lists/panel-stats';
 import {
   ColumnSelectFilter,
   DataTablePagination,
@@ -46,7 +43,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { buttonVariants, Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RECEIVABLES_NOTE } from '@/lib/dashboard/receivables-note';
 import { formatIsoDatePl, formatTimestampDatePl } from '@/lib/format/iso-date';
@@ -302,19 +298,16 @@ function OverdueHeading() {
 /** Lista, której nie da się potwierdzić w całości: komunikat zamiast kwot (w karcie z zakładkami). */
 export function OverdueDashboardError({ message }: { message: string }) {
   return (
-    <div className="ff-page-fill flex flex-col gap-6">
+    <div className="ff-tab-panel flex w-full flex-1 flex-col">
       <OverdueHeading />
-      <Card className="flex-1 pt-0 shadow-none">
-        <InvoicesTabs active="po-terminie" />
-        <div className="px-4 pt-2">
-          <Alert variant="destructive">
-            <AlertTitle>Nie udało się pobrać listy: {message}</AlertTitle>
-            <AlertDescription>
-              Odśwież stronę za chwilę. Jeśli komunikat wraca, napisz do pomocy FaktWay — sprawdzimy dane faktur.
-            </AlertDescription>
-          </Alert>
-        </div>
-      </Card>
+      <div className="px-4 pt-2">
+        <Alert variant="destructive">
+          <AlertTitle>Nie udało się pobrać listy: {message}</AlertTitle>
+          <AlertDescription>
+            Odśwież stronę za chwilę. Jeśli komunikat wraca, napisz do pomocy FaktWay — sprawdzimy dane faktur.
+          </AlertDescription>
+        </Alert>
+      </div>
     </div>
   );
 }
@@ -440,7 +433,6 @@ export function OverdueDashboard({ overdueInvoices, stats, limitReached = false,
           {RECEIVABLES_NOTE}
         </>
       ),
-      icon: RiAlarmWarningLine,
     },
     {
       label: 'Faktur po terminie',
@@ -452,7 +444,6 @@ export function OverdueDashboard({ overdueInvoices, stats, limitReached = false,
           Pokazujemy pierwsze {formatPlInt(stats.totalCount)}, od najdłużej zaległych
         </>
       ) : averageNote,
-      icon: RiErrorWarningLine,
     },
     {
       label: 'Przypomnień wysłanych w miesiącu',
@@ -463,24 +454,25 @@ export function OverdueDashboard({ overdueInvoices, stats, limitReached = false,
           {reminderStateNote ? <><br />{reminderStateNote}</> : null}
         </>
       ) : reminderStateNote ?? undefined,
-      icon: RiMailSendLine,
     },
     {
       label: 'Wstrzymanych',
       value: formatPlInt(stats.pausedCount),
       note: 'z pokazanych faktur',
-      icon: RiPauseCircleLine,
     },
   ];
 
+  // Zawartość karty sekcji Faktur (`(faktury)/layout.tsx` daje kafle, kartę
+  // i rząd zakładek). Liczby tej zakładki stoją w pasku nad tabelą, nie
+  // w osobnych kaflach — przełączenie zakładki nie rusza niczego nad kartą
+  // (decyzja Bartosza 25.10.2026).
   return (
-    <div className="ff-page-fill flex flex-col gap-6">
+    <div className="ff-tab-panel flex w-full flex-1 flex-col">
       <OverdueHeading />
-      <StatsCards stats={statItems} iconPosition="right" />
+      <PanelStats label="Podsumowanie faktur po terminie" items={statItems} />
 
       {overdueInvoices.length === 0 ? (
-        <Card className="flex-1 pt-0 shadow-none">
-          <InvoicesTabs active="po-terminie" />
+        <>
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-12 text-center">
             <div className="bg-muted flex size-12 items-center justify-center">
               <RiCheckboxCircleLine className="text-foreground size-6" aria-hidden />
@@ -496,11 +488,10 @@ export function OverdueDashboard({ overdueInvoices, stats, limitReached = false,
               </Link>
             ) : null}
           </div>
-        </Card>
+        </>
       ) : (
-        <Card className="flex-1 pt-0 shadow-none">
-          <InvoicesTabs active="po-terminie" />
-          <div className="flex w-full flex-1 flex-col pt-2">
+        <>
+          <div className="flex w-full flex-1 flex-col pt-4">
             <div className="flex-1 border-b">
               <div className="flex gap-6 p-4 pt-0 max-lg:flex-col lg:items-center lg:justify-between">
                 <div className="flex items-center gap-4">
@@ -557,7 +548,7 @@ export function OverdueDashboard({ overdueInvoices, stats, limitReached = false,
             </div>
             <DataTablePagination table={table} />
           </div>
-        </Card>
+        </>
       )}
       {reminderInvoice ? (
         <ReminderConsentDialog key={reminderInvoice.id}

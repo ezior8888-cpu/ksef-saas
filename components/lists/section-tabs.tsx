@@ -31,19 +31,33 @@ export interface SectionTab<T extends string = string> {
  * całą stronę — z kaflami i tym rzędem — na ogólny szkielet. Gdy strona
  * jeszcze nie przyszła, `LinkPendingMark` przenosi podkreślenie na dotkniętą
  * zakładkę od razu (`.ff-section-tabs` w `globals.css`).
+ *
+ * JEDNA STRONA, NIE PODSTRONA (poprawka Bartosza 25.10.2026). Rząd stoi
+ * w layoucie sekcji (`(faktury)`, `(koszty)`, `reports`) razem z kaflami
+ * i kartą, a zakładka podmienia tylko stronę pod nim — tabelę. Dlatego
+ * linki nie przewijają (`scroll={false}`), a `data-ff-keep-scroll` mówi
+ * `ShellScrollMemory`, żeby nie wracał na górę: zmiana tabeli nie może
+ * ruszać reszty ekranu. W layoucie aktywną zakładkę wybiera `SectionTabsNav`
+ * z adresu.
  */
 export function SectionTabs<T extends string>({
   label,
   tabs,
   active,
+  className,
 }: {
   /** `aria-label` nawigacji, np. „Rodzaje faktur”. */
   label: string;
   tabs: readonly SectionTab<T>[];
-  active: T;
+  /** Aktywna zakładka; `null` — żadna (adres spoza zakładek sekcji). */
+  active: T | null;
+  className?: string;
 }) {
   return (
-    <nav aria-label={label} className="ff-section-tabs flex h-11 w-full shrink-0 items-start border-b px-1 pt-[3px] sm:px-4">
+    <nav
+      aria-label={label}
+      className={cn('ff-section-tabs flex h-11 w-full shrink-0 items-start border-b px-1 pt-[3px] sm:px-4', className)}
+    >
       {tabs.map((tab) => {
         const current = tab.value === active;
         return (
@@ -51,6 +65,8 @@ export function SectionTabs<T extends string>({
             key={tab.value}
             href={tab.href}
             prefetch
+            scroll={false}
+            data-ff-keep-scroll=""
             aria-current={current ? 'page' : undefined}
             className={cn(
               'relative inline-flex h-[calc(100%-1px)] items-center justify-center px-3 text-sm font-medium whitespace-nowrap transition-all outline-none sm:px-4',

@@ -1008,6 +1008,31 @@ html.dark .ff-dashboard[data-slot='sheet-content']:has(section[aria-label='Co Fl
   flex-grow: 1;
 }
 
+/* Zawartość karty sekcji, czyli strona podzakładki (poprawka Bartosza
+ * 25.10.2026: przy zmianie zakładki „płynnie zmienia się sama tabelka”).
+ * Kafle, karta i rząd zakładek stoją w layoucie sekcji i się nie ruszają;
+ * nowa tabela tylko krótko się rozjaśnia. Sama przezroczystość, bez ruchu:
+ * `transform` zrobiłby z panelu blok zawierający dla `fixed` dzieci (pływający
+ * „+ Dodaj wydatek”), jak opisano niżej przy `.ff-route-template`. */
+.ff-tab-panel {
+  animation: ff-tab-panel-in 160ms ease-out backwards;
+}
+
+@keyframes ff-tab-panel-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-tab-panel {
+    animation: none;
+  }
+}
+
 /* Zakładki w karcie (`components/lists/section-tabs.tsx`): dotknięta zakładka
  * przejmuje podkreślenie od razu, zanim jej strona przyjdzie z serwera.
  * Znacznik `[data-link-pending]` wstawia `LinkPendingMark` tylko na czas
