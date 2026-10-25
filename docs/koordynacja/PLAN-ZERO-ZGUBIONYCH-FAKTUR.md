@@ -215,7 +215,7 @@ agenta z weryfikacją Bartosza, nie obietnica.
   KOR/ZAL/ROZ; decyzje D-A4-1 (cudzy 440) i D-A4-2 (ENV_MISMATCH) w runbooku
   `ksef-error-codes.md`.
 - **D-A4-1b-3 — decyzja klienta przy nierozstrzygniętym 440** (stan
-  07.10.2026): A0 (#229) i A — dane oryginału na wpisie (#230, 00144) —
+  25.10.2026; część PR B opisana wg stanu 07.10.2026): A0 (#229) i A — dane oryginału na wpisie (#230, 00144) —
   scalone; wierny import C5a–C5c (#231, #239, #241) scalony. **PR B** —
   decyzja klienta „ta sama sprzedaż” / „inna sprzedaż” (00148, przed
   wdrożeniem; numer PR w dzienniku, sekcja 9): powody `no-own-file`
@@ -228,10 +228,48 @@ agenta z weryfikacją Bartosza, nie obietnica.
   `I5D-env` (07.10 (4)); e-mail raz na fakturę i numer KSeF oryginału
   oraz „Przypomnij klientowi” raz na 24 h (07.10 (5), (12)); teksty klienta
   i komunikaty P0001 — przegląd prawnika przed KSeF PROD (punkt bramki,
-  sekcja 8). Dalej: **PR C** (`faktflow-original` — zapis oryginału
-  z FaktFlow) i **PR D** („Sprawdź ponownie” dla powodów bez danych
-  oryginału). Bez decyzji w panelu zostają: KOR/ZAL/ROZ (D-A4-1b-3-S),
-  `same-content-other-program` (D-A4-1b-2), `archive-conflict` (runbook).
+  sekcja 8). **PR C0** (#246) i **C0b** (#247) to warunki PR C (mapowanie
+  wiersza importu do czystego modułu, odczyt plików z generatora bez strat).
+  **PR C, zapis oryginału z oznaczeniem FaktWay** (`faktflow-original`,
+  00156 przed wdrożeniem; numer PR w dzienniku, sekcja 9; migracja 00156
+  zamiast rezerwacji 00149, bo 00151 i 00155 przepisały te same funkcje):
+  runner ocenia pobrany plik bramą pochodzenia (16 jawnych reguł, wynik
+  w `original_check.importGate`); przy ocenie `importable` klient (albo
+  operator na jego prośbę) zapisuje decyzję, a `decide_ksef_duplicate_original`
+  w jednej transakcji wycofuje dokument X bez numeru i zapisuje oryginał K
+  jako przyjętą fakturę sprzedaży z numerem X (pozycje, `xml_documents`,
+  sesja i `upo_receipts`; data nadania z KSeF albo NULL z alarmem, nigdy
+  `now()`). Dwa przyciski „ta sama” / „inna” zapisują K (C1, C2); przy
+  własnej historii pliku albo tej samej treści jeden przycisk (C3, C5).
+  Plik z oceną `review` idzie do przeglądu operatora (I5R, alarm krytyczny
+  po 72 h od `checkedAt`): zapis K albo oddanie decyzji klientowi (bez
+  zapisu K, jak w PR B). Znacznik bez oceny pliku albo po odmowie przy zapisie
+  to `recheck-needed` (I5, cron robi nowy werdykt); `cross-tenant` kończy
+  się runbookiem i decyzją Bartosza, `known-now` powtórzeniem werdyktu.
+  Szkic wycofany po zapisie K jest bez numeru, PDF i e-mail odmawiają
+  (C8), K ma kartę z notatką o pochodzeniu; I3K (brak sesji UPO albo daty)
+  to trwały sygnał, a datę uzupełnia `scripts/ops/oryginal-ksef-data-nadania.sh`.
+  Teksty klienta PR C i komunikaty P0001 z 00156: przegląd prawnika przed
+  KSeF PROD (punkt bramki, sekcja 8). Runbook: `ksef-error-codes.md`, sekcja
+  „D-A4-1b-3 PR C”; kontrola: `kontrola-faktur-ksef.sh`, sekcja 10 (h) do (p).
+  Dalej: **PR D** („Sprawdź ponownie” dla powodów bez danych oryginału)
+  i **PR E** (K na wierszu X przy tej samej treści, C5). Bez decyzji
+  w panelu zostają: KOR/ZAL/ROZ (D-A4-1b-3-S), `same-content-other-program`
+  (D-A4-1b-2), `archive-conflict` (runbook).
+  Zapisane osobno przy PR C (nie naprawiane w nim; szczegóły w runbooku):
+  **D-A4-1b-3-MI** (szkic wycofany Z numerem blokuje Magiczny import oryginału),
+  **-UPO** (brak skryptu ręcznego UPO, `upo-retry-stale` bez limitu prób),
+  **-SYS** (`SystemInfo` jest jedyną podstawą powodu; zmiana przed KSeF PROD),
+  **-DATE** (werdykt bez daty nie alarmuje w runnerze), **-PDF** (PDF zwykłego
+  szkicu bez oznaczenia), **-PAY** (brak blokady wpłaty na szkic wycofany),
+  **-CAT** (komunikat katalogu „damy znać” przy `pair`), **-LIST** (lista
+  pokazuje X jako „(bez numeru)”), **-EVID** (decyzje PR B tylko w `audit_logs`),
+  **-XEDIT** (treść szkicu wycofanego zmienialna surowym PATCH), **-KORB2C**
+  (brak korekty dla nabywcy bez NIP i VAT-UE), **-FLO-NUM** (audyt numeracji FLO
+  liczy tylko `origin = 'app'`), **-TESTENV** (wspólny KSeF TEST), a także
+  GEN-PESEL-KRAJ, C5b-d+, IDX-ENV. Reguła `totals` bramy jest ścisła co do
+  grosza (pierwotna specyfikacja dopuszczała 0,01 zł): plik „importable”,
+  którego nie da się zapisać, krążyłby w ponownym sprawdzaniu bez wyjścia.
 
 **A5. Ślad per próba — kontrakt danych dla centrum dowodzenia (M10)**
 - Problem: porażka przed POST (poświadczenia, XML, upload, przejęcie) nie
@@ -586,6 +624,28 @@ są odhaczone (z datą i numerem PR/raportu):
       decyzje Bartosza 07.10.2026 (A) i (8); TEST bez blokady. Lista:
       DUPLICATE_DECISION_TEXTS + DUPLICATE_DECISION_SQL_TEXTS (snapshot
       tests/unit/ksef-duplikat-decyzja-teksty.test.ts).
+- [ ] Teksty decyzji D-A4-1b-3 PR C (zapis oryginału z oznaczeniem FaktWay)
+      przejrzane przez prawnika (rozszerzenie punktu wyżej); TEST bez
+      blokady. Ta sama migawka
+      (`tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt`): 68 tekstów
+      klienta `DUPLICATE_DECISION_TEXTS.FAKTFLOW` i 12 nowych szablonów
+      `DUPLICATE_DECISION_SQL_TEXTS` z 00156. Klient: wstęp panelu (para,
+      własna historia, ta sama treść), „Zapisz fakturę z KSeF w FaktWay”,
+      dialogi „ta sama” / „inna” / „zapisz” z „Rozumiem skutki”, zdania o JPK
+      i KPiR (`LEDGER`, `PAST_PERIOD`, `NOT_RECORDED`), o korekcie dla nabywcy
+      bez NIP i VAT-UE (`CORRECTION_PERSON`) i o wstrzymanych korektach na
+      produkcji (`HELD_CORRECTIONS`), tosty, banery wycofanego dokumentu,
+      karta faktury z KSeF (`IMPORTED_CARD*`), odmowa PDF i e-maila
+      (`RETIRED_DOCUMENT_REFUSAL`, `RETIRED_PDF_LINK`), teksty o ponownym
+      sprawdzeniu i o błędzie odczytu (`RECHECK`, `READ_FAILED`), e-mail i push (`NOTICE_*`: zapis, oddanie,
+      „sprawdzamy fakturę”), `LAST_ERROR`, `LAST_ERROR_REVIEW`,
+      `RELEASED_NOTE`, `PROGRAM_RELEASED`. Komunikaty P0001 z 00156:
+      `known-now`, `cross-tenant`, `recheck-needed`, `provenance-review`,
+      `CHOICE`, `IMPORT_MISMATCH`, `ALREADY_IMPORTED` i pięć odmów wyzwalacza
+      `TRIGGER_*_IMPORTED`. Teksty operatora (`OPERATOR_DUPLICATE_MESSAGES`)
+      prawnika nie dotyczą. Zmiana tekstu P0001 po przeglądzie wymaga nowej
+      migracji i tej samej zmiany w lustrze TS (strażnik
+      `tests/unit/zapis-oryginalu-migracja.test.ts`).
 - [ ] `scripts/ops/kontrola-faktur-ksef.sh` uruchamiany codziennie przez
       14 dni bez „nieznanych” stanów.
 
