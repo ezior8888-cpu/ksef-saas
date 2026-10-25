@@ -672,6 +672,54 @@ describe('decideKsefDuplicateAction — suchy przebieg zapisu oryginału i znacz
     );
   });
 
+  // Finding 5 (recenzja commitów 6–8): `flag_ksef_original_recheck` odpowiada `{flagged:false, reason:'stale'|'not-pending'}`,
+  // gdy stan zmienił się od kliknięcia (np. operator zdecydował w międzyczasie). Tekst „sprawdzamy” i alarm byłyby nieprawdziwe.
+  describe.each(['stale', 'not-pending'] as const)('ZB6: flag_ksef_original_recheck odpowiada %s', (reason) => {
+    const flagReplies = (): void => {
+      m.rpc.mockImplementation(async (fn: string, args: Row) =>
+        fn === 'flag_ksef_original_recheck' ? { data: { flagged: false, reason }, error: null } : defaultRpc(fn, args));
+    };
+
+    it('brak obiektu w magazynie (NoSuchKey) — STALE zamiast RECHECK, bez alarmu recheck i bez RPC decyzji', async () => {
+      m.download.mockRejectedValue(new NoSuchKey({ message: 'The specified key does not exist.', $metadata: {} }));
+      flagReplies();
+
+      const r = await decide();
+
+      expect(r).toEqual({ success: false, error: T.STALE });
+      expect(rpcNames()).toEqual(['flag_ksef_original_recheck']);
+      expect(alarmKinds()).toEqual([]);
+    });
+
+    it('not-buildable:lines przy ofercie pair — STALE zamiast RECHECK, bez alarmu recheck', async () => {
+      m.prepareOverride = async () => ({ ok: false, kind: 'not-buildable', detail: 'lines' });
+      flagReplies();
+
+      const r = await decide({ choice: 'other_sale', confirmed: true });
+
+      expect(r).toEqual({ success: false, error: T.STALE });
+      expect(rpcNames()).toEqual(['flag_ksef_original_recheck']);
+      expect(alarmKinds()).toEqual([]);
+    });
+
+    it.each([
+      ['P0001 import-mismatch:number', { code: 'P0001', message: 'IMPORT_MISMATCH', details: 'import-mismatch:number' }],
+      ['22023 import-projection:lines', { code: '22023', message: 'KSeF original import projection rejected', details: 'import-projection:lines' }],
+    ])('odmowa bazy %s — STALE zamiast RECHECK, bez alarmu import-refused', async (_label, error) => {
+      m.rpc.mockImplementation(async (fn: string, args: Row) => {
+        if (fn === 'decide_ksef_duplicate_original') return { data: null, error };
+        if (fn === 'flag_ksef_original_recheck') return { data: { flagged: false, reason }, error: null };
+        return defaultRpc(fn, args);
+      });
+
+      const r = await decide();
+
+      expect(r).toEqual({ success: false, error: T.STALE });
+      expect(rpcNames()).toEqual(['decide_ksef_duplicate_original', 'flag_ksef_original_recheck']);
+      expect(alarmKinds()).toEqual([]);
+    });
+  });
+
   it('ZB5: błąd odczytu magazynu (chwilowy) — READ_FAILED, captureException z przyczyną, BEZ znacznika i bez RPC decyzji', async () => {
     const cause = new Error('R2: connect ETIMEDOUT');
     m.download.mockRejectedValue(cause);
