@@ -34,9 +34,9 @@ export const INVARIANT_LABELS: Record<string, string> = {
   I9: 'failed / rejected z numerem KSeF (stan sprzeczny)',
   // 00148 (D-A4-1b-3 PR B, decyzja 4): stan, nie naruszenie — osobno w raporcie i w /admin/ksef.
   I5D: 'czeka na decyzję klienta: nierozstrzygnięty 440 z danymi oryginału (no-own-file, known-number) — bez automatu i bez alarmu; e-mail idzie raz i nie jest ponawiany; gdy nie doszedł — operator: „Przypomnij klientowi”',
-  // 00149 (D-A4-1b-3 PR C, spec v3 6.6): naruszenia (KPI i „Naruszenia strażnika”), nie I5D.
+  // 00156 (D-A4-1b-3 PR C, spec v3 6.6): naruszenia (KPI i „Naruszenia strażnika”), nie I5D.
   // Brzmienie I5D i dopisek I5 z 6.6 — razem z zachowaniem (grupa E; I5D przypięte w admin-ksef-cykl-dane).
-  I5R: 'przegląd pliku z oznaczeniem FaktFlow przez operatora (faktflow-original z oceną review) — klient czeka na „damy znać”; alarm krytyczny po 72 h od ostatniego sprawdzenia',
+  I5R: 'przegląd pliku z oznaczeniem FaktWay przez operatora (faktflow-original z oceną review) — klient czeka na „damy znać”; alarm krytyczny po 72 h od ostatniego sprawdzenia',
   I3K: 'faktura zapisana z KSeF decyzją bez sesji UPO albo bez daty nadania — UPO ręcznie albo skrypt daty (runbook)',
 };
 

@@ -13,26 +13,30 @@ import {
 } from '@/lib/ksef/duplicate-original-projection';
 
 /**
- * Strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z FaktFlow;
- * spec v3 7.2 wiersz `zapis-oryginalu-migracja`, sekcje 4.1–4.14). Zachowanie
- * sprawdza baza (`tests/rls-zapis-oryginalu.test.ts`, job „RLS isolation”);
- * tu tylko to, czego baza nie widzi: kształt pliku, REVOKE/GRANT, dosłowne
- * teksty odmów, zgodność list SQL z ich lustrami w TS i dosłowne instrukcje
- * 00148 w trybie `retire` (INV-14).
+ * Strażnik tekstu migracji 00156 (D-A4-1b-3 PR C, zapis oryginału z oznaczeniem
+ * FaktWay; spec v3 7.2 wiersz `zapis-oryginalu-migracja`, sekcje 4.1–4.14).
+ * Zachowanie sprawdza baza (`tests/rls-zapis-oryginalu.test.ts`, job „RLS
+ * isolation”); tu tylko to, czego baza nie widzi: kształt pliku, REVOKE/GRANT,
+ * dosłowne teksty odmów, zgodność list SQL z ich lustrami w TS i dosłowne
+ * instrukcje oraz odmowy 00151 w trybie `retire` (INV-14).
  *
- * Wszystkie przypadki są czerwone, dopóki 00149 ma pustą transakcję
- * (commit 1 „kontrakt”) — czerwień z braku funkcji, nie z błędu testu. Żaden
- * przypadek nie jest „strażnikiem” zielonym przed migracją.
+ * Numer: rezerwacja PR C 00149 przeszła na 00156, bo 00151 (marka FaktWay)
+ * i 00155 (synchronizacja historii) przepisały po niej `decide_ksef_duplicate`,
+ * `guard_ksef_retired_draft` i `ksef_lifecycle_violations`. Dlatego 00156 jest
+ * pisana na ciałach 00151 i 00155 — pilnują tego przypadki „= ciało z 00151 /
+ * 00155” niżej (wzór: U16a w `ksef-decyzja-duplikatu-migracja.test.ts`).
  *
  * Lekser SQL jak w `ksef-decyzja-duplikatu-migracja.test.ts` (komentarze `--`
- * i `/* *\/`, literały `'…'`, ciała `$tag$…$tag$`): nagłówek 00149 mówi
+ * i `/* *\/`, literały `'…'`, ciała `$tag$…$tag$`): nagłówek 00156 mówi
  * „DROP FUNCTION”, „bez DML”, a komentarze w SQL — „DELETE”, więc zakazane
  * operacje szukamy dopiero poza komentarzami i literałami. Każdy przypadek
  * czyta plik sam, żeby padał osobno.
  */
 
-const M149 = 'supabase/migrations/00149_ksef_duplicate_original.sql';
-const M148 = 'supabase/migrations/00148_ksef_duplicate_decision.sql';
+const M156 = 'supabase/migrations/00156_ksef_duplicate_original.sql';
+/** Ostatnie definicje przed 00156: decyzja i wyzwalacz w marce FaktWay (00151), strażnik z I3 przez predykat (00155). */
+const M151 = 'supabase/migrations/00151_faktway_duplicate_decision_texts.sql';
+const M155 = 'supabase/migrations/00155_ksef_history_sync.sql';
 
 const read = (path: string): string => readFileSync(path, 'utf8');
 
@@ -168,10 +172,10 @@ const bodyCode = (body: string): string => lex(body).filter((p) => p.kind === 'c
 /** Tekst bez komentarzy, literały zostają (RAISE, listy literałów). */
 const withoutComments = (sql: string): string => lex(sql).map((p) => (p.kind === 'comment' ? ' ' : p.text)).join('');
 
-/** Jedyne ciało funkcji z 00149; brak funkcji = czerwień z komunikatem, nie wyjątek testu. */
+/** Jedyne ciało funkcji w pliku migracji; brak funkcji = czerwień z komunikatem, nie wyjątek testu. */
 function bodyOf(sql: string, fn: string): string {
   const bodies = functionBodies(sql).get(fn);
-  expect(bodies?.length ?? 0, `00149: brak funkcji public.${fn}`).toBe(1);
+  expect(bodies?.length ?? 0, `brak funkcji public.${fn}`).toBe(1);
   return bodies![0]!;
 }
 
@@ -280,12 +284,12 @@ function literalLists(code: string): string[][] {
 /** Postać kanoniczna listy (bez kolejności) — porównujemy zbiory. */
 const canon = (items: readonly string[]): string => [...items].sort().join(',');
 
-// ─── Kontrakt funkcji 00149 (spec v3 4.1–4.9; kolejność jak w nagłówku migracji) ───────────────
+// ─── Kontrakt funkcji 00156 (spec v3 4.1–4.9; kolejność jak w nagłówku migracji) ───────────────
 
 type Access = 'service_role' | 'authenticated' | 'trigger';
 
 interface FunctionSpec {
-  /** Numer w nagłówku 00149 (1–15; punkt 16 to COMMENT na kolumnie). */
+  /** Numer w nagłówku 00156 (1–15; punkt 16 to COMMENT na kolumnie). */
   n: number;
   name: string;
   /** „nazwa typ [DEFAULT …]” w kolejności z sygnatury. */
@@ -414,16 +418,16 @@ function aclOf(stmts: Statement[]): Acl[] {
   return out;
 }
 
-describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z FaktFlow)', () => {
-  it('U16a-00149: jedna transakcja BEGIN … COMMIT z 15 funkcjami (CREATE OR REPLACE), REVOKE/GRANT/COMMENT; poza ciałami funkcji żadnego DROP, TRUNCATE, DELETE ani UPDATE', () => {
-    const m149 = read(M149);
-    const stmts = statements(m149);
+describe('strażnik tekstu migracji 00156 (D-A4-1b-3 PR C, zapis oryginału z oznaczeniem FaktWay)', () => {
+  it('U16a-00156: jedna transakcja BEGIN … COMMIT z 15 funkcjami (CREATE OR REPLACE), REVOKE/GRANT/COMMENT; poza ciałami funkcji żadnego DROP, TRUNCATE, DELETE ani UPDATE', () => {
+    const m156 = read(M156);
+    const stmts = statements(m156);
     const first = (s: Statement) => s.bare.split(' ')[0]!.toUpperCase();
 
     // Nagłówek 4.1: funkcje 1–15; punkt 16 to COMMENT na kolumnie. Kolejność plików nie ma znaczenia, zbiór — tak.
     const creates = stmts.filter((s) => first(s) === 'CREATE');
     expect(creates.filter((s) => !/^CREATE OR REPLACE FUNCTION public\.\w+\s*\(/i.test(s.bare)).map((s) => s.bare),
-      '00149 tworzy tylko funkcje (CREATE OR REPLACE FUNCTION) — bez tabel, indeksów i wyzwalaczy').toEqual([]);
+      '00156 tworzy tylko funkcje (CREATE OR REPLACE FUNCTION) — bez tabel, indeksów i wyzwalaczy').toEqual([]);
     const created = createStatements(stmts).map(({ header }) => header.name);
     expect([...created].sort()).toEqual(FUNCTIONS.map((f) => f.name).sort());
     expect(new Set(created).size, 'każda funkcja dokładnie raz').toBe(FUNCTIONS.length);
@@ -435,15 +439,15 @@ describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z Fa
     expect(stmts.filter((s) => !allowed.has(first(s))).map((s) => s.bare)).toEqual([]);
 
     // Także w ciałach: bez kasowania danych i zmiany schematu.
-    for (const [name, bodies] of functionBodies(m149)) {
+    for (const [name, bodies] of functionBodies(m156)) {
       for (const body of bodies) {
         expect(bodyCode(body), name).not.toMatch(/\b(DELETE\s+FROM|TRUNCATE|DROP|ALTER\s+TABLE)\b/i);
       }
     }
   });
 
-  it('U16b-00149: sygnatury, zwracany typ, język, SECURITY i zmienność funkcji = kontrakt PR C (4.1–4.9); SET search_path = \'\'; DEFAULT tylko w opakowaniu 9-arg', () => {
-    const created = createStatements(statements(read(M149)));
+  it('U16b-00156: sygnatury, zwracany typ, język, SECURITY i zmienność funkcji = kontrakt PR C (4.1–4.9); SET search_path = \'\'; DEFAULT tylko w opakowaniu 9-arg', () => {
+    const created = createStatements(statements(read(M156)));
 
     for (const spec of FUNCTIONS) {
       const found = created.filter(({ header }) => header.name === spec.name);
@@ -474,9 +478,9 @@ describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z Fa
     }
   });
 
-  it('U16c-00149: REVOKE FROM PUBLIC, anon, authenticated i GRANT tylko service_role (funkcja 7: authenticated, nie anon); wyzwalacz bez GRANT; COMMENT na każdej funkcji i na original_check', () => {
-    const m149 = read(M149);
-    const stmts = statements(m149);
+  it('U16c-00156: REVOKE FROM PUBLIC, anon, authenticated i GRANT tylko service_role (funkcja 7: authenticated, nie anon); wyzwalacz bez GRANT; COMMENT na każdej funkcji i na original_check', () => {
+    const m156 = read(M156);
+    const stmts = statements(m156);
     const acl = aclOf(stmts);
 
     for (const spec of FUNCTIONS) {
@@ -499,7 +503,7 @@ describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z Fa
       }
     }
 
-    // Wyzwalacz: CREATE OR REPLACE zachowuje ACL z 00148 — 00149 nie dopisuje mu żadnego GRANT.
+    // Wyzwalacz: CREATE OR REPLACE zachowuje ACL z 00148 — 00156 nie dopisuje mu żadnego GRANT.
     expect(acl.filter((a) => a.kind === 'GRANT' && a.fn === 'guard_ksef_retired_draft')).toEqual([]);
     expect(stmts.filter((s) => /^GRANT\b/i.test(s.bare) && /guard_ksef_retired_draft/.test(s.bare))).toEqual([]);
     expect(createStatements(stmts).filter(({ header }) => header.name === 'guard_ksef_retired_draft'),
@@ -523,9 +527,9 @@ describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z Fa
     expect(column[0]!.text).toContain('decision');
   });
 
-  // U16e-00149 (spec 7.2): każdy nowy szablon DUPLICATE_DECISION_SQL_TEXTS stoi dosłownie po `RAISE EXCEPTION '`.
+  // U16e-00156 (spec 7.2): każdy nowy szablon DUPLICATE_DECISION_SQL_TEXTS stoi dosłownie po `RAISE EXCEPTION '`.
   // Funkcja-gospodarz wg 4.6 (core: blokada, powtórzenie, oferta, wybór, projekcja) i 4.11 (wyzwalacz szkicu wycofanego).
-  const HOST_00149: ReadonlyArray<readonly [DuplicateDecisionSqlTextKey, string]> = [
+  const HOST_00156: ReadonlyArray<readonly [DuplicateDecisionSqlTextKey, string]> = [
     ['known-now', 'ksef_duplicate_decide_core'],
     ['cross-tenant', 'ksef_duplicate_decide_core'],
     ['recheck-needed', 'ksef_duplicate_decide_core'],
@@ -550,27 +554,27 @@ describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z Fa
     ALREADY_IMPORTED: 'already',
   };
 
-  it('U16e-00149: lista kluczy 00149 jest w DUPLICATE_DECISION_SQL_TEXTS (6.3), każdy z gospodarzem', () => {
-    const keys = HOST_00149.map(([key]) => key);
+  it('U16e-00156: lista kluczy 00156 jest w DUPLICATE_DECISION_SQL_TEXTS (6.3), każdy z gospodarzem', () => {
+    const keys = HOST_00156.map(([key]) => key);
     expect(new Set(keys).size).toBe(12);
     for (const key of keys) {
       expect(DUPLICATE_DECISION_SQL_TEXTS[key], key).toBeDefined();
     }
-    // Gospodarze istnieją w 00149 (czerwień do czasu migracji).
-    const bodies = functionBodies(read(M149));
-    for (const host of new Set(HOST_00149.map(([, h]) => h))) {
-      expect(bodies.get(host)?.length ?? 0, `00149: brak funkcji public.${host}`).toBe(1);
+    // Gospodarze istnieją w 00156 (czerwień do czasu migracji).
+    const bodies = functionBodies(read(M156));
+    for (const host of new Set(HOST_00156.map(([, h]) => h))) {
+      expect(bodies.get(host)?.length ?? 0, `00156: brak funkcji public.${host}`).toBe(1);
     }
   });
 
-  it.each(HOST_00149)(
-    'U16e-00149: szablon %s stoi dosłownie po RAISE EXCEPTION w %s — ERRCODE P0001, liczba argumentów = arity, DETAIL wg 4.14, nigdy w format()',
+  it.each(HOST_00156)(
+    'U16e-00156: szablon %s stoi dosłownie po RAISE EXCEPTION w %s — ERRCODE P0001, liczba argumentów = arity, DETAIL wg 4.14, nigdy w format()',
     (key, host) => {
-      const m149 = read(M149);
+      const m156 = read(M156);
       const { template, arity } = DUPLICATE_DECISION_SQL_TEXTS[key];
-      const code = withoutComments(bodyOf(m149, host));
+      const code = withoutComments(bodyOf(m156, host));
 
-      expect(m149, `${key}: format()`).not.toMatch(new RegExp(`format\\s*\\(\\s*'${escapeRegExp(template)}`));
+      expect(m156, `${key}: format()`).not.toMatch(new RegExp(`format\\s*\\(\\s*'${escapeRegExp(template)}`));
       const raises = raisesOf(code, template);
       expect(raises.length, `${key}: brak RAISE EXCEPTION '<szablon>' w ${host}`).toBeGreaterThan(0);
 
@@ -592,16 +596,15 @@ describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z Fa
     },
   );
 
-  it('tryb retire w core zawiera dosłownie instrukcje (a), (c), (d), (e) z 00148 (INV-14: 9-arg działa jak w 00148)', () => {
-    const core = normBody(bodyOf(read(M149), 'ksef_duplicate_decide_core'));
+  it('tryb retire w core zawiera dosłownie instrukcje (a), (c), (d), (e) z 00151 (INV-14: 9-arg działa jak w 00151 = 00148 w marce FaktWay)', () => {
+    const core = normBody(bodyOf(read(M156), 'ksef_duplicate_decide_core'));
     expect(core, "tryb 'retire'").toContain("'retire'");
 
-    const body148 = functionBodies(read(M148)).get('decide_ksef_duplicate');
-    expect(body148, '00148: decide_ksef_duplicate').toHaveLength(1);
-    const stmts148 = statements(body148![0]!);
+    // 00151 to ostatnia definicja decide_ksef_duplicate przed 00156 (ciało 00148 z marką FaktWay w literałach).
+    const stmts151 = statements(bodyOf(read(M151), 'decide_ksef_duplicate'));
     const pick = (label: string, test: (s: Statement) => boolean): Statement => {
-      const found = stmts148.filter(test);
-      expect(found, `00148 ${label}`).toHaveLength(1);
+      const found = stmts151.filter(test);
+      expect(found, `00151 ${label}`).toHaveLength(1);
       return found[0]!;
     };
 
@@ -612,12 +615,180 @@ describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z Fa
       ['(e) audyt invoice.send_reset', pick('(e)', (s) => s.text.includes("'invoice.send_reset'"))],
     ];
     for (const [label, stmt] of instructions) {
-      expect(core.includes(tight(stmt.text)), `${label}: instrukcja z 00148 nie stoi dosłownie w core`).toBe(true);
+      expect(core.includes(tight(stmt.text)), `${label}: instrukcja z 00151 nie stoi dosłownie w core`).toBe(true);
     }
   });
 
+  it('tryb retire w core: każda odmowa decide_ksef_duplicate z 00151 stoi w core znak w znak — tekst FaktWay, argumenty i USING (INV-14; 00156 nie cofa zmiany marki)', () => {
+    const code151 = withoutComments(bodyOf(read(M151), 'decide_ksef_duplicate'));
+    const code156 = withoutComments(bodyOf(read(M156), 'ksef_duplicate_decide_core'));
+    const templates = [...new Set([...code151.matchAll(/RAISE\s+EXCEPTION\s+'((?:[^']|'')*)'/g)].map((m) => m[1]!))];
+    // 00151: 8 odmów technicznych 22023/42501, NOTE, ROLE, ALREADY, IN_FLIGHT, 15 gałęzi blokady, STALE, ENV, EVIDENCE.
+    expect(templates.length).toBeGreaterThan(25);
+    const missing: string[] = [];
+    for (const template of templates) {
+      const have = new Set(raisesOf(code156, template).map(tight));
+      for (const rest of raisesOf(code151, template).map(tight)) {
+        if (!have.has(rest)) missing.push(`${template} …${rest}`);
+      }
+    }
+    expect(missing, 'odmowa z 00151 bez dosłownego odpowiednika w core 00156').toEqual([]);
+  });
+
+  it('14. guard_ksef_retired_draft = ciało z 00151 + krok 3b (teksty *_IMPORTED); bez zapisu oryginału teksty i kolejność 00151 znak w znak, nagłówek jak w 00151', () => {
+    const T = DUPLICATE_DECISION_SQL_TEXTS;
+    const body151 = normBody(bodyOf(read(M151), 'guard_ksef_retired_draft'));
+    const body156 = normBody(bodyOf(read(M156), 'guard_ksef_retired_draft'));
+
+    const declOld = tight('v_choice text;');
+    const declNew = tight('v_choice text; v_imported text; v_retired text; v_old text;');
+    const selectOld = tight("SELECT s.original_ksef_number, s.original_check->'decision'->>'choice' INTO v_k, v_choice");
+    const selectNew = tight(`
+      SELECT s.original_ksef_number,
+             s.original_check->'decision'->>'choice',
+             s.original_check->'decision'->>'importedInvoiceId',
+             s.original_check->'decision'->>'retiredInternalNumber'
+        INTO v_k, v_choice, v_imported, v_retired`);
+    const step3 = tight(`
+      IF NOT FOUND THEN
+        IF TG_OP = 'DELETE' THEN
+          RETURN OLD;
+        END IF;
+        RETURN NEW;
+      END IF;`);
+    // 4.11: v_old = dawny numer; kolejność jak kroki 5–7 (usunięcie, kierunek, numer, wyjście z draft).
+    const step3b = tight(`
+      IF v_imported IS NOT NULL AND v_k IS NOT NULL THEN
+        v_old := COALESCE(v_retired, OLD.internal_number, 'bez numeru');
+        IF TG_OP = 'DELETE' THEN
+          RAISE EXCEPTION '${T.TRIGGER_DELETE_IMPORTED.template}', v_old, v_k USING ERRCODE = 'P0001';
+        END IF;
+        IF TG_NAME = 'c_guard_ksef_retired_draft_number' THEN
+          IF NEW.direction IS DISTINCT FROM OLD.direction THEN
+            RAISE EXCEPTION '${T.TRIGGER_DIRECTION_IMPORTED.template}', v_old, v_k USING ERRCODE = 'P0001';
+          END IF;
+          RAISE EXCEPTION '${T.TRIGGER_RENUMBER_IMPORTED.template}', v_old, v_k USING ERRCODE = 'P0001';
+        END IF;
+        IF v_choice = 'other_sale' THEN
+          RAISE EXCEPTION '${T.TRIGGER_OTHER_IMPORTED.template}', v_old, v_old, v_k USING ERRCODE = 'P0001';
+        END IF;
+        RAISE EXCEPTION '${T.TRIGGER_SAME_IMPORTED.template}', v_old, v_k, v_old USING ERRCODE = 'P0001';
+      END IF;`);
+    for (const piece of [declOld, selectOld, step3]) {
+      expect(body151.split(piece), `00151: ${piece}`).toHaveLength(2);
+    }
+    // Zastępowanie funkcją: `$'` i `$&` w napisie zastępującym to wzorce replace, nie tekst.
+    const expected = tight(body151.replace(declOld, () => declNew).replace(selectOld, () => selectNew).replace(step3, () => `${step3} ${step3b}`));
+    expect(body156).toBe(expected);
+
+    const header = (sql: string) => createStatements(statements(sql))
+      .filter(({ header: h }) => h.name === 'guard_ksef_retired_draft')
+      .map(({ stmt }) => tight(stmt.text));
+    expect(header(read(M156))).toEqual(header(read(M151)));
+  });
+
+  it('15. ksef_lifecycle_violations = ciało z 00155 (I3 przez ksef_upo_expected) + I3K po I3, I5 bez przeglądu pliku, I5D i I5R jednym zapytaniem; reszta znak w znak', () => {
+    const body155 = normBody(bodyOf(read(M155), 'ksef_lifecycle_violations'));
+    const body156 = normBody(bodyOf(read(M156), 'ksef_lifecycle_violations'));
+
+    const i3End = tight('OR (public.ksef_upo_expected(i) AND NOT EXISTS (SELECT 1 FROM public.upo_receipts u WHERE u.invoice_id = i.id)) );');
+    const i3k = tight(`
+      RETURN QUERY
+        SELECT 'I3K'::text, k.id, k.tenant_id,
+               jsonb_build_object(
+                 'ksef_number', k.ksef_number,
+                 'no_session', NOT EXISTS (SELECT 1 FROM public.ksef_submissions s
+                                            WHERE s.invoice_id = k.id AND s.tenant_id = k.tenant_id
+                                              AND s.response_ksef_number = k.ksef_number
+                                              AND s.session_reference_number IS NOT NULL),
+                 'no_date', k.ksef_accepted_at IS NULL,
+                 'upo_status', (SELECT u.status FROM public.upo_receipts u WHERE u.invoice_id = k.id))
+          FROM public.invoices k
+         WHERE k.id IN (SELECT CASE WHEN m.original_check->'decision'->>'importedInvoiceId'
+                                         ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                                    THEN (m.original_check->'decision'->>'importedInvoiceId')::uuid END
+                          FROM public.ksef_submissions m
+                         WHERE m.status = 'number_taken'
+                           AND m.original_check->'decision' ? 'importedInvoiceId')
+           AND k.direction = 'outgoing'
+           AND k.ksef_status = 'accepted'
+           AND k.origin = 'ksef_import'
+           AND (k.ksef_accepted_at IS NULL
+                OR (NOT EXISTS (SELECT 1 FROM public.upo_receipts u
+                                 WHERE u.invoice_id = k.id AND u.status IN ('downloaded', 'archived'))
+                    AND NOT EXISTS (SELECT 1 FROM public.ksef_submissions s
+                                     WHERE s.invoice_id = k.id AND s.tenant_id = k.tenant_id
+                                       AND s.response_ksef_number = k.ksef_number
+                                       AND s.session_reference_number IS NOT NULL)));`);
+    // 4.10 pkt 1: NULL <> … = NULL — I5D wypada jak w 00148; przegląd pliku idzie do I5R; recheck-needed zostaje w I5.
+    const i5Old = tight('AND public.ksef_duplicate_decision_blocker(s.invoice_id, s.tenant_id) IS NOT NULL;');
+    const i5New = tight("AND public.ksef_duplicate_decision_blocker(s.invoice_id, s.tenant_id) <> 'provenance-review';");
+    const lateralMarker = `
+      FROM public.invoices i
+      CROSS JOIN LATERAL (
+        SELECT s.original_ksef_number, s.original_check, s.attempted_at
+          FROM public.ksef_submissions s
+         WHERE s.invoice_id = i.id AND s.tenant_id = i.tenant_id
+           AND s.status IN ('intent', 'sent') AND s.original_ksef_number IS NOT NULL
+         ORDER BY s.attempted_at DESC NULLS LAST, s.id
+         LIMIT 1) m`;
+    const i5dOld = tight(`
+      RETURN QUERY
+        SELECT 'I5D'::text, i.id, i.tenant_id,
+               jsonb_build_object(
+                 'original_ksef_number', m.original_ksef_number,
+                 'reason', m.original_check->>'reason',
+                 'env', m.original_check->>'env',
+                 'checked_at', m.original_check->>'checkedAt',
+                 'attempted_at', m.attempted_at,
+                 'last_attempt_at', i.last_attempt_at)
+        ${lateralMarker}
+         WHERE i.direction = 'outgoing'
+           AND i.ksef_status = 'failed'
+           AND i.last_error_code = 'KSEF_DUPLICATE_RECONCILE'
+           AND public.ksef_duplicate_decision_blocker(i.id, i.tenant_id) IS NULL;`);
+    // 4.10 pkt 2: blokada liczona raz na fakturę (OFFSET 0), I5R tylko przy provenance-review.
+    const i5dNew = tight(`
+      RETURN QUERY
+        SELECT CASE WHEN b.code IS NULL THEN 'I5D' ELSE 'I5R' END, i.id, i.tenant_id,
+               jsonb_build_object(
+                 'original_ksef_number', m.original_ksef_number,
+                 'reason', m.original_check->>'reason',
+                 'env', m.original_check->>'env',
+                 'checked_at', m.original_check->>'checkedAt',
+                 'attempted_at', m.attempted_at,
+                 'last_attempt_at', i.last_attempt_at,
+                 'problems', m.original_check->'importGate'->'problems')
+        ${lateralMarker}
+          CROSS JOIN LATERAL (
+            SELECT public.ksef_duplicate_decision_blocker(i.id, i.tenant_id) AS code
+            OFFSET 0) b
+         WHERE i.direction = 'outgoing'
+           AND i.ksef_status = 'failed'
+           AND i.last_error_code = 'KSEF_DUPLICATE_RECONCILE'
+           AND (b.code IS NULL OR b.code = 'provenance-review');`);
+
+    for (const piece of [i3End, i5Old, i5dOld]) {
+      expect(body155.split(piece), `00155: ${piece.slice(0, 80)}`).toHaveLength(2);
+    }
+    // Zastępowanie funkcją: wzorzec UUID w I3K kończy się na `$'`, a to w napisie zastępującym znaczy „reszta tekstu”.
+    const expected = tight(body155.replace(i3End, () => `${i3End} ${i3k}`).replace(i5Old, () => i5New).replace(i5dOld, () => i5dNew));
+    expect(body156).toBe(expected);
+  });
+
+  it('marka FaktWay (00151, zmiana nazwy 10.2026): literały w ciałach funkcji 00156 bez „FaktFlow” i adresu w dawnej domenie — poza kodem powodu faktflow-original i wzorcem SystemInfo', () => {
+    // Identyfikatory, które zostają (docs/rebrand/FAKTWAY.md): kod powodu i przyszła postać SystemInfo
+    // (lustro TS: FAKTFLOW_SYSTEM_INFO_NEXT w lib/ksef/duplicate-decision.ts).
+    const allowed = new Set(["'faktflow-original'", "'^FaktFlow [0-9]'"]);
+    const hits = [...functionBodies(read(M156))].flatMap(([fn, bodies]) => bodies.flatMap((body) => lex(body)
+      .filter((p) => p.kind === 'literal' && /faktflow/i.test(p.text) && !allowed.has(p.text))
+      .map((p) => `${fn}: ${p.text}`)));
+    expect(hits).toEqual([]);
+    expect(read(M156), 'adres pomocy w dawnej domenie').not.toMatch(/pomoc@faktflow\.pl/);
+  });
+
   it('listy kluczy w 4.8 (ksef_original_import_mismatch) = ORIGINAL_IMPORT_INVOICE_KEYS i ORIGINAL_IMPORT_LINE_KEYS; lista buyer_id_type = ORIGINAL_IMPORT_BUYER_ID_TYPES', () => {
-    const lists = literalLists(withoutComments(bodyOf(read(M149), 'ksef_original_import_mismatch'))).map(canon);
+    const lists = literalLists(withoutComments(bodyOf(read(M156), 'ksef_original_import_mismatch'))).map(canon);
 
     expect(lists, 'klucze nagłówka (invoice) — 19 kolumn C0 poza kolumnami ustawianymi przez SQL').toContain(canon(ORIGINAL_IMPORT_INVOICE_KEYS));
     expect(lists, 'klucze pozycji (lines)').toContain(canon(ORIGINAL_IMPORT_LINE_KEYS));
@@ -626,7 +797,7 @@ describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z Fa
 
   it('listy stawek w 4.8 = ORIGINAL_IMPORT_VAT_RATES: 8 stawek FaktFlow zawsze, FA3_ONLY_VAT_RATES tylko przy review-*, „nieznana” nigdy', () => {
     const rates = ORIGINAL_IMPORT_VAT_RATES;
-    const raw = literalLists(withoutComments(bodyOf(read(M149), 'ksef_original_import_mismatch')));
+    const raw = literalLists(withoutComments(bodyOf(read(M156), 'ksef_original_import_mismatch')));
     const lists = raw.map(canon);
 
     expect(lists, 'stawki FaktFlow (VAT_RATES)').toContain(canon(rates.faktflow));
@@ -638,16 +809,16 @@ describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z Fa
   });
 
   it('kody p_kind w 4.7b (flag_ksef_original_recheck) = ORIGINAL_RECHECK_KINDS', () => {
-    const code = withoutComments(bodyOf(read(M149), 'flag_ksef_original_recheck'));
+    const code = withoutComments(bodyOf(read(M156), 'flag_ksef_original_recheck'));
     const lists = literalLists(code).map(canon);
     expect(lists, 'lista p_kind').toContain(canon(ORIGINAL_RECHECK_KINDS));
     expect(code, 'walidacja p_kind').toMatch(/\bp_kind\b/);
   });
 
   it('ksef_duplicate_cross_tenant: LANGUAGE sql, jedna instrukcja, ciało używa tylko $1–$3 (test R-C7 c wkleja prosrc do PREPARE)', () => {
-    const m149 = read(M149);
-    const body = bodyOf(m149, 'ksef_duplicate_cross_tenant');
-    const header = createStatements(statements(m149)).find(({ header: h }) => h.name === 'ksef_duplicate_cross_tenant')?.header;
+    const m156 = read(M156);
+    const body = bodyOf(m156, 'ksef_duplicate_cross_tenant');
+    const header = createStatements(statements(m156)).find(({ header: h }) => h.name === 'ksef_duplicate_cross_tenant')?.header;
     expect(/\bLANGUAGE\s+sql\b/i.test(header?.tail ?? ''), 'LANGUAGE sql (parametry pozycyjne $n)').toBe(true);
 
     const code = bodyCode(body);
@@ -669,7 +840,7 @@ describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z Fa
     expect(refusal.errorCode).toBe('NO_SESSION_REFERENCE');
     expect(refusal.error.length).toBeGreaterThan(20);
 
-    const coreStatements = statements(bodyOf(read(M149), 'ksef_duplicate_decide_core'));
+    const coreStatements = statements(bodyOf(read(M156), 'ksef_duplicate_decide_core'));
     const upoInserts = coreStatements.filter((s) => /\bINSERT INTO public\.upo_receipts\b/i.test(s.bare));
     expect(upoInserts.length, '(c7) INSERT INTO public.upo_receipts w core').toBeGreaterThan(0);
     expect(upoInserts.some((s) => s.text.includes(`'${refusal.error.replace(/'/g, "''")}'`)),
@@ -679,7 +850,7 @@ describe('strażnik tekstu migracji 00149 (D-A4-1b-3 PR C, zapis oryginału z Fa
   it('release_ksef_original_review: odmowy to komunikaty-kody ORIGINAL_RELEASE_REFUSAL_CODES (P0001; release:not-review z DETAIL), krok 9 — XX000', async () => {
     // Moduł RPC (server-only, klient admina) ładujemy tu, nie statycznie: jego zależności nie mogą wywrócić pozostałych przypadków.
     const { ORIGINAL_RELEASE_REFUSAL_CODES } = await import('@/lib/ksef/duplicate-decision-rpc');
-    const code = withoutComments(bodyOf(read(M149), 'release_ksef_original_review'));
+    const code = withoutComments(bodyOf(read(M156), 'release_ksef_original_review'));
 
     for (const refusal of ORIGINAL_RELEASE_REFUSAL_CODES) {
       const raises = raisesOf(code, refusal);

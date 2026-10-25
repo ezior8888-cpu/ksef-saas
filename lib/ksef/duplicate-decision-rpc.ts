@@ -9,7 +9,7 @@
  * udokumentowane rzutowanie klienta poniżej — metoda wołana na obiekcie, żeby
  * zachować `this` klienta supabase-js.
  *
- * D-A4-1b-3 PR C (00149): `decide_ksef_duplicate_original`,
+ * D-A4-1b-3 PR C (00156): `decide_ksef_duplicate_original`,
  * `release_ksef_original_review`, `flag_ksef_original_recheck` (service_role)
  * i `ksef_duplicate_decision_blocker_for_session` (sesja klienta, 4.9).
  */
@@ -35,7 +35,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 export interface DuplicateRpcError {
   code?: string;
   message?: string;
-  /** PR C: PostgREST `details` = `DETAIL` odmowy z 00149 (`mode`, `offer`, `choice`, `already`, `import-mismatch:<kod>`…). */
+  /** PR C: PostgREST `details` = `DETAIL` odmowy z 00156 (`mode`, `offer`, `choice`, `already`, `import-mismatch:<kod>`…). */
   details?: string;
 }
 
@@ -44,7 +44,7 @@ type UntypedRpcClient = {
     fn:
       | 'decide_ksef_duplicate'
       | 'ksef_duplicate_decision_blocker'
-      // PR C (00149) — rzutowanie zostaje dla nich do typów z produkcji po wgraniu 00149 (8.6).
+      // PR C (00156) — rzutowanie zostaje dla nich do typów z produkcji po wgraniu 00156 (8.6).
       | 'decide_ksef_duplicate_original'
       | 'release_ksef_original_review'
       | 'flag_ksef_original_recheck'
@@ -124,7 +124,7 @@ export async function readDuplicateDecisionBlocker(
   return typeof data === 'string' && data.length > 0 ? data : null;
 }
 
-// ─── PR C (00149) — sygnatury kontraktu (commit 1); ciała: commit 6 (grupa C) ──
+// ─── PR C (00156) — sygnatury kontraktu (commit 1); ciała: commit 6 (grupa C) ──
 
 /**
  * `DETAIL` odmów `decide_ksef_duplicate_original` (4.14): P0001 `STALE`
@@ -217,7 +217,7 @@ export interface FlagKsefOriginalRecheckResult {
 
 /* eslint-disable @typescript-eslint/no-unused-vars -- PR C kontrakt: sygnatury bez ciał, wyłącznik znika z ciałami */
 
-/** `decide_ksef_duplicate_original` (00149, 4.6) — dla `faktflow-original`; powody PR B idą `callDecideKsefDuplicate`. */
+/** `decide_ksef_duplicate_original` (00156, 4.6) — dla `faktflow-original`; powody PR B idą `callDecideKsefDuplicate`. */
 export async function callDecideKsefDuplicateOriginal(
   admin: AdminClient,
   args: DecideKsefDuplicateOriginalArgs,
@@ -225,7 +225,7 @@ export async function callDecideKsefDuplicateOriginal(
   throw new Error('PR C: nie zaimplementowane');
 }
 
-/** `release_ksef_original_review` (00149, 4.7) — operator oddaje decyzję klientowi (tylko `review-pair`). */
+/** `release_ksef_original_review` (00156, 4.7) — operator oddaje decyzję klientowi (tylko `review-pair`). */
 export async function callReleaseKsefOriginalReview(
   admin: AdminClient,
   args: ReleaseKsefOriginalReviewArgs,
@@ -234,7 +234,7 @@ export async function callReleaseKsefOriginalReview(
 }
 
 /**
- * `flag_ksef_original_recheck` (00149, 4.7b) — trwały znacznik „sprawdź
+ * `flag_ksef_original_recheck` (00156, 4.7b) — trwały znacznik „sprawdź
  * ponownie” po odmowie w chwili zapisu. Nigdy nie rzuca: błąd →
  * `Sentry.captureException` (`tags.kind = 'ksef-duplicate-recheck-flag'`)
  * i `null` (wołający i tak zwraca tekst `FAKTFLOW.RECHECK`).
@@ -247,7 +247,7 @@ export async function callFlagKsefOriginalRecheck(
 }
 
 /**
- * `ksef_duplicate_decision_blocker_for_session` (00149, 4.9; GRANT
+ * `ksef_duplicate_decision_blocker_for_session` (00156, 4.9; GRANT
  * authenticated) — kod blokady własnej faktury dla sesji klienta (firma
  * z `x-active-org`); `null` = czeka na decyzję; błąd → `undefined`
  * (wołający odmawia `state-unknown`). Strona woła ją tylko przy znaczniku

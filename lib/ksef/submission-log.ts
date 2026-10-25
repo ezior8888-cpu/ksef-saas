@@ -470,7 +470,7 @@ export interface KsefNumberTaken {
   /** `original_check.decision.choice` (00148); `null` — automatyczny „numer zajęty”. */
   decision: DuplicateDecisionChoice | null;
   /**
-   * PR C (00149, 5.4): `decision.importedInvoiceId` — faktura K zapisana z KSeF,
+   * PR C (00156, 5.4): `decision.importedInvoiceId` — faktura K zapisana z KSeF,
    * na którą przeszedł numer (szkic wycofany bez numeru; PDF i e-mail odsyłają
    * do PDF K, 5.12). `null` — decyzja bez zapisu oryginału albo jej brak.
    */
@@ -491,7 +491,7 @@ function takenDecision(check: unknown): DuplicateDecisionChoice | null {
   return choice === 'same_sale' || choice === 'other_sale' ? choice : null;
 }
 
-/** Klucze decyzji z zapisem oryginału (00149) — tylko poprawne wartości (id jak wzorzec I3K), reszta `null`. */
+/** Klucze decyzji z zapisem oryginału (00156) — tylko poprawne wartości (id jak wzorzec I3K), reszta `null`. */
 function takenImport(check: unknown): Pick<KsefNumberTaken, 'importedInvoiceId' | 'retiredInternalNumber' | 'offer'> {
   const decision = isRecord(check) && isRecord(check.decision) ? check.decision : null;
   const imported = decision?.importedInvoiceId;

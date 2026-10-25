@@ -753,19 +753,20 @@ export const EXPECTED_SQL_TEXTS: Readonly<Record<string, { template: string; ari
   TRIGGER_RENUMBER: { template: 'Numeru wycofanego dokumentu % nie zmienisz: ten numer ma w KSeF już %, a dokument zostaje z nim w FaktWay, żeby numer nie został podpowiedziany ponownie. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 2 },
   TRIGGER_DIRECTION: { template: 'Wycofanego dokumentu % nie zmienisz na fakturę zakupową: zajmuje numer, który w KSeF ma już %, i zostaje w FaktWay jako faktura sprzedaży, żeby tego numeru nie dostała inna faktura sprzedaży.', arity: 2 },
   CATALOG_NUMBER_TAKEN: { template: 'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie. Tego dokumentu nie wyślesz do KSeF. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.', arity: 0 },
-  // PR C (00149): nowe wzorce przepisane ze specyfikacji v3, 6.3 (słowo w słowo; lista prawnika).
-  'known-now': { template: 'Faktura % z KSeF jest już zapisana w FaktFlow przy innym dokumencie — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl. Nie wystawiaj dokumentu % ponownie.', arity: 2 },
-  'cross-tenant': { template: 'Faktury z KSeF o numerze % nie możemy zapisać przy tym dokumencie — wyjaśniamy to i damy znać. Nie wystawiaj dokumentu % ponownie; pytania: pomoc@faktflow.pl.', arity: 2 },
-  'recheck-needed': { template: 'Fakturę z KSeF dla dokumentu % sprawdzamy jeszcze raz — automatycznie, zwykle w ciągu 2 dni; potem decyzję zapiszesz na tej karcie. Nie wystawiaj dokumentu ponownie; jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl.', arity: 1 },
-  'provenance-review': { template: 'Sprawdzamy fakturę z KSeF dla dokumentu % — nie wystawiaj go ponownie, damy znać. Pytania: pomoc@faktflow.pl.', arity: 1 },
+  // PR C (00156): nowe wzorce przepisane ze specyfikacji v3, 6.3 (słowo w słowo; lista prawnika),
+  // marka FaktWay i pomoc@faktway.pl jak w 00151.
+  'known-now': { template: 'Faktura % z KSeF jest już zapisana w FaktWay przy innym dokumencie — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktway.pl. Nie wystawiaj dokumentu % ponownie.', arity: 2 },
+  'cross-tenant': { template: 'Faktury z KSeF o numerze % nie możemy zapisać przy tym dokumencie — wyjaśniamy to i damy znać. Nie wystawiaj dokumentu % ponownie; pytania: pomoc@faktway.pl.', arity: 2 },
+  'recheck-needed': { template: 'Fakturę z KSeF dla dokumentu % sprawdzamy jeszcze raz — automatycznie, zwykle w ciągu 2 dni; potem decyzję zapiszesz na tej karcie. Nie wystawiaj dokumentu ponownie; jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktway.pl.', arity: 1 },
+  'provenance-review': { template: 'Sprawdzamy fakturę z KSeF dla dokumentu % — nie wystawiaj go ponownie, damy znać. Pytania: pomoc@faktway.pl.', arity: 1 },
   CHOICE: { template: 'Dla dokumentu % możliwy jest tylko zapis faktury z KSeF jako tej samej sprzedaży — odśwież stronę.', arity: 1 },
-  IMPORT_MISMATCH: { template: 'Faktury % z KSeF nie zapiszemy przy dokumencie %: numer faktury albo NIP sprzedawcy w KSeF nie zgadza się z tym dokumentem albo z danymi Twojej firmy. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.', arity: 2 },
+  IMPORT_MISMATCH: { template: 'Faktury % z KSeF nie zapiszemy przy dokumencie %: numer faktury albo NIP sprzedawcy w KSeF nie zgadza się z tym dokumentem albo z danymi Twojej firmy. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktway.pl, podając numer dokumentu.', arity: 2 },
   ALREADY_IMPORTED: { template: 'Decyzja dla dokumentu % jest już zapisana („%”) — co zrobić, jeśli była błędna, piszemy na karcie wycofanego dokumentu.', arity: 2 },
-  TRIGGER_SAME_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: to ta sama sprzedaż co faktura % z KSeF, zapisana w FaktFlow pod numerem %.', arity: 3 },
-  TRIGGER_OTHER_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: numer % ma faktura % z KSeF, zapisana w FaktFlow. Tę sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 3 },
-  TRIGGER_DELETE_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie usuniesz: zostaje w FaktFlow jako ślad decyzji o fakturze % z KSeF, która ma teraz jego numer. Jeśli musisz go usunąć, napisz do nas: pomoc@faktflow.pl.', arity: 2 },
+  TRIGGER_SAME_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: to ta sama sprzedaż co faktura % z KSeF, zapisana w FaktWay pod numerem %.', arity: 3 },
+  TRIGGER_OTHER_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: numer % ma faktura % z KSeF, zapisana w FaktWay. Tę sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 3 },
+  TRIGGER_DELETE_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie usuniesz: zostaje w FaktWay jako ślad decyzji o fakturze % z KSeF, która ma teraz jego numer. Jeśli musisz go usunąć, napisz do nas: pomoc@faktway.pl.', arity: 2 },
   TRIGGER_RENUMBER_IMPORTED: { template: 'Wycofanemu dokumentowi (dawniej %) nie nadasz numeru — zostaje bez numeru jako ślad decyzji o fakturze % z KSeF. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 2 },
-  TRIGGER_DIRECTION_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie zmienisz na fakturę zakupową: zostaje w FaktFlow jako ślad decyzji o fakturze % z KSeF.', arity: 2 },
+  TRIGGER_DIRECTION_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie zmienisz na fakturę zakupową: zostaje w FaktWay jako ślad decyzji o fakturze % z KSeF.', arity: 2 },
 };
 
 /** Wypełnienie wzorca RAISE od lewej do prawej — niezależne od `fillSqlText` modułu. */

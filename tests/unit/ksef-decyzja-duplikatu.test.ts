@@ -684,7 +684,7 @@ const rowOf = (v: { comparison: Array<{ label: string }> }, label: string) => v.
 const releasedCheck = (): Record<string, unknown> => ({ importGate: faktflowReviewGate(['rates'], { release: faktflowRelease() }) });
 
 describe('U1i (PR C): faktflow-original — oferta pair (dwa przyciski, zapis oryginału)', () => {
-  it('klient: widok do decyzji z ofertą pair, trybem import, obu wyborami, programem FaktFlow i danymi oryginału z bramy', () => {
+  it('klient: widok do decyzji z ofertą pair, trybem import, obu wyborami, programem FaktWay i danymi oryginału z bramy', () => {
     const v = ffDecidable();
     expect(v).toMatchObject({
       kind: 'decidable',
@@ -694,7 +694,7 @@ describe('U1i (PR C): faktflow-original — oferta pair (dwa przyciski, zapis or
       invoiceNumber: DUP_NR,
       originalKsefNumber: DUP_K,
       originalSha256: DUP_SHA,
-      program: 'FaktFlow',
+      program: 'FaktWay',
       choices: ['same_sale', 'other_sale'],
       sameContent: false,
       knownInvoice: null,
@@ -711,7 +711,7 @@ describe('U1i (PR C): faktflow-original — oferta pair (dwa przyciski, zapis or
       'Numer faktury', 'Data wystawienia', 'Nabywca', 'NIP nabywcy', 'Kwota brutto', 'Program', FF.ROW_SALE_DATE,
     ]));
     expect(v.comparison).toHaveLength(7);
-    expect(rowOf(v, 'Program')).toMatchObject({ ksef: 'FaktFlow', ours: 'FaktFlow', same: null });
+    expect(rowOf(v, 'Program')).toMatchObject({ ksef: 'FaktWay', ours: 'FaktWay', same: null });
   });
 
   it('wiersz „Data sprzedaży”: NULL po obu stronach to „jak data wystawienia”, nie „—” ani brak', () => {
@@ -724,9 +724,9 @@ describe('U1i (PR C): faktflow-original — oferta pair (dwa przyciski, zapis or
     expect(rowOf(ksefNull, FF.ROW_SALE_DATE)).toMatchObject({ ksef: FF.SALE_DATE_AS_ISSUE, ours: '2026-09-29' });
   });
 
-  it('przyszła postać SystemInfo „FaktFlow 2.0” (D-A4-1b-3-SYS) też daje program FaktFlow i ofertę pair', () => {
+  it('przyszła postać SystemInfo „FaktFlow 2.0” (D-A4-1b-3-SYS) też daje program FaktWay i ofertę pair', () => {
     const v = ffDecidable({ check: { summary: { ...(validCheck().summary as object), systemInfo: 'FaktFlow 2.0' } } });
-    expect(v).toMatchObject({ offer: 'pair', program: 'FaktFlow' });
+    expect(v).toMatchObject({ offer: 'pair', program: 'FaktWay' });
   });
 
   it.each([
@@ -760,14 +760,14 @@ describe('U1j (PR C): faktflow-original — oferta record (jeden przycisk, włas
     ['własna historia w bazie: sesja oryginału w próbie faktury (T3, JSON ownHistory = false)', () => faktflowFacts({ history: 'session' })],
     ['własna historia w bazie: skrót oryginału w próbie, wielkość liter bez znaczenia (T3)', () => faktflowFacts({ history: 'hash' })],
     ['ta sama treść poza nagłówkiem (C5)', () => faktflowFacts({ check: { sameContentExceptHeader: true } })],
-  ])('%s — oferta record, tryb import, tylko „ta sama sprzedaż”, program FaktFlow', (_name, facts) => {
+  ])('%s — oferta record, tryb import, tylko „ta sama sprzedaż”, program FaktWay', (_name, facts) => {
     const v = decidableView(facts());
     expect(v).toMatchObject({
       kind: 'decidable',
       reason: 'faktflow-original',
       offer: 'record',
       mode: 'import',
-      program: 'FaktFlow',
+      program: 'FaktWay',
       choices: ['same_sale'],
       needsConfirmation: expect.objectContaining({ other_sale: false }),
     });
@@ -837,7 +837,7 @@ describe('U1k (PR C): faktflow-original — oferta released (operator oddał dec
       invoiceNumber: DUP_NR,
       originalKsefNumber: DUP_K,
     });
-    expect(rowOf(v, 'Program')).toMatchObject({ ksef: FF.PROGRAM_RELEASED, ours: 'FaktFlow' });
+    expect(rowOf(v, 'Program')).toMatchObject({ ksef: FF.PROGRAM_RELEASED, ours: 'FaktWay' });
   });
 
   it('„Rozumiem skutki” jak w PR B (NIP, kwota), nie jak record', () => {
@@ -1060,7 +1060,7 @@ describe('U1o (PR C): widok operatora w przeglądzie pliku (provenance-review, I
       sameContent: false,
       markedDifference: false,
       heldCorrections: false,
-      program: 'FaktFlow',
+      program: 'FaktWay',
       releasable: true,
       correctionForPerson: false,
     });
@@ -1192,7 +1192,7 @@ describe('U1p (PR C): szkic wycofany po zapisie oryginału — trzy banery, przy
     });
   });
 
-  it('zapis operatora w przeglądzie: baner SAME / OTHER (review-pair) albo RECORD (review-record) z dopiskiem „zapisała pomoc FaktFlow”', () => {
+  it('zapis operatora w przeglądzie: baner SAME / OTHER (review-pair) albo RECORD (review-record) z dopiskiem „zapisała pomoc FaktWay”', () => {
     const via = DUPLICATE_DECISION_TEXTS.BANNER_VIA_OPERATOR;
     const same = retired([numberTakenFaktflowRow('import', { choice: 'same_sale', offer: 'review-pair', via: 'operator' })]);
     expect(same).toMatchObject({ body: FF.BANNER_SAME(data, via, DUP_NR, DUP_K), cta: null });

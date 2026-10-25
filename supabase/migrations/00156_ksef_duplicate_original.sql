@@ -1,8 +1,9 @@
--- 00149_ksef_duplicate_original.sql
+-- 00156_ksef_duplicate_original.sql
 --
 -- D-A4-1b-3 PR C (plan „zero zgubionych faktur”): oryginał z oznaczeniem
--- FaktFlow przy nierozstrzygniętym 440 (`faktflow-original`), decyzje Bartosza
--- 04.10, 07.10 i 08.10.2026 (C1–C8). Brama pochodzenia liczona w runnerze
+-- naszego programu przy nierozstrzygniętym 440 (powód `faktflow-original`;
+-- identyfikator zostaje po zmianie marki), decyzje Bartosza 04.10, 07.10
+-- i 08.10.2026 (C1–C8). Brama pochodzenia liczona w runnerze
 -- (`original_check.importGate`) wybiera ofertę: zapis oryginału przez klienta
 -- (para albo jeden przycisk), przegląd operatora albo — po oddaniu przez
 -- operatora — decyzja jak przy innym programie. Zapis oryginału w jednej
@@ -10,9 +11,30 @@
 -- na oryginał, oryginał jako przyjęta faktura sprzedaży (origin ksef_import)
 -- z pozycjami, xml_documents, sesją oryginału i wierszem upo_receipts.
 --
+-- NUMER 00156, nie 00149. PR C miał rezerwację 00149 (szkic #248), ale zanim
+-- wszedł, 00151 (marka FaktWay) przepisała decide_ksef_duplicate
+-- i guard_ksef_retired_draft, a 00155 (synchronizacja historii) —
+-- ksef_lifecycle_violations (I3 przez ksef_upo_expected). Pod numerem 00149
+-- świeża baza (pliki w kolejności numerów) wgrałaby PR C PRZED nimi, a 00151
+-- i 00155 cofnęłyby po cichu opakowanie decyzji, krok 3b wyzwalacza oraz I5R
+-- i I3K. Reguła 05.10: migracja przenoszona bierze kolejny wolny numer
+-- (rejestr: docs/koordynacja/CLAUDE-DO-CODEXA.md; 00149 zostaje nieużyty).
+-- Ciała napisane na tym, co obowiązuje dziś:
+--   - decide_ksef_duplicate (9 argumentów) i tryb retire w core — zachowanie
+--     i teksty z 00151 (FaktWay, pomoc@faktway.pl), INV-14;
+--   - guard_ksef_retired_draft — ciało z 00151 + krok 3b (teksty *_IMPORTED);
+--   - ksef_lifecycle_violations — ciało z 00155 (I3 przez ksef_upo_expected,
+--     strażnik tests/unit/ksef-cykl-zycia-wersje.test.ts) + I5 bez przeglądu
+--     pliku, I5D i I5R jednym zapytaniem, I3K;
+--   - ksef_duplicate_check_allows i ksef_duplicate_decision_blocker — od 00148
+--     nikt ich nie zmieniał (00151 i 00155 ich nie dotykają).
+-- Nowe teksty dla klienta (spec v3 6.3) mówią „FaktWay” i pomoc@faktway.pl;
+-- lustro: DUPLICATE_DECISION_SQL_TEXTS (lib/ksef/duplicate-decision.ts),
+-- strażnik U16e-00156 (tests/unit/zapis-oryginalu-migracja.test.ts).
+--
 --  1. ksef_duplicate_check_allows — + faktflow-original (CREATE OR REPLACE).
 --  2. ksef_duplicate_own_history — predykat 00148 krok 12 jako funkcja.
---  3. ksef_duplicate_gate_ok — poprawny kształt importGate (wspólny dla 4, 5, 11).
+--  3. ksef_duplicate_gate_ok — poprawny kształt importGate (wspólny dla 4, 6, 12).
 --  4. ksef_duplicate_original_offer — oferta z importGate i własnej historii.
 --  5. ksef_duplicate_cross_tenant — K albo numer w innej firmie (jedyne miejsce reguły).
 --  6. ksef_duplicate_decision_blocker — + known-now, cross-tenant,
@@ -32,38 +54,61 @@
 -- PRZED wdrożeniem kodu: CREATE OR REPLACE i nowe funkcje; bez DML na danych,
 -- bez DROP. Stary kod: decyzji dla faktflow-original nie woła (TS odmawia
 -- przed RPC — allows TS bez faktflow-original); decide_ksef_duplicate dla
--- no-own-file/known-number działa jak w 00148 (INV-14). Okno
--- migracja→wdrożenie: stary runner zapisuje znacznik faktflow-original bez
--- importGate → blokada recheck-needed → I5 (stary cron po 48 h robi
--- „Tylko uzgodnij”, a nowy runner zapisze bramę); stary notify-user idzie
--- ścieżką ogólną. Okno worker→web: nowy worker może wysłać e-mail „zapisz
--- fakturę z KSeF”, a stary panel jeszcze odmawia („decyzji w panelu nie ma”)
--- — przy 0 znacznikach bez skutku, okno to minuty. Produkcja 08.10:
--- 0 takich znaczników. Wdrożenie: worker (id=2), potem web (id=1).
+-- no-own-file/known-number działa jak w 00151 (INV-14: te same kroki, kody
+-- i teksty). Okno migracja→wdrożenie: stary runner zapisuje znacznik
+-- faktflow-original bez importGate → blokada recheck-needed → I5 (stary cron
+-- po 48 h robi „Tylko uzgodnij”, a nowy runner zapisze bramę); stary
+-- notify-user idzie ścieżką ogólną. Okno worker→web: nowy worker może wysłać
+-- e-mail „zapisz fakturę z KSeF”, a stary panel jeszcze odmawia („decyzji
+-- w panelu nie ma”) — przy 0 znacznikach bez skutku, okno to minuty.
+-- Produkcja 08.10: 0 takich znaczników (sprawdź zapytaniem niżej).
+-- Wdrożenie: worker (id=2), potem web (id=1).
 --
 -- Wycofanie (decyzja Bartosza): NAJPIERW zapisz wynik zapytania I3K
 -- (ksef_lifecycle_violations() WHERE invariant = 'I3K' — faktury z KSeF bez
--- sesji UPO albo daty; po wycofaniu nic ich nie pokaże) w runbooku. Potem
--- CREATE OR REPLACE funkcji 1, 6, 10, 15 ciałami z 00148; DROP FUNCTION
--- decide_ksef_duplicate_original, release_ksef_original_review,
+-- sesji UPO albo daty; po wycofaniu nic ich nie pokaże) w runbooku. Potem,
+-- w jednej transakcji, CREATE OR REPLACE:
+--   - decide_ksef_duplicate — ciałem z 00151 (sekcja 1; teksty FaktWay);
+--   - ksef_lifecycle_violations — ciałem z 00155 (sekcja 8; I3 przez
+--     ksef_upo_expected — bez niego I3 pokaże całą historię z KSeF);
+--   - ksef_duplicate_check_allows i ksef_duplicate_decision_blocker — ciałami
+--     z 00148;
+-- i dopiero po nich (ciała SQL/plpgsql nie mają zależności w katalogu, więc
+-- DROP przeszedłby także przed nimi i zostawił opakowanie bez core) DROP
+-- FUNCTION decide_ksef_duplicate_original, release_ksef_original_review,
 -- flag_ksef_original_recheck, ksef_duplicate_decide_core,
 -- ksef_original_import_mismatch, ksef_duplicate_decision_blocker_for_session,
 -- ksef_duplicate_original_offer, ksef_duplicate_cross_tenant,
 -- ksef_duplicate_gate_ok, ksef_duplicate_own_history.
--- guard_ksef_retired_draft ZOSTAJE z 00149 (bez decyzji z importem jej teksty
--- są identyczne z 00148; ciało z 00148 pokazałoby przy szkicu bez numeru
--- „zajmuje numer, który w KSeF ma już…”, co byłoby fałszem). Faktury zapisane
--- z KSeF zostają (są poprawnym zapisem wystawionych faktur); szkice wycofane
--- bez numeru zostają bez numeru.
+-- guard_ksef_retired_draft ZOSTAJE z 00156 (decyzja Bartosza, spec v3 4.1):
+-- bez decyzji z zapisem oryginału jej teksty i kolejność są identyczne
+-- z 00151, a ciało z 00151 pokazałoby przy szkicu bez numeru „zajmuje numer,
+-- który w KSeF ma już…”, co byłoby fałszem. Tylko gdy żadnej decyzji z zapisem
+-- nie było (SELECT count(*) FROM public.ksef_submissions
+-- WHERE original_check->'decision' ? 'importedInvoiceId' → 0), można ją cofnąć
+-- ciałem z 00151 (sekcja 2). Faktury zapisane z KSeF zostają (są poprawnym
+-- zapisem wystawionych faktur); szkice wycofane bez numeru zostają bez numeru.
 --
 -- Przed uruchomieniem (sesja lokalna, AGENTS.md „Wgrywanie migracji”):
---   SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 3;   → 00148
+--   SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 3;
+--     → 00200, 00155, 00154 (00200 spoza kolejności, wgrana 02.10); jest 00151; nie ma 00156 (00149 nie było i nie będzie)
+--   SELECT proname FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+--      AND proname IN ('decide_ksef_duplicate', 'guard_ksef_retired_draft')
+--      AND prosrc ILIKE '%faktflow%';
+--     → 0 wierszy (00151 wgrana — inaczej najpierw 00151)
+--   SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+--      AND proname = 'ksef_lifecycle_violations' AND prosrc LIKE '%ksef_upo_expected%';
+--     → 1 (00155 wgrana — inaczej najpierw 00155)
 --   SELECT count(*) FROM public.invoices WHERE ksef_status='failed' AND last_error_code='KSEF_DUPLICATE_RECONCILE';
 --   SELECT original_check->>'reason', original_check ? 'importGate', count(*)
 --     FROM public.ksef_submissions WHERE original_check IS NOT NULL GROUP BY 1, 2;
 --   SELECT count(*) FROM public.ksef_submissions WHERE status='number_taken';
 --   SELECT count(*) FROM public.invoices WHERE origin='ksef_import';
 --   (informacyjnie — migracja nie zmienia wierszy)
+-- Po wgraniu: wpis 00156 w schema_migrations, NOTIFY pgrst (nowe RPC:
+-- decide_ksef_duplicate_original, release_ksef_original_review,
+-- flag_ksef_original_recheck, ksef_duplicate_decision_blocker_for_session),
+-- a prosrc decide_ksef_duplicate zawiera ksef_duplicate_decide_core.
 
 BEGIN;
 
@@ -119,7 +164,7 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_duplicate_check_allows(jsonb, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_duplicate_check_allows(jsonb, text) TO service_role;
 COMMENT ON FUNCTION public.ksef_duplicate_check_allows(jsonb, text) IS
-  'Czy dane oryginału z original_check pozwalają zdecydować o duplikacie 440 (00148, 00149): v 1, bez decision, powód no-own-file, known-number albo faktflow-original, sha256 oryginału, summary. PR B: ownHistory false, przy known-number knownInvoice.id. faktflow-original: SystemInfo FaktFlow (KSeF SaaS v1.0 albo FaktFlow <wersja>), archivePath, sizeBytes, ownHistory logiczne, other_sale tylko przy ownHistory false i treści różnej od true; importGate rozstrzyga blokada i oferta. Lustro TS: duplicateCheckAllows (lib/ksef/duplicate-decision.ts).';
+  'Czy dane oryginału z original_check pozwalają zdecydować o duplikacie 440 (00148, 00156): v 1, bez decision, powód no-own-file, known-number albo faktflow-original, sha256 oryginału, summary. PR B: ownHistory false, przy known-number knownInvoice.id. faktflow-original: SystemInfo naszego programu (KSeF SaaS v1.0 albo FaktFlow <wersja>), archivePath, sizeBytes, ownHistory logiczne, other_sale tylko przy ownHistory false i treści różnej od true; importGate rozstrzyga blokada i oferta. Lustro TS: duplicateCheckAllows (lib/ksef/duplicate-decision.ts).';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 2. Własna historia w bazie (predykat 00148 krok 12 jako funkcja)
@@ -148,7 +193,7 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_duplicate_own_history(uuid, uuid, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_duplicate_own_history(uuid, uuid, text, text) TO service_role;
 COMMENT ON FUNCTION public.ksef_duplicate_own_history(uuid, uuid, text, text) IS
-  'Własna historia oryginału w bazie (00149, predykat kroku 12 z 00148): któraś próba faktury ma sesję oryginału albo lower(request_payload_hash) = SHA-256 oryginału. Lustro TS: ownHistoryInSubmissions.';
+  'Własna historia oryginału w bazie (00156, predykat kroku 12 z 00148): któraś próba faktury ma sesję oryginału albo lower(request_payload_hash) = SHA-256 oryginału. Lustro TS: ownHistoryInSubmissions.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 3. Poprawny kształt importGate (wspólny dla 4, 6 i 12)
@@ -188,7 +233,7 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_duplicate_gate_ok(jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_duplicate_gate_ok(jsonb) TO service_role;
 COMMENT ON FUNCTION public.ksef_duplicate_gate_ok(jsonb) IS
-  'Poprawny kształt original_check.importGate (00149): obiekt, v 1, rules liczbą, kind importable albo review, problems tablicą napisów; importable wtedy i tylko wtedy, gdy problems puste. Lustro TS: originalGateOk.';
+  'Poprawny kształt original_check.importGate (00156): obiekt, v 1, rules liczbą, kind importable albo review, problems tablicą napisów; importable wtedy i tylko wtedy, gdy problems puste. Lustro TS: originalGateOk.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 4. Oferta z importGate i własnej historii (jedna funkcja dla panelu, powiadomień i operatora)
@@ -241,7 +286,7 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_duplicate_original_offer(jsonb, boolean) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_duplicate_original_offer(jsonb, boolean) TO service_role;
 COMMENT ON FUNCTION public.ksef_duplicate_original_offer(jsonb, boolean) IS
-  'Oferta decyzji przy faktflow-original (00149): pair, record (własna historia w JSON albo w bazie, ta sama treść), released (operator oddał decyzję przy poprawnej bramie), review-pair albo review-record (przegląd, brak bramy, zły kształt); NULL poza faktflow-original albo gdy allows odmawia. p_own_history_db NULL = tylko zapis. Lustro TS: duplicateOriginalOffer.';
+  'Oferta decyzji przy faktflow-original (00156): pair, record (własna historia w JSON albo w bazie, ta sama treść), released (operator oddał decyzję przy poprawnej bramie), review-pair albo review-record (przegląd, brak bramy, zły kształt); NULL poza faktflow-original albo gdy allows odmawia. p_own_history_db NULL = tylko zapis. Lustro TS: duplicateOriginalOffer.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 5. K albo numer X w innej firmie (INV-9, jedyne miejsce reguły)
@@ -280,7 +325,7 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_duplicate_cross_tenant(uuid, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_duplicate_cross_tenant(uuid, text, text) TO service_role;
 COMMENT ON FUNCTION public.ksef_duplicate_cross_tenant(uuid, text, text) IS
-  'Inna firma (00149, INV-9): numer KSeF oryginału na fakturze sprzedaży innej firmy albo numer dokumentu na wysyłanej kiedyś fakturze sprzedaży innej firmy z tym samym NIP. Jedyne miejsce reguły; woła ją blokada decyzji (krok 11b). Tylko serwis.';
+  'Inna firma (00156, INV-9): numer KSeF oryginału na fakturze sprzedaży innej firmy albo numer dokumentu na wysyłanej kiedyś fakturze sprzedaży innej firmy z tym samym NIP. Jedyne miejsce reguły; woła ją blokada decyzji (krok 11b). Tylko serwis.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 6. Blokada decyzji (NULL = faktura czeka na decyzję klienta)
@@ -338,7 +383,7 @@ BEGIN
     RETURN 'kind';
   END IF;
 
-  -- 5. billing: faktura abonamentu FaktFlow.
+  -- 5. billing: faktura abonamentu FaktWay.
   IF v_inv.stripe_invoice_id IS NOT NULL THEN
     RETURN 'billing';
   END IF;
@@ -379,7 +424,7 @@ BEGIN
     RETURN 'no-check';
   END IF;
 
-  -- 10. reason: polityka danych oryginału (00149: także faktflow-original z danymi pliku).
+  -- 10. reason: polityka danych oryginału (00156: także faktflow-original z danymi pliku).
   IF NOT public.ksef_duplicate_check_allows(v_marker.original_check, NULL) THEN
     RETURN 'reason';
   END IF;
@@ -397,7 +442,7 @@ BEGIN
     RETURN 'known-stale';
   END IF;
 
-  -- Zmienne pomocnicze (00149): v_own liczone raz — dla PR B to dokładnie krok 12 z 00148.
+  -- Zmienne pomocnicze (00156): v_own liczone raz — dla PR B to dokładnie krok 12 z 00148.
   v_ff := COALESCE(v_marker.original_check->>'reason' = 'faktflow-original', false);
   v_own := public.ksef_duplicate_own_history(p_invoice_id, p_tenant_id,
              v_marker.original_session_reference_number, v_marker.original_check->>'sha256');
@@ -452,7 +497,7 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_duplicate_decision_blocker(uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_duplicate_decision_blocker(uuid, uuid) TO service_role;
 COMMENT ON FUNCTION public.ksef_duplicate_decision_blocker(uuid, uuid) IS
-  'Pierwszy powód, dla którego faktura nie czeka na decyzję klienta przy duplikacie 440 (00148, 00149): not-found, not-pending, in-ksef, kind, billing, offline, no-marker, conflicting-originals, no-check, reason, known-stale, known-now, cross-tenant, recheck-needed, own-history (nie dla faktflow-original), payments, provenance-review; NULL = czeka (I5D). Lustro TS: duplicateDecisionOptions.';
+  'Pierwszy powód, dla którego faktura nie czeka na decyzję klienta przy duplikacie 440 (00148, 00156): not-found, not-pending, in-ksef, kind, billing, offline, no-marker, conflicting-originals, no-check, reason, known-stale, known-now, cross-tenant, recheck-needed, own-history (nie dla faktflow-original), payments, provenance-review; NULL = czeka (I5D). Lustro TS: duplicateDecisionOptions.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 7. Blokada dla sesji klienta (strona faktury, firma z x-active-org)
@@ -483,7 +528,7 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_duplicate_decision_blocker_for_session(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_duplicate_decision_blocker_for_session(uuid) TO authenticated, service_role;
 COMMENT ON FUNCTION public.ksef_duplicate_decision_blocker_for_session(uuid) IS
-  'Blokada decyzji (ksef_duplicate_decision_blocker) dla sesji klienta (00149): firma z get_current_tenant_id(); brak aktywnej firmy albo faktura innej firmy → not-found. Strona faktury czyta nią kod przy znaczniku faktflow-original (bez klucza serwisowego).';
+  'Blokada decyzji (ksef_duplicate_decision_blocker) dla sesji klienta (00156): firma z get_current_tenant_id(); brak aktywnej firmy albo faktura innej firmy → not-found. Strona faktury czyta nią kod przy znaczniku faktflow-original (bez klucza serwisowego).';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 8. Kontrola projekcji oryginału (lustro TS: originalImportProjectionProblem)
@@ -662,7 +707,7 @@ BEGIN
   END IF;
 
   -- ── lines: klucze = ORIGINAL_IMPORT_LINE_KEYS, typy i zakresy, stawki wg oferty ──
-  -- pair/record (i każda inna): 8 stawek FaktFlow; review-*: także FA(3) spoza FaktFlow (F42); nieznana nigdy.
+  -- pair/record (i każda inna): 8 stawek FaktWay (VAT_RATES); review-*: także FA(3) spoza FaktWay (F42); nieznana nigdy.
   v_rates := CASE WHEN p_offer IN ('review-pair', 'review-record')
                   THEN ARRAY['23', '8', '5', '0', 'zw', 'oo', 'np', 'np_ii', '0 WDT', '0 EX', '22', '7', '4', '3']
                   ELSE ARRAY['23', '8', '5', '0', 'zw', 'oo', 'np', 'np_ii'] END;
@@ -826,19 +871,19 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_original_import_mismatch(jsonb, public.invoices, public.ksef_submissions, uuid, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_original_import_mismatch(jsonb, public.invoices, public.ksef_submissions, uuid, text, text) TO service_role;
 COMMENT ON FUNCTION public.ksef_original_import_mismatch(jsonb, public.invoices, public.ksef_submissions, uuid, text, text) IS
-  'Kontrola projekcji oryginału K przed zapisem (00149, 4.8): NULL albo pierwszy kod shape, lines, number, seller, kind, issue-date, gross, buyer, currency, xml, totals, fa3. Nie pisze i nie rzuca. number i seller = niezgodność z dokumentem albo firmą (P0001 IMPORT_MISMATCH), reszta = błąd programu (22023). Lustro TS: originalImportProjectionProblem.';
+  'Kontrola projekcji oryginału K przed zapisem (00156, 4.8): NULL albo pierwszy kod shape, lines, number, seller, kind, issue-date, gross, buyer, currency, xml, totals, fa3. Nie pisze i nie rzuca. number i seller = niezgodność z dokumentem albo firmą (P0001 IMPORT_MISMATCH), reszta = błąd programu (22023). Lustro TS: originalImportProjectionProblem.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 9. Ciało decyzji (tryby retire / import / no-import)
 -- ─────────────────────────────────────────────────────────────────
--- retire = decide_ksef_duplicate z 00148 (powody PR B; instrukcje (a), (c),
--- (d), (e) dosłownie z 00148 — INV-14). import = zapis oryginału K w tej samej
+-- retire = decide_ksef_duplicate z 00151 (00148 w marce FaktWay; powody PR B;
+-- instrukcje (a), (c), (d), (e) i teksty odmów dosłownie z 00151 — INV-14). import = zapis oryginału K w tej samej
 -- transakcji: wycofanie X (jak 00148), numer przechodzi z X na K, K jako
 -- przyjęta faktura sprzedaży (origin ksef_import) z pozycjami, xml_documents,
 -- sesją oryginału i wierszem upo_receipts. no-import = po oddaniu decyzji przez
 -- operatora (oferta released): skutki 00148, dowód decyzji na znaczniku.
--- Każda odmowa to RAISE (cała transakcja się cofa). Teksty odmów = 6.3 / 00148
--- (DUPLICATE_DECISION_SQL_TEXTS), DETAIL = kod (4.14).
+-- Każda odmowa to RAISE (cała transakcja się cofa). Teksty odmów = 6.3 / 00151
+-- (DUPLICATE_DECISION_SQL_TEXTS, marka FaktWay), DETAIL = kod (4.14).
 CREATE OR REPLACE FUNCTION public.ksef_duplicate_decide_core(
   p_mode text,
   p_offer text,
@@ -1022,7 +1067,7 @@ BEGIN
       RAISE EXCEPTION 'Decyzja dla dokumentu % jest już zapisana („%”) — co zrobić, jeśli była błędna, piszemy na karcie wycofanego dokumentu.', v_num, v_label USING ERRCODE = 'P0001', DETAIL = 'already';
     END IF;
     v_choice_label := CASE v_dec_choice WHEN 'same_sale' THEN 'ta sama sprzedaż' ELSE 'inna sprzedaż' END;
-    RAISE EXCEPTION 'Decyzja dla dokumentu % jest już zapisana („%”). Jeśli była błędna, napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.', v_num, v_choice_label USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'Decyzja dla dokumentu % jest już zapisana („%”). Jeśli była błędna, napisz do nas: pomoc@faktway.pl, podając numer dokumentu.', v_num, v_choice_label USING ERRCODE = 'P0001';
   END IF;
 
   -- 3. Próba w toku.
@@ -1060,35 +1105,35 @@ BEGIN
     ELSIF v_code = 'not-pending' THEN
       RAISE EXCEPTION 'Dokument % nie czeka już na Twoją decyzję — odśwież stronę.', v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'in-ksef' THEN
-      RAISE EXCEPTION 'Dokument % ma już numer KSeF — decyzja nie jest potrzebna. Odśwież stronę; jeśli komunikat wraca, napisz do nas: pomoc@faktflow.pl.', v_num USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Dokument % ma już numer KSeF — decyzja nie jest potrzebna. Odśwież stronę; jeśli komunikat wraca, napisz do nas: pomoc@faktway.pl.', v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'kind' THEN
-      RAISE EXCEPTION 'Dokument % to korekta, faktura zaliczkowa albo rozliczeniowa — tej decyzji nie zapiszesz jeszcze w FaktFlow. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.', v_num USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Dokument % to korekta, faktura zaliczkowa albo rozliczeniowa — tej decyzji nie zapiszesz jeszcze w FaktWay. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktway.pl, podając numer dokumentu.', v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'billing' THEN
-      RAISE EXCEPTION 'Dokument % to faktura abonamentu FaktFlow — decyzję zapisuje pomoc FaktFlow.', v_num USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Dokument % to faktura abonamentu FaktWay — decyzję zapisuje pomoc FaktWay.', v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'offline' THEN
-      RAISE EXCEPTION 'Dokument % był wystawiony w trybie offline i mógł już trafić do nabywcy — tej decyzji nie zapiszesz w FaktFlow. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.', v_num USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Dokument % był wystawiony w trybie offline i mógł już trafić do nabywcy — tej decyzji nie zapiszesz w FaktWay. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktway.pl, podając numer dokumentu.', v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'no-marker' THEN
-      RAISE EXCEPTION 'Dla dokumentu % nie mamy zapisanej odpowiedzi KSeF o fakturze z tym numerem — tej decyzji nie zapiszesz w FaktFlow. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.', v_num USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Dla dokumentu % nie mamy zapisanej odpowiedzi KSeF o fakturze z tym numerem — tej decyzji nie zapiszesz w FaktWay. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktway.pl, podając numer dokumentu.', v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'conflicting-originals' THEN
-      RAISE EXCEPTION 'W historii dokumentu % są odpowiedzi KSeF o dwóch różnych fakturach — tej decyzji nie zapiszesz w FaktFlow. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.', v_num USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'W historii dokumentu % są odpowiedzi KSeF o dwóch różnych fakturach — tej decyzji nie zapiszesz w FaktWay. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktway.pl, podając numer dokumentu.', v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'no-check' THEN
       RAISE EXCEPTION 'Dla dokumentu % nie mamy jeszcze danych faktury z KSeF — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni). Nie wystawiaj go ponownie.', v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'reason' THEN
-      RAISE EXCEPTION 'Dla dokumentu % ta decyzja nie jest dostępna w panelu. Nie wystawiaj go ponownie; szczegóły są na karcie faktury, a pytania: pomoc@faktflow.pl.', v_num USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Dla dokumentu % ta decyzja nie jest dostępna w panelu. Nie wystawiaj go ponownie; szczegóły są na karcie faktury, a pytania: pomoc@faktway.pl.', v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'known-stale' THEN
-      RAISE EXCEPTION 'Dokument w FaktFlow, który ma albo miał numer KSeF %, nie zgadza się już z naszym zapisem — sprawdzimy fakturę w KSeF ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl. Nie wystawiaj dokumentu % ponownie.', v_marker.original_ksef_number, v_num USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Dokument w FaktWay, który ma albo miał numer KSeF %, nie zgadza się już z naszym zapisem — sprawdzimy fakturę w KSeF ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktway.pl. Nie wystawiaj dokumentu % ponownie.', v_marker.original_ksef_number, v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'known-now' THEN
-      RAISE EXCEPTION 'Faktura % z KSeF jest już zapisana w FaktFlow przy innym dokumencie — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl. Nie wystawiaj dokumentu % ponownie.', v_marker.original_ksef_number, v_num USING ERRCODE = 'P0001', DETAIL = 'known-now';
+      RAISE EXCEPTION 'Faktura % z KSeF jest już zapisana w FaktWay przy innym dokumencie — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktway.pl. Nie wystawiaj dokumentu % ponownie.', v_marker.original_ksef_number, v_num USING ERRCODE = 'P0001', DETAIL = 'known-now';
     ELSIF v_code = 'cross-tenant' THEN
-      RAISE EXCEPTION 'Faktury z KSeF o numerze % nie możemy zapisać przy tym dokumencie — wyjaśniamy to i damy znać. Nie wystawiaj dokumentu % ponownie; pytania: pomoc@faktflow.pl.', v_num, v_num USING ERRCODE = 'P0001', DETAIL = 'cross-tenant';
+      RAISE EXCEPTION 'Faktury z KSeF o numerze % nie możemy zapisać przy tym dokumencie — wyjaśniamy to i damy znać. Nie wystawiaj dokumentu % ponownie; pytania: pomoc@faktway.pl.', v_num, v_num USING ERRCODE = 'P0001', DETAIL = 'cross-tenant';
     ELSIF v_code = 'recheck-needed' THEN
-      RAISE EXCEPTION 'Fakturę z KSeF dla dokumentu % sprawdzamy jeszcze raz — automatycznie, zwykle w ciągu 2 dni; potem decyzję zapiszesz na tej karcie. Nie wystawiaj dokumentu ponownie; jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl.', v_num USING ERRCODE = 'P0001', DETAIL = 'recheck-needed';
+      RAISE EXCEPTION 'Fakturę z KSeF dla dokumentu % sprawdzamy jeszcze raz — automatycznie, zwykle w ciągu 2 dni; potem decyzję zapiszesz na tej karcie. Nie wystawiaj dokumentu ponownie; jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktway.pl.', v_num USING ERRCODE = 'P0001', DETAIL = 'recheck-needed';
     ELSIF v_code = 'own-history' THEN
-      RAISE EXCEPTION 'Faktura % w KSeF może być wcześniejszą wersją dokumentu % wysłaną z FaktFlow — tej decyzji nie zapiszesz w panelu. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.', v_marker.original_ksef_number, v_num USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Faktura % w KSeF może być wcześniejszą wersją dokumentu % wysłaną z FaktWay — tej decyzji nie zapiszesz w panelu. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktway.pl, podając numer dokumentu.', v_marker.original_ksef_number, v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'payments' THEN
-      RAISE EXCEPTION 'Na dokumencie % są zapisane wpłaty — decyzji nie zapiszemy, dopóki wpłaty są przy tym dokumencie. W FaktFlow nie zmienisz ich sam: napisz do nas: pomoc@faktflow.pl, podając numer dokumentu — ustalimy, przy której fakturze je zapisać. Nie wystawiaj go ponownie.', v_num USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Na dokumencie % są zapisane wpłaty — decyzji nie zapiszemy, dopóki wpłaty są przy tym dokumencie. W FaktWay nie zmienisz ich sam: napisz do nas: pomoc@faktway.pl, podając numer dokumentu — ustalimy, przy której fakturze je zapisać. Nie wystawiaj go ponownie.', v_num USING ERRCODE = 'P0001';
     ELSIF v_code = 'provenance-review' THEN
-      RAISE EXCEPTION 'Sprawdzamy fakturę z KSeF dla dokumentu % — nie wystawiaj go ponownie, damy znać. Pytania: pomoc@faktflow.pl.', v_num USING ERRCODE = 'P0001', DETAIL = 'provenance-review';
+      RAISE EXCEPTION 'Sprawdzamy fakturę z KSeF dla dokumentu % — nie wystawiaj go ponownie, damy znać. Pytania: pomoc@faktway.pl.', v_num USING ERRCODE = 'P0001', DETAIL = 'provenance-review';
     ELSE
       -- Kod spoza listy = rozjazd tej funkcji z blokadą; technicznie, nie dla klienta.
       RAISE EXCEPTION 'Unknown KSeF duplicate decision blocker: %', v_code USING ERRCODE = 'XX000';
@@ -1115,7 +1160,7 @@ BEGIN
       WHEN 'demo' THEN 'demo'
       ELSE 'nieznane'
     END;
-    RAISE EXCEPTION 'Dane faktury % sprawdziliśmy w środowisku KSeF „%”, a FaktFlow pracuje teraz w środowisku „%” — tej decyzji nie zapiszesz. Nie wystawiaj dokumentu % ponownie i napisz do nas: pomoc@faktflow.pl.', v_marker.original_ksef_number, v_env_check, v_env_now, v_num USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'Dane faktury % sprawdziliśmy w środowisku KSeF „%”, a FaktWay pracuje teraz w środowisku „%” — tej decyzji nie zapiszesz. Nie wystawiaj dokumentu % ponownie i napisz do nas: pomoc@faktway.pl.', v_marker.original_ksef_number, v_env_check, v_env_now, v_num USING ERRCODE = 'P0001';
   END IF;
 
   -- 6a. Tryb a powód (INV-8): retire tylko dla powodów PR B, import/no-import
@@ -1135,7 +1180,7 @@ BEGIN
     END IF;
     IF v_offer LIKE 'review-%' AND p_via <> 'operator' THEN
       -- Obrona: blokada (4) już to łapie.
-      RAISE EXCEPTION 'Sprawdzamy fakturę z KSeF dla dokumentu % — nie wystawiaj go ponownie, damy znać. Pytania: pomoc@faktflow.pl.', v_num USING ERRCODE = 'P0001', DETAIL = 'provenance-review';
+      RAISE EXCEPTION 'Sprawdzamy fakturę z KSeF dla dokumentu % — nie wystawiaj go ponownie, damy znać. Pytania: pomoc@faktway.pl.', v_num USING ERRCODE = 'P0001', DETAIL = 'provenance-review';
     END IF;
 
     -- 6c. Wybór: allows z wyborem i „tylko zapis” przy ofercie record/review-record.
@@ -1156,7 +1201,7 @@ BEGIN
     SELECT t.nip INTO v_tenant_nip FROM public.tenants t WHERE t.id = p_tenant_id;
     v_mismatch := public.ksef_original_import_mismatch(p_import, v_inv, v_marker, p_tenant_id, v_tenant_nip, v_offer);
     IF v_mismatch IN ('number', 'seller') THEN
-      RAISE EXCEPTION 'Faktury % z KSeF nie zapiszemy przy dokumencie %: numer faktury albo NIP sprzedawcy w KSeF nie zgadza się z tym dokumentem albo z danymi Twojej firmy. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.', v_marker.original_ksef_number, v_num USING ERRCODE = 'P0001', DETAIL = 'import-mismatch:' || v_mismatch;
+      RAISE EXCEPTION 'Faktury % z KSeF nie zapiszemy przy dokumencie %: numer faktury albo NIP sprzedawcy w KSeF nie zgadza się z tym dokumentem albo z danymi Twojej firmy. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktway.pl, podając numer dokumentu.', v_marker.original_ksef_number, v_num USING ERRCODE = 'P0001', DETAIL = 'import-mismatch:' || v_mismatch;
     ELSIF v_mismatch IS NOT NULL THEN
       RAISE EXCEPTION 'KSeF original import projection rejected' USING ERRCODE = '22023', DETAIL = 'import-projection:' || v_mismatch;
     END IF;
@@ -1251,13 +1296,13 @@ BEGIN
     GET DIAGNOSTICS v_closed = ROW_COUNT;
   ELSE
     -- (a') To samo w trybach import / no-import: tekst wpisu przy zapisie K mówi,
-    --      że numer ma faktura z KSeF zapisana w FaktFlow; decyzja z dowodem (T6).
+    --      że numer ma faktura z KSeF zapisana w FaktWay; decyzja z dowodem (T6).
     UPDATE public.ksef_submissions s
        SET status = 'number_taken',
            error_code = 'NUMBER_TAKEN',
            completed_at = now(),
            error_message = CASE WHEN p_mode = 'import'
-             THEN left(format('Decyzja klienta%s: %s — numer %s ma faktura %s z KSeF, zapisana w FaktFlow',
+             THEN left(format('Decyzja klienta%s: %s — numer %s ma faktura %s z KSeF, zapisana w FaktWay',
                               CASE p_via WHEN 'operator' THEN ' (zapisał operator)' ELSE '' END,
                               v_label,
                               v_retired,
@@ -1287,7 +1332,7 @@ BEGIN
   -- (b) Obrona: po zamknięciu wpisów i przy przejściu blokady dowodu kontaktu
   --     być nie może.
   IF public.ksef_has_contact_evidence(p_invoice_id, p_tenant_id) THEN
-    RAISE EXCEPTION 'Dokument % mógł dotrzeć do KSeF w innej próbie — decyzji nie zapiszemy. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl.', v_num USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'Dokument % mógł dotrzeć do KSeF w innej próbie — decyzji nie zapiszemy. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktway.pl.', v_num USING ERRCODE = 'P0001';
   END IF;
 
   -- (c) Powrót do szkicu w miejscu, nie PERFORM reset_ksef_send: tamten
@@ -1533,13 +1578,13 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_duplicate_decide_core(text, text, uuid, uuid, uuid, text, text, text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_duplicate_decide_core(text, text, uuid, uuid, uuid, text, text, text, text, text, text, jsonb) TO service_role;
 COMMENT ON FUNCTION public.ksef_duplicate_decide_core(text, text, uuid, uuid, uuid, text, text, text, text, text, text, jsonb) IS
-  'Ciało decyzji przy nierozstrzygniętym duplikacie 440 (00149): retire = decide_ksef_duplicate z 00148 (powody PR B), import = wycofanie dokumentu i zapis oryginału K jako przyjętej faktury sprzedaży (numer przechodzi z dokumentu na K, pozycje, xml_documents, sesja oryginału, upo_receipts), no-import = po oddaniu decyzji przez operatora. Jedna transakcja; tryb, oferta, K, SHA-256 i środowisko wiązane ze stanem bazy (STALE). Wołają ją decide_ksef_duplicate i decide_ksef_duplicate_original.';
+  'Ciało decyzji przy nierozstrzygniętym duplikacie 440 (00156): retire = decide_ksef_duplicate z 00148 (powody PR B), import = wycofanie dokumentu i zapis oryginału K jako przyjętej faktury sprzedaży (numer przechodzi z dokumentu na K, pozycje, xml_documents, sesja oryginału, upo_receipts), no-import = po oddaniu decyzji przez operatora. Jedna transakcja; tryb, oferta, K, SHA-256 i środowisko wiązane ze stanem bazy (STALE). Wołają ją decide_ksef_duplicate i decide_ksef_duplicate_original.';
 
 -- ─────────────────────────────────────────────────────────────────
--- 10. decide_ksef_duplicate (te same 9 argumentów co 00148) — tryb retire
+-- 10. decide_ksef_duplicate (te same 9 argumentów co 00148 i 00151) — tryb retire
 -- ─────────────────────────────────────────────────────────────────
 -- Sygnatura, nazwy parametrów i wartość domyślna bez zmian (INV-14); stary kod
--- woła ją dla no-own-file / known-number z tym samym wynikiem co w 00148.
+-- woła ją dla no-own-file / known-number z tym samym wynikiem i tekstami co w 00151.
 CREATE OR REPLACE FUNCTION public.decide_ksef_duplicate(
   p_invoice_id uuid,
   p_tenant_id uuid,
@@ -1562,7 +1607,7 @@ $$;
 REVOKE ALL ON FUNCTION public.decide_ksef_duplicate(uuid, uuid, uuid, text, text, text, text, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.decide_ksef_duplicate(uuid, uuid, uuid, text, text, text, text, text, text) TO service_role;
 COMMENT ON FUNCTION public.decide_ksef_duplicate(uuid, uuid, uuid, text, text, text, text, text, text) IS
-  'Decyzja klienta (albo operatora na jego prośbę) przy nierozstrzygniętym duplikacie 440 dla powodów no-own-file i known-number (00148; od 00149 opakowanie ksef_duplicate_decide_core w trybie retire, ten sam wynik): same_sale albo other_sale, wpisy → number_taken z decision, faktura → szkic wycofany (numer zostaje), audyt invoice.ksef_duplicate_decided i invoice.send_reset. Dla faktflow-original odmawia STALE (DETAIL mode) — tam decide_ksef_duplicate_original.';
+  'Decyzja klienta (albo operatora na jego prośbę) przy nierozstrzygniętym duplikacie 440 dla powodów no-own-file i known-number (00148, teksty FaktWay od 00151; od 00156 opakowanie ksef_duplicate_decide_core w trybie retire, ten sam wynik i te same teksty): same_sale albo other_sale, wpisy → number_taken z decision, faktura → szkic wycofany (numer zostaje), audyt invoice.ksef_duplicate_decided i invoice.send_reset. Dla faktflow-original odmawia STALE (DETAIL mode) — tam decide_ksef_duplicate_original.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 11. decide_ksef_duplicate_original — tryby import i no-import
@@ -1595,10 +1640,10 @@ $$;
 REVOKE ALL ON FUNCTION public.decide_ksef_duplicate_original(uuid, uuid, uuid, text, text, text, text, text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.decide_ksef_duplicate_original(uuid, uuid, uuid, text, text, text, text, text, text, text, text, jsonb) TO service_role;
 COMMENT ON FUNCTION public.decide_ksef_duplicate_original(uuid, uuid, uuid, text, text, text, text, text, text, text, text, jsonb) IS
-  'Decyzja przy faktflow-original (00149): p_mode import (oferta pair, record, review-pair, review-record; zapis oryginału K z projekcją p_import) albo no-import (oferta released, po oddaniu decyzji przez operatora — semantyka 00148). Opakowanie ksef_duplicate_decide_core; tryb, oferta, K, SHA-256 i środowisko muszą zgadzać się ze stanem bazy (STALE).';
+  'Decyzja przy faktflow-original (00156): p_mode import (oferta pair, record, review-pair, review-record; zapis oryginału K z projekcją p_import) albo no-import (oferta released, po oddaniu decyzji przez operatora — semantyka 00148). Opakowanie ksef_duplicate_decide_core; tryb, oferta, K, SHA-256 i środowisko muszą zgadzać się ze stanem bazy (STALE).';
 
 -- ─────────────────────────────────────────────────────────────────
--- 12. Operator oddaje decyzję klientowi (plik nie z FaktFlow, T8, INV-21)
+-- 12. Operator oddaje decyzję klientowi (plik nie z FaktWay, T8, INV-21)
 -- ─────────────────────────────────────────────────────────────────
 -- Tylko przy blokadzie provenance-review, ofercie review-pair i poprawnej
 -- bramie, z notatką. Odmowy dla operatora: P0001 z komunikatem-kodem (akcja
@@ -1703,7 +1748,7 @@ BEGIN
     RAISE EXCEPTION 'release:not-review' USING ERRCODE = 'P0001', DETAIL = COALESCE(v_code, 'none');
   END IF;
 
-  -- 6. Plik w historii dokumentu albo ta sama treść — to plik z FaktFlow (INV-19).
+  -- 6. Plik w historii dokumentu albo ta sama treść — to plik z FaktWay (INV-19).
   IF v_offer IS DISTINCT FROM 'review-pair' THEN
     RAISE EXCEPTION 'release:own-file' USING ERRCODE = 'P0001';
   END IF;
@@ -1750,7 +1795,7 @@ $$;
 REVOKE ALL ON FUNCTION public.release_ksef_original_review(uuid, uuid, uuid, text, text, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.release_ksef_original_review(uuid, uuid, uuid, text, text, text, text) TO service_role;
 COMMENT ON FUNCTION public.release_ksef_original_review(uuid, uuid, uuid, text, text, text, text) IS
-  'Operator oddaje decyzję klientowi przy pliku z oznaczeniem FaktFlow, który nie wygląda na plik generatora (00149, INV-21): tylko przy blokadzie provenance-review, ofercie review-pair i poprawnej bramie, z notatką; zapisuje importGate.release {at, via, actorUserId, note} i sprawdza, że oferta jest teraz released. Powtórzenie = already_released z tym samym release_at. Odmowy release:not-review, release:stale, release:env, release:own-file, release:no-gate.';
+  'Operator oddaje decyzję klientowi przy pliku z oznaczeniem FaktWay, który nie wygląda na plik generatora (00156, INV-21): tylko przy blokadzie provenance-review, ofercie review-pair i poprawnej bramie, z notatką; zapisuje importGate.release {at, via, actorUserId, note} i sprawdza, że oferta jest teraz released. Powtórzenie = already_released z tym samym release_at. Odmowy release:not-review, release:stale, release:env, release:own-file, release:no-gate.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 13. Trwały znacznik „sprawdź ponownie” (INV-25)
@@ -1856,19 +1901,20 @@ $$;
 REVOKE ALL ON FUNCTION public.flag_ksef_original_recheck(uuid, uuid, uuid, text, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.flag_ksef_original_recheck(uuid, uuid, uuid, text, text, text) TO service_role;
 COMMENT ON FUNCTION public.flag_ksef_original_recheck(uuid, uuid, uuid, text, text, text) IS
-  'Trwały znacznik „sprawdź ponownie” (00149, INV-25): original_check.recheckNeeded {kind, at} na otwartym znaczniku faktflow-original po odmowie w chwili zapisu (archive-missing, archive-mismatch, gate-drift, import-mismatch, not-buildable, import-projection). Blokada recheck-needed → I5 → cron Tylko uzgodnij. Wynik flagged true, already true albo reason not-pending / stale; nigdy nie zmienia faktury.';
+  'Trwały znacznik „sprawdź ponownie” (00156, INV-25): original_check.recheckNeeded {kind, at} na otwartym znaczniku faktflow-original po odmowie w chwili zapisu (archive-missing, archive-mismatch, gate-drift, import-mismatch, not-buildable, import-projection). Blokada recheck-needed → I5 → cron Tylko uzgodnij. Wynik flagged true, already true albo reason not-pending / stale; nigdy nie zmienia faktury.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 14. Szkic wycofany: teksty po zapisie oryginału (wyzwalacze bez zmian)
 -- ─────────────────────────────────────────────────────────────────
--- Ciało 00148 plus krok 3b: przy decyzji z zapisem K (importedInvoiceId na
--- wpisie number_taken) dokument nie ma już numeru — teksty *_IMPORTED nazywają
--- dawny numer (retiredInternalNumber) i fakturę K. Bez importu — teksty
--- i kolejność 00148 (INV-14; FO-ODDANA też tu). CREATE TRIGGER z 00148 bez zmian.
+-- Ciało z 00151 (00148 w marce FaktWay) plus krok 3b: przy decyzji z zapisem
+-- K (importedInvoiceId na wpisie number_taken) dokument nie ma już numeru —
+-- teksty *_IMPORTED nazywają dawny numer (retiredInternalNumber) i fakturę K.
+-- Bez importu — teksty i kolejność 00151 znak w znak (INV-14; FO-ODDANA też
+-- tu). Nagłówek jak w 00148/00151. CREATE TRIGGER z 00148 bez zmian: wyzwalacze
+-- wołają funkcję po nazwie.
 CREATE OR REPLACE FUNCTION public.guard_ksef_retired_draft()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
@@ -1895,9 +1941,11 @@ BEGIN
   END IF;
 
   -- 2. Wpis number_taken: najpierw z decyzją (NULL ? 'decision' = NULL, stąd
-  --    COALESCE), potem z numerem oryginału, potem najnowszy. Osobne zapytanie
-  --    funkcji VOLATILE ma świeżą migawkę (EvalPlanQual). 00149: także K
-  --    zapisany decyzją i dawny numer dokumentu.
+  --    COALESCE), potem z numerem oryginału (automatyczne zamknięcie obejmuje
+  --    też wpisy bez znacznika), potem najnowszy. Osobne zapytanie funkcji
+  --    VOLATILE ma świeżą migawkę: widzi decyzję zatwierdzoną, gdy UPDATE
+  --    czekał na blokadę wiersza (EvalPlanQual). 00156: także K zapisany
+  --    decyzją (importedInvoiceId) i dawny numer dokumentu (retiredInternalNumber).
   SELECT s.original_ksef_number,
          s.original_check->'decision'->>'choice',
          s.original_check->'decision'->>'importedInvoiceId',
@@ -1921,22 +1969,24 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- 3b. 00149: decyzja zapisała oryginał K — numer ma teraz K, dokument zostaje bez numeru.
+  -- 3b. 00156 (PR C): decyzja zapisała oryginał K — numer ma teraz K, dokument
+  --     zostaje bez numeru. Teksty *_IMPORTED nazywają dawny numer
+  --     (retiredInternalNumber) i fakturę K; kolejność jak w krokach 5–7.
   IF v_imported IS NOT NULL AND v_k IS NOT NULL THEN
     v_old := COALESCE(v_retired, OLD.internal_number, 'bez numeru');
     IF TG_OP = 'DELETE' THEN
-      RAISE EXCEPTION 'Wycofanego dokumentu (dawniej %) nie usuniesz: zostaje w FaktFlow jako ślad decyzji o fakturze % z KSeF, która ma teraz jego numer. Jeśli musisz go usunąć, napisz do nas: pomoc@faktflow.pl.', v_old, v_k USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Wycofanego dokumentu (dawniej %) nie usuniesz: zostaje w FaktWay jako ślad decyzji o fakturze % z KSeF, która ma teraz jego numer. Jeśli musisz go usunąć, napisz do nas: pomoc@faktway.pl.', v_old, v_k USING ERRCODE = 'P0001';
     END IF;
     IF TG_NAME = 'c_guard_ksef_retired_draft_number' THEN
       IF NEW.direction IS DISTINCT FROM OLD.direction THEN
-        RAISE EXCEPTION 'Wycofanego dokumentu (dawniej %) nie zmienisz na fakturę zakupową: zostaje w FaktFlow jako ślad decyzji o fakturze % z KSeF.', v_old, v_k USING ERRCODE = 'P0001';
+        RAISE EXCEPTION 'Wycofanego dokumentu (dawniej %) nie zmienisz na fakturę zakupową: zostaje w FaktWay jako ślad decyzji o fakturze % z KSeF.', v_old, v_k USING ERRCODE = 'P0001';
       END IF;
       RAISE EXCEPTION 'Wycofanemu dokumentowi (dawniej %) nie nadasz numeru — zostaje bez numeru jako ślad decyzji o fakturze % z KSeF. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', v_old, v_k USING ERRCODE = 'P0001';
     END IF;
     IF v_choice = 'other_sale' THEN
-      RAISE EXCEPTION 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: numer % ma faktura % z KSeF, zapisana w FaktFlow. Tę sprzedaż wystaw jako nową fakturę z nowym numerem.', v_old, v_old, v_k USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: numer % ma faktura % z KSeF, zapisana w FaktWay. Tę sprzedaż wystaw jako nową fakturę z nowym numerem.', v_old, v_old, v_k USING ERRCODE = 'P0001';
     END IF;
-    RAISE EXCEPTION 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: to ta sama sprzedaż co faktura % z KSeF, zapisana w FaktFlow pod numerem %.', v_old, v_k, v_old USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: to ta sama sprzedaż co faktura % z KSeF, zapisana w FaktWay pod numerem %.', v_old, v_k, v_old USING ERRCODE = 'P0001';
   END IF;
 
   -- 4. Numer i odwołanie do oryginału (mianownik / biernik).
@@ -1946,41 +1996,46 @@ BEGIN
 
   -- 5. Usunięcie z sesji klienta (zwykła faktura i zaliczka — WHEN wyzwalacza).
   IF TG_OP = 'DELETE' THEN
-    RAISE EXCEPTION 'Wycofanego dokumentu % nie usuniesz: zajmuje numer, który w KSeF ma już %, i zostaje w FaktFlow, żeby ten numer nie został podpowiedziany ponownie. Jeśli musisz go usunąć, napisz do nas: pomoc@faktflow.pl.', v_num, v_ref USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'Wycofanego dokumentu % nie usuniesz: zajmuje numer, który w KSeF ma już %, i zostaje w FaktWay, żeby ten numer nie został podpowiedziany ponownie. Jeśli musisz go usunąć, napisz do nas: pomoc@faktway.pl.', v_num, v_ref USING ERRCODE = 'P0001';
   END IF;
 
   -- 6. Zmiana numeru albo kierunku z sesji klienta (każdy rodzaj, 07.10 (11)).
+  --    Kierunek: faktura zakupowa wypada z indeksu unikalnego numerów sprzedaży
+  --    (00120), więc numer byłby znów wolny dla nowej faktury sprzedaży.
   --    Zmiana kierunku i numeru naraz dostaje tekst o kierunku.
   IF TG_NAME = 'c_guard_ksef_retired_draft_number' THEN
     IF NEW.direction IS DISTINCT FROM OLD.direction THEN
-      RAISE EXCEPTION 'Wycofanego dokumentu % nie zmienisz na fakturę zakupową: zajmuje numer, który w KSeF ma już %, i zostaje w FaktFlow jako faktura sprzedaży, żeby tego numeru nie dostała inna faktura sprzedaży.', v_num, v_ref USING ERRCODE = 'P0001';
+      RAISE EXCEPTION 'Wycofanego dokumentu % nie zmienisz na fakturę zakupową: zajmuje numer, który w KSeF ma już %, i zostaje w FaktWay jako faktura sprzedaży, żeby tego numeru nie dostała inna faktura sprzedaży.', v_num, v_ref USING ERRCODE = 'P0001';
     END IF;
-    RAISE EXCEPTION 'Numeru wycofanego dokumentu % nie zmienisz: ten numer ma w KSeF już %, a dokument zostaje z nim w FaktFlow, żeby numer nie został podpowiedziany ponownie. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', v_num, v_ref USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'Numeru wycofanego dokumentu % nie zmienisz: ten numer ma w KSeF już %, a dokument zostaje z nim w FaktWay, żeby numer nie został podpowiedziany ponownie. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', v_num, v_ref USING ERRCODE = 'P0001';
   END IF;
 
   -- 7. Wyjście ze stanu draft (każda rola). Decyzja zawsze stoi na wpisie
-  --    z K; wpis z decyzją bez K (uszkodzone dane) dostaje tekst automatu.
+  --    z K; wpis z decyzją bez K (uszkodzone dane) dostaje tekst automatu,
+  --    jak w TS (retiredDraftSendRefusal), a nie „<NULL>” w komunikacie.
   IF v_choice = 'same_sale' AND v_k IS NOT NULL THEN
     RAISE EXCEPTION 'Dokument % jest wycofany: to ta sama sprzedaż co faktura % w KSeF. Tego dokumentu nie wyślesz do KSeF.', v_num, v_k USING ERRCODE = 'P0001';
   ELSIF v_choice = 'other_sale' AND v_k IS NOT NULL THEN
     RAISE EXCEPTION 'Dokument % jest wycofany: numer jest zajęty w KSeF przez fakturę %. Tego dokumentu nie wyślesz do KSeF — tę sprzedaż wystaw jako nową fakturę z nowym numerem.', v_num, v_k USING ERRCODE = 'P0001';
   END IF;
-  RAISE EXCEPTION 'Numer % jest zajęty w KSeF przez % wystawioną poza FaktFlow — tego dokumentu nie wyślesz do KSeF (KSeF odrzuciłby go jako duplikat). Jeśli to inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.', v_num, v_ref_acc USING ERRCODE = 'P0001';
+  RAISE EXCEPTION 'Numer % jest zajęty w KSeF przez % wystawioną poza FaktWay — tego dokumentu nie wyślesz do KSeF (KSeF odrzuciłby go jako duplikat). Jeśli to inna sprzedaż, wystaw ją jako nową fakturę z nowym numerem.', v_num, v_ref_acc USING ERRCODE = 'P0001';
 END;
 $$;
 REVOKE ALL ON FUNCTION public.guard_ksef_retired_draft() FROM PUBLIC, anon, authenticated;
 COMMENT ON FUNCTION public.guard_ksef_retired_draft() IS
-  'Szkic wycofany (wpis ksef_submissions number_taken, 00148, 00149): nie wychodzi ze stanu draft (każda rola), a sesja klienta nie usuwa szkicu zwykłej faktury ani zaliczki (niezależnie od kierunku) i nie zmienia numeru ani kierunku szkicu żadnego rodzaju. Po decyzji z zapisem oryginału K teksty nazywają dawny numer dokumentu i fakturę K (numer ma teraz K). Serwis usuwa, przenumerowuje i zmienia kierunek za zgodą Bartosza.';
+  'Szkic wycofany (wpis ksef_submissions number_taken, 00148, teksty FaktWay od 00151, 00156): nie wychodzi ze stanu draft (każda rola), a sesja klienta nie usuwa szkicu zwykłej faktury ani zaliczki (niezależnie od kierunku) i nie zmienia numeru ani kierunku szkicu żadnego rodzaju. Po decyzji z zapisem oryginału K (00156) teksty nazywają dawny numer dokumentu i fakturę K (numer ma teraz K). Serwis usuwa, przenumerowuje i zmienia kierunek za zgodą Bartosza.';
 
 -- ─────────────────────────────────────────────────────────────────
--- 15. Strażnik: I5 bez przeglądu pliku, I5D + I5R, I3K (00148 + 00149)
+-- 15. Strażnik: I5 bez przeglądu pliku, I5D + I5R, I3K (00155 + 00156)
 -- ─────────────────────────────────────────────────────────────────
--- Ciało 00148 z trzema zmianami: I5 bez faktur w przeglądzie pliku (I5R —
--- cron ich nie uzgadnia, bez pętli; recheck-needed zostaje w I5, cron robi nową
--- ocenę); I5D i I5R jednym zapytaniem z blokadą liczoną raz na fakturę
--- (OFFSET 0 w podzapytaniu bocznym); I3K — faktura zapisana z KSeF decyzją bez
--- sesji UPO albo bez daty nadania (liczona od wpisów number_taken z decyzją
--- importu, nie od fa3_data wszystkich przyjętych faktur).
+-- Ciało z 00155 (00148 z I3 przez ksef_upo_expected — każda redefinicja musi
+-- go wołać, strażnik tests/unit/ksef-cykl-zycia-wersje.test.ts) z trzema
+-- zmianami: I5 bez faktur w przeglądzie pliku (I5R — cron ich nie uzgadnia,
+-- bez pętli; recheck-needed zostaje w I5, cron robi nową ocenę); I5D i I5R
+-- jednym zapytaniem z blokadą liczoną raz na fakturę (OFFSET 0 w podzapytaniu
+-- bocznym); I3K — faktura zapisana z KSeF decyzją bez sesji UPO albo bez daty
+-- nadania (liczona od wpisów number_taken z decyzją importu, nie od fa3_data
+-- wszystkich przyjętych faktur). Reszta (I1–I4, I9) znak w znak z 00155.
 CREATE OR REPLACE FUNCTION public.ksef_lifecycle_violations()
 RETURNS TABLE (invariant text, invoice_id uuid, tenant_id uuid, detail jsonb)
 LANGUAGE plpgsql
@@ -2014,6 +2069,8 @@ BEGIN
        AND (i.submitted_to_ksef_at IS NULL OR i.submitted_to_ksef_at < now() - interval '30 minutes');
 
   -- I3: accepted bez numeru / środowiska / pliku XML albo bez wiersza UPO.
+  -- 00155: brak UPO tylko, gdy UPO jest oczekiwane (ksef_upo_expected — faktury
+  -- wysłane sesją FaktWay; historia z KSeF go nie ma, decyzja Bartosza 22.10.2026).
   RETURN QUERY
     SELECT 'I3'::text, i.id, i.tenant_id,
            jsonb_build_object(
@@ -2029,12 +2086,15 @@ BEGIN
          i.ksef_number IS NULL
          OR i.ksef_environment IS NULL
          OR i.xml_storage_path IS NULL
-         OR NOT EXISTS (SELECT 1 FROM public.upo_receipts u WHERE u.invoice_id = i.id)
+         OR (public.ksef_upo_expected(i) AND NOT EXISTS (SELECT 1 FROM public.upo_receipts u WHERE u.invoice_id = i.id))
        );
 
-  -- I3K (00149): faktura zapisana z KSeF decyzją (zapis oryginału) bez sesji UPO
-  -- albo bez daty nadania — trwały sygnał (T4, C6). Rzut identyfikatora tylko po
-  -- sprawdzeniu wzorca (CASE).
+  -- I3K (00156): faktura zapisana z KSeF decyzją (zapis oryginału) bez sesji UPO
+  -- albo bez daty nadania — trwały sygnał (T4, C6). Liczona od wpisów number_taken
+  -- z decyzją importu (mało wierszy), nie od fa3_data wszystkich przyjętych faktur.
+  -- Rzut identyfikatora tylko po sprawdzeniu wzorca (CASE). I3 K nie pokazuje:
+  -- K ma zawsze wiersz upo_receipts (INV-18), a ksef_upo_expected(K) = true
+  -- (sesja oryginału na K albo znacznik X z numerem K w ksef_submissions).
   RETURN QUERY
     SELECT 'I3K'::text, k.id, k.tenant_id,
            jsonb_build_object(
@@ -2077,9 +2137,10 @@ BEGIN
        );
 
   -- I5: otwarty wpis `sent` albo zamiar `intent` starszy niż 48 h, a faktura nie jest w sending.
-  -- 00148: bez faktur czekających na decyzję klienta (blokada NULL — I5D).
-  -- 00149: bez przeglądu pliku (provenance-review — I5R); NULL <> … = NULL, więc
-  -- I5D też wypada; recheck-needed zostaje w I5 (cron robi nową ocenę, INV-25).
+  -- 00148: bez faktur czekających na decyzję klienta (blokada decyzji NULL) — te są w I5D.
+  -- 00156: bez przeglądu pliku (provenance-review — I5R; cron go nie uzgadnia, bez pętli);
+  -- NULL <> … = NULL, więc I5D też wypada; recheck-needed zostaje w I5 (cron robi nową
+  -- ocenę, INV-25).
   RETURN QUERY
     SELECT 'I5'::text, s.invoice_id, s.tenant_id,
            jsonb_build_object('attempted_at', s.attempted_at, 'session', s.session_reference_number,
@@ -2089,12 +2150,15 @@ BEGIN
      WHERE s.status IN ('sent', 'intent')
        AND s.attempted_at < now() - interval '48 hours'
        AND i.ksef_status <> 'sending'
-       AND public.ksef_duplicate_decision_blocker(s.invoice_id, s.tenant_id) <> 'provenance-review';
+       AND public.ksef_duplicate_decision_blocker(s.invoice_id, s.tenant_id) <> 'provenance-review';  -- 00156: NULL (czeka na klienta) = I5D, przegląd = I5R
 
-  -- I5D (00148): faktura czeka na decyzję klienta (blokada NULL). I5R (00149):
-  -- poprawna brama review — przegląd pliku z oznaczeniem FaktFlow przez operatora.
-  -- Cron żadnej z nich nie uzgadnia; alarm krytyczny I5D nie liczy (poza I5D-env),
-  -- I5R po 72 h. Blokada liczona raz na fakturę (OFFSET 0).
+  -- I5D (00148): faktura czeka na decyzję klienta — nierozstrzygnięty 440 z kompletnymi
+  -- danymi oryginału (blokada decyzji = NULL). I5R (00156): poprawna brama review —
+  -- przegląd pliku z oznaczeniem FaktWay przez operatora (blokada provenance-review).
+  -- Osobno od I5: cron żadnej z nich nie uzgadnia; alarm krytyczny I5D nie liczy
+  -- (chyba że środowisko się nie zgadza), I5R po 72 h; raport — osobne wiersze.
+  -- Jedno zapytanie, blokada liczona raz na fakturę (OFFSET 0 w podzapytaniu
+  -- bocznym: bez niego planista wkleja wywołanie STABLE w CASE i WHERE).
   RETURN QUERY
     SELECT CASE WHEN b.code IS NULL THEN 'I5D' ELSE 'I5R' END, i.id, i.tenant_id,
            jsonb_build_object(
@@ -2134,12 +2198,12 @@ $$;
 REVOKE ALL ON FUNCTION public.ksef_lifecycle_violations() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ksef_lifecycle_violations() TO service_role;
 COMMENT ON FUNCTION public.ksef_lifecycle_violations() IS
-  'Naruszenia inwariantów cyklu życia faktury I1–I5, I9 (docs/architecture/cykl-zycia-faktury-ksef.md) oraz: I5 także faktflow-original bez oceny pliku albo z recheckNeeded (cron robi nową ocenę), bez faktur czekających na klienta i bez przeglądu pliku; I5D — faktura czeka na decyzję klienta przy nierozstrzygniętym 440 (00148; nie alarm krytyczny, w raporcie osobno); I5R — przegląd pliku z oznaczeniem FaktFlow przez operatora (00149); I3K — faktura zapisana z KSeF decyzją bez sesji UPO albo bez daty nadania (00149). I6–I8 realizuje cron i indeks unikalny numeru.';
+  'Naruszenia inwariantów cyklu życia faktury I1–I5, I9 (docs/architecture/cykl-zycia-faktury-ksef.md) oraz: I3 — brak UPO tylko, gdy ksef_upo_expected (00155); I5 także faktflow-original bez oceny pliku albo z recheckNeeded (cron robi nową ocenę), bez faktur czekających na klienta i bez przeglądu pliku; I5D — faktura czeka na decyzję klienta przy nierozstrzygniętym 440 (00148; nie alarm krytyczny, w raporcie osobno); I5R — przegląd pliku z oznaczeniem FaktWay przez operatora (00156); I3K — faktura zapisana z KSeF decyzją bez sesji UPO albo bez daty nadania (00156). I6–I8 realizuje cron i indeks unikalny numeru.';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 16. Opis original_check: importGate, recheckNeeded, decision przy zapisie oryginału
 -- ─────────────────────────────────────────────────────────────────
 COMMENT ON COLUMN public.ksef_submissions.original_check IS
-  'D-A4-1b-3 (00144): wynik weryfikacji duplikatu 440, którego automat nie rozstrzygnął — {v, env, checkedAt, reason (known-number | download-refused | download-pending | storage-pending | archive-pending | faktflow-original | same-content-other-program | no-own-file | archive-conflict), sha256, archivePath, sizeBytes, summary {systemInfo, number, issueDate, buyerNip, buyerName, gross, currency}, sameContentExceptHeader, ownHistory, acquiredAt, httpStatus, knownInvoice, recheck}. Tylko na otwartym wpisie ze znacznikiem 440; pisze serwer. Ponowne sprawdzenie, które nie pobrało oryginału, nie kasuje danych z udanego — zapisuje się w recheck. decision {choice, via, at, reason, env} — zapisuje wyłącznie decyzja (decide_ksef_duplicate 00148, ksef_duplicate_decide_core 00149), raz, gdy wpis staje się number_taken; obecność klucza = dokument wycofany decyzją klienta. Od 00148 powód known-number też niesie dane oryginału (sha256, summary, archivePath) i knownInvoice. 00149: importGate {v, rules, kind importable|review, problems[], preview, release? {at, via, actorUserId, note}} — ocena pliku oryginału przy faktflow-original (runner; release zapisuje tylko release_ksef_original_review). recheckNeeded {kind, at} — odmowa w chwili zapisu, faktura czeka na nowy werdykt (flag_ksef_original_recheck, cron I5; nowy werdykt zapisuje znacznik bez tego klucza). decision przy faktflow-original dokłada mode (import|no-import), offer, actorUserId, note (operator), original, retired, przy imporcie importedInvoiceId i retiredInternalNumber (numer przeszedł z dokumentu na fakturę z KSeF), przy no-import release.';
+  'D-A4-1b-3 (00144): wynik weryfikacji duplikatu 440, którego automat nie rozstrzygnął — {v, env, checkedAt, reason (known-number | download-refused | download-pending | storage-pending | archive-pending | faktflow-original | same-content-other-program | no-own-file | archive-conflict), sha256, archivePath, sizeBytes, summary {systemInfo, number, issueDate, buyerNip, buyerName, gross, currency}, sameContentExceptHeader, ownHistory, acquiredAt, httpStatus, knownInvoice, recheck}. Tylko na otwartym wpisie ze znacznikiem 440; pisze serwer. Ponowne sprawdzenie, które nie pobrało oryginału, nie kasuje danych z udanego — zapisuje się w recheck. decision {choice, via, at, reason, env} — zapisuje wyłącznie decyzja (decide_ksef_duplicate 00148, ksef_duplicate_decide_core 00156), raz, gdy wpis staje się number_taken; obecność klucza = dokument wycofany decyzją klienta. Od 00148 powód known-number też niesie dane oryginału (sha256, summary, archivePath) i knownInvoice. 00156: importGate {v, rules, kind importable|review, problems[], preview, release? {at, via, actorUserId, note}} — ocena pliku oryginału przy faktflow-original (runner; release zapisuje tylko release_ksef_original_review). recheckNeeded {kind, at} — odmowa w chwili zapisu, faktura czeka na nowy werdykt (flag_ksef_original_recheck, cron I5; nowy werdykt zapisuje znacznik bez tego klucza). decision przy faktflow-original dokłada mode (import|no-import), offer, actorUserId, note (operator), original, retired, przy imporcie importedInvoiceId i retiredInternalNumber (numer przeszedł z dokumentu na fakturę z KSeF), przy no-import release.';
 
 COMMIT;

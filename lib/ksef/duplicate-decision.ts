@@ -17,7 +17,7 @@
  * (DUPLICATE_DECISION_SQL_TEXTS). Migawka do przeglądu:
  * `tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt`.
  *
- * D-A4-1b-3 PR C (00149, spec v3 5.5): powód `faktflow-original` — oferta
+ * D-A4-1b-3 PR C (00156, spec v3 5.5): powód `faktflow-original` — oferta
  * (`duplicateOriginalOffer`, lustro `ksef_duplicate_original_offer`), lustra
  * `ksef_duplicate_check_allows` (4.2), `ksef_duplicate_own_history` (4.3)
  * i kroku 11c blokady, widok operatora `review`, banery szkicu po zapisie
@@ -75,11 +75,11 @@ const FAKTFLOW_SYSTEM_INFO = 'KSeF SaaS v1.0';
 
 export type DuplicateChoice = DuplicateDecisionChoice;
 export type DuplicateVia = DuplicateDecisionVia;
-/** Powody, dla których klient decyduje: PR B (`no-own-file`, `known-number`) i PR C (`faktflow-original`, 00149). */
+/** Powody, dla których klient decyduje: PR B (`no-own-file`, `known-number`) i PR C (`faktflow-original`, 00156). */
 export type DuplicateDecisionReason = 'no-own-file' | 'known-number' | 'faktflow-original';
 
 /**
- * Kody `ksef_duplicate_decision_blocker` w kolejności sprawdzeń 00149 (4.5):
+ * Kody `ksef_duplicate_decision_blocker` w kolejności sprawdzeń 00156 (4.5):
  * 00148 + `known-now`, `cross-tenant`, `recheck-needed` (tylko
  * `faktflow-original`, przed `own-history`) i `provenance-review` (ostatni).
  * Dla powodów PR B kody i kolejność jak w 00148 (INV-14).
@@ -246,7 +246,7 @@ export interface DuplicateOriginalViewData {
 
 /**
  * Widok operatora w przeglądzie pliku (`provenance-review`, 5.5): zapis
- * oryginału („Zapisz fakturę z KSeF w FaktFlow”) i — tylko przy `review-pair` —
+ * oryginału („Zapisz fakturę z KSeF w FaktWay”) i — tylko przy `review-pair` —
  * oddanie decyzji klientowi. Zapisywalność (`recordable`) dokłada strona
  * operatora z suchego przebiegu `prepareOriginalImport`; polityka jest czysta.
  * Klient tego widoku nie dostaje (odmowa `provenance-review`).
@@ -266,7 +266,7 @@ export interface DuplicateDecisionReviewView {
   sameContent: boolean | null;
   markedDifference: boolean;
   heldCorrections: boolean;
-  program: 'FaktFlow';
+  program: 'FaktWay';
   /** `offer === 'review-pair'` — „Oddaj decyzję klientowi” (INV-19, N4). */
   releasable: boolean;
   /** `preview.buyerIdKind ∉ ORIGINAL_CORRECTABLE_BUYER_ID_KINDS` — zdanie `FAKTFLOW.CORRECTION_PERSON`. */
@@ -410,7 +410,7 @@ export type DuplicateDecisionSqlTextKey =
   | 'TRIGGER_RENUMBER'
   | 'TRIGGER_DIRECTION'
   | 'CATALOG_NUMBER_TAKEN'
-  // PR C (00149, spec v3 6.3) — lista prawnika.
+  // PR C (00156, spec v3 6.3; marka FaktWay) — lista prawnika.
   | 'known-now'
   | 'cross-tenant'
   | 'recheck-needed'
@@ -440,7 +440,9 @@ export interface DuplicateDecisionSqlText {
  * TRIGGER_AUTO (nr, „fakturę {K}” / „inną fakturę Twojej firmy”); TRIGGER_DELETE,
  * TRIGGER_RENUMBER i TRIGGER_DIRECTION (nr, „faktura {K}” / „inna faktura Twojej firmy”).
  * Test U16e sprawdza, że każdy wzorzec stoi zaraz po `RAISE EXCEPTION '` w ciele
- * funkcji obowiązującym po wszystkich migracjach (00148, decyzja i wyzwalacz z 00151).
+ * funkcji obowiązującym po wszystkich migracjach (00148, decyzja i wyzwalacz z 00151);
+ * klucze PR C — U16e-00156 w 00156 (core decyzji i wyzwalacz), a tryb retire core
+ * w 00156 ma teksty PR B dosłownie z 00151.
  *
  * Testy RLS porównują `error.message` z bazy z tym lustrem słowo w słowo, więc zmiana
  * tekstu = nowa migracja (kolejny numer z rejestru) z `CREATE OR REPLACE` funkcji,
@@ -474,22 +476,22 @@ export const DUPLICATE_DECISION_SQL_TEXTS: Readonly<Record<DuplicateDecisionSqlT
   TRIGGER_RENUMBER: { template: 'Numeru wycofanego dokumentu % nie zmienisz: ten numer ma w KSeF już %, a dokument zostaje z nim w FaktWay, żeby numer nie został podpowiedziany ponownie. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 2 },
   TRIGGER_DIRECTION: { template: 'Wycofanego dokumentu % nie zmienisz na fakturę zakupową: zajmuje numer, który w KSeF ma już %, i zostaje w FaktWay jako faktura sprzedaży, żeby tego numeru nie dostała inna faktura sprzedaży.', arity: 2 },
   CATALOG_NUMBER_TAKEN: { template: 'W KSeF jest już faktura Twojej firmy o tym numerze, wystawiona w innym programie. Tego dokumentu nie wyślesz do KSeF. Jeśli to ta sama sprzedaż — nie wystawiaj jej ponownie. Jeśli inna — wystaw ją jako nową fakturę z nowym numerem.', arity: 0 },
-  // ── PR C (00149, spec v3 6.3; lista prawnika). Argumenty: known-now (K, nr); cross-tenant (nr, nr);
+  // ── PR C (00156, spec v3 6.3; lista prawnika; marka FaktWay jak 00151). Argumenty: known-now (K, nr); cross-tenant (nr, nr);
   // recheck-needed, provenance-review, CHOICE (nr); IMPORT_MISMATCH (K, nr); ALREADY_IMPORTED (nr, etykieta
   // decyzji — „zapis faktury z KSeF” przy ofercie record/review-record); TRIGGER_SAME_IMPORTED (nrOld, K, nrOld);
   // TRIGGER_OTHER_IMPORTED (nrOld, nrOld, K); TRIGGER_DELETE/RENUMBER/DIRECTION_IMPORTED (nrOld, K).
-  'known-now': { template: 'Faktura % z KSeF jest już zapisana w FaktFlow przy innym dokumencie — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl. Nie wystawiaj dokumentu % ponownie.', arity: 2 },
-  'cross-tenant': { template: 'Faktury z KSeF o numerze % nie możemy zapisać przy tym dokumencie — wyjaśniamy to i damy znać. Nie wystawiaj dokumentu % ponownie; pytania: pomoc@faktflow.pl.', arity: 2 },
-  'recheck-needed': { template: 'Fakturę z KSeF dla dokumentu % sprawdzamy jeszcze raz — automatycznie, zwykle w ciągu 2 dni; potem decyzję zapiszesz na tej karcie. Nie wystawiaj dokumentu ponownie; jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl.', arity: 1 },
-  'provenance-review': { template: 'Sprawdzamy fakturę z KSeF dla dokumentu % — nie wystawiaj go ponownie, damy znać. Pytania: pomoc@faktflow.pl.', arity: 1 },
+  'known-now': { template: 'Faktura % z KSeF jest już zapisana w FaktWay przy innym dokumencie — sprawdzimy ją ponownie automatycznie (zwykle w ciągu 2 dni). Jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktway.pl. Nie wystawiaj dokumentu % ponownie.', arity: 2 },
+  'cross-tenant': { template: 'Faktury z KSeF o numerze % nie możemy zapisać przy tym dokumencie — wyjaśniamy to i damy znać. Nie wystawiaj dokumentu % ponownie; pytania: pomoc@faktway.pl.', arity: 2 },
+  'recheck-needed': { template: 'Fakturę z KSeF dla dokumentu % sprawdzamy jeszcze raz — automatycznie, zwykle w ciągu 2 dni; potem decyzję zapiszesz na tej karcie. Nie wystawiaj dokumentu ponownie; jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktway.pl.', arity: 1 },
+  'provenance-review': { template: 'Sprawdzamy fakturę z KSeF dla dokumentu % — nie wystawiaj go ponownie, damy znać. Pytania: pomoc@faktway.pl.', arity: 1 },
   CHOICE: { template: 'Dla dokumentu % możliwy jest tylko zapis faktury z KSeF jako tej samej sprzedaży — odśwież stronę.', arity: 1 },
-  IMPORT_MISMATCH: { template: 'Faktury % z KSeF nie zapiszemy przy dokumencie %: numer faktury albo NIP sprzedawcy w KSeF nie zgadza się z tym dokumentem albo z danymi Twojej firmy. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktflow.pl, podając numer dokumentu.', arity: 2 },
+  IMPORT_MISMATCH: { template: 'Faktury % z KSeF nie zapiszemy przy dokumencie %: numer faktury albo NIP sprzedawcy w KSeF nie zgadza się z tym dokumentem albo z danymi Twojej firmy. Nie wystawiaj go ponownie i napisz do nas: pomoc@faktway.pl, podając numer dokumentu.', arity: 2 },
   ALREADY_IMPORTED: { template: 'Decyzja dla dokumentu % jest już zapisana („%”) — co zrobić, jeśli była błędna, piszemy na karcie wycofanego dokumentu.', arity: 2 },
-  TRIGGER_SAME_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: to ta sama sprzedaż co faktura % z KSeF, zapisana w FaktFlow pod numerem %.', arity: 3 },
-  TRIGGER_OTHER_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: numer % ma faktura % z KSeF, zapisana w FaktFlow. Tę sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 3 },
-  TRIGGER_DELETE_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie usuniesz: zostaje w FaktFlow jako ślad decyzji o fakturze % z KSeF, która ma teraz jego numer. Jeśli musisz go usunąć, napisz do nas: pomoc@faktflow.pl.', arity: 2 },
+  TRIGGER_SAME_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: to ta sama sprzedaż co faktura % z KSeF, zapisana w FaktWay pod numerem %.', arity: 3 },
+  TRIGGER_OTHER_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie wyślesz do KSeF: numer % ma faktura % z KSeF, zapisana w FaktWay. Tę sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 3 },
+  TRIGGER_DELETE_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie usuniesz: zostaje w FaktWay jako ślad decyzji o fakturze % z KSeF, która ma teraz jego numer. Jeśli musisz go usunąć, napisz do nas: pomoc@faktway.pl.', arity: 2 },
   TRIGGER_RENUMBER_IMPORTED: { template: 'Wycofanemu dokumentowi (dawniej %) nie nadasz numeru — zostaje bez numeru jako ślad decyzji o fakturze % z KSeF. Inną sprzedaż wystaw jako nową fakturę z nowym numerem.', arity: 2 },
-  TRIGGER_DIRECTION_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie zmienisz na fakturę zakupową: zostaje w FaktFlow jako ślad decyzji o fakturze % z KSeF.', arity: 2 },
+  TRIGGER_DIRECTION_IMPORTED: { template: 'Wycofanego dokumentu (dawniej %) nie zmienisz na fakturę zakupową: zostaje w FaktWay jako ślad decyzji o fakturze % z KSeF.', arity: 2 },
 };
 
 /**
@@ -713,7 +715,7 @@ export const DUPLICATE_DECISION_TEXTS = {
     PUSH_BODY: 'KSeF ma już fakturę o tym numerze — porównaj dane i zdecyduj.',
   },
 
-  // ── PR C (00149): oryginał z oznaczeniem FaktFlow (`faktflow-original`) — spec v3 6.2, słowo w słowo;
+  // ── PR C (00156): oryginał z oznaczeniem FaktWay (`faktflow-original`) — spec v3 6.2, słowo w słowo;
   // lista prawnika przed KSeF PROD (6.7). Znaczniki: `{nr}` dokument, `{k}` numer KSeF oryginału,
   // `{nrK}` numer faktury z KSeF (`summary.number ?? nr`), `{nrOld}` dawny numer wycofanego dokumentu,
   // `{okres}` = `preview.period`, `{dzien}` = `originalAssignedDay`, `{data}` = formatWarsawDateTime(decision.at),
@@ -721,15 +723,15 @@ export const DUPLICATE_DECISION_TEXTS = {
   FAKTFLOW: {
     // Panel — para
     INTRO_PAIR: (nr: string, k: string) =>
-      `KSeF nie przyjął dokumentu ${nr}, bo ma już fakturę Twojej firmy o tym numerze (numer KSeF ${k}) z oznaczeniem FaktFlow. Faktura w KSeF jest wiążąca — nie da się jej usunąć ani zastąpić. Porównaj dane i zdecyduj, czym jest ten dokument.`,
-    NOT_RECORDED: 'W FaktFlow nie ma zapisu tej faktury — najpewniej jej dokument usunięto, zanim FaktFlow zapisał potwierdzenie z KSeF.',
+      `KSeF nie przyjął dokumentu ${nr}, bo ma już fakturę Twojej firmy o tym numerze (numer KSeF ${k}) z oznaczeniem FaktWay. Faktura w KSeF jest wiążąca — nie da się jej usunąć ani zastąpić. Porównaj dane i zdecyduj, czym jest ten dokument.`,
+    NOT_RECORDED: 'W FaktWay nie ma zapisu tej faktury — najpewniej jej dokument usunięto, zanim FaktWay zapisał potwierdzenie z KSeF.',
     LEDGER: (k: string, okres: string) =>
-      `Do czasu decyzji FaktFlow nie ujmuje faktury ${k} w JPK ani w KPiR — nie składaj z FaktFlow JPK_V7 za ${okres}, dopóki jej nie zapiszesz. Po decyzji zapiszemy ją w FaktFlow z danymi z KSeF i trafi do JPK i KPiR za ${okres}.`,
+      `Do czasu decyzji FaktWay nie ujmuje faktury ${k} w JPK ani w KPiR — nie składaj z FaktWay JPK_V7 za ${okres}, dopóki jej nie zapiszesz. Po decyzji zapiszemy ją w FaktWay z danymi z KSeF i trafi do JPK i KPiR za ${okres}.`,
     // Panel — jeden przycisk
     INTRO_RECORD_OWN: (nr: string, k: string, dzien: string | null, nrK: string) =>
-      `W KSeF jest wcześniejsza wersja dokumentu ${nr}, wysłana z FaktFlow (numer KSeF ${k}${dzien ? `, numer nadany ${dzien}` : ''}). To ona jest wystawioną fakturą i obowiązują jej dane — faktury w KSeF nie da się usunąć ani zastąpić. Zapiszemy ją w FaktFlow jako fakturę ${nrK}, a ten dokument wycofamy bez numeru; zmiany wprowadzisz korektą faktury ${nrK}.`,
+      `W KSeF jest wcześniejsza wersja dokumentu ${nr}, wysłana z FaktWay (numer KSeF ${k}${dzien ? `, numer nadany ${dzien}` : ''}). To ona jest wystawioną fakturą i obowiązują jej dane — faktury w KSeF nie da się usunąć ani zastąpić. Zapiszemy ją w FaktWay jako fakturę ${nrK}, a ten dokument wycofamy bez numeru; zmiany wprowadzisz korektą faktury ${nrK}.`,
     INTRO_RECORD_SAME: (nr: string, k: string, dzien: string | null) =>
-      `W KSeF jest już faktura ${nr} z oznaczeniem FaktFlow (numer KSeF ${k}${dzien ? `, numer nadany ${dzien}` : ''}) o tej samej treści co ten dokument — różni się tylko nagłówek pliku. Najpewniej to wcześniejsza wysyłka, której wyniku FaktFlow nie zapisał.`,
+      `W KSeF jest już faktura ${nr} z oznaczeniem FaktWay (numer KSeF ${k}${dzien ? `, numer nadany ${dzien}` : ''}) o tej samej treści co ten dokument — różni się tylko nagłówek pliku. Najpewniej to wcześniejsza wysyłka, której wyniku FaktWay nie zapisał.`,
     ROW_SALE_DATE: 'Data sprzedaży',
     ANNOTATIONS: (lista: string) => `Oznaczenia faktury w KSeF: ${lista}.`,
     ANNOTATION_LABELS: {
@@ -741,92 +743,92 @@ export const DUPLICATE_DECISION_TEXTS = {
     LINES_TOGGLE: (n: number) => `Pozycje faktury w KSeF (${n})`,
     LINES_MORE: (m: number) => `…i jeszcze ${m} — pełną treść ma plik faktury w KSeF.`,
     LINES_COLUMNS: { name: 'Nazwa', quantity: 'Ilość', unitPriceNet: 'Cena netto', vatRate: 'Stawka VAT', gross: 'Brutto' },
-    BUTTON_RECORD: 'Zapisz fakturę z KSeF w FaktFlow',
+    BUTTON_RECORD: 'Zapisz fakturę z KSeF w FaktWay',
     // Dialogi
     DIALOG_SAME: {
       LINE_1: (nrK: string, k: string, okres: string) =>
-        `Fakturą tej sprzedaży jest faktura ${nrK} z KSeF (numer KSeF ${k}). Zapiszemy ją w FaktFlow z danymi z KSeF — trafi do JPK i KPiR za ${okres}; w FaktFlow ją rozliczasz i korygujesz.`,
+        `Fakturą tej sprzedaży jest faktura ${nrK} z KSeF (numer KSeF ${k}). Zapiszemy ją w FaktWay z danymi z KSeF — trafi do JPK i KPiR za ${okres}; w FaktWay ją rozliczasz i korygujesz.`,
       LINE_2: (nr: string) =>
-        `Dokument ${nr} wycofamy: zostanie w FaktFlow jako szkic bez numeru, którego nie wyślesz do KSeF ani nie usuniesz. Numer ${nr} przejdzie na fakturę z KSeF.`,
+        `Dokument ${nr} wycofamy: zostanie w FaktWay jako szkic bez numeru, którego nie wyślesz do KSeF ani nie usuniesz. Numer ${nr} przejdzie na fakturę z KSeF.`,
     },
     DIALOG_OTHER: {
       LINE_1: (nrK: string, k: string, okres: string) =>
-        `Faktura ${nrK} z KSeF (numer KSeF ${k}) dokumentuje inną sprzedaż i jest wystawiona — obowiązuje, bo jest w KSeF. Zapiszemy ją w FaktFlow z danymi z KSeF — trafi do JPK i KPiR za ${okres}.`,
+        `Faktura ${nrK} z KSeF (numer KSeF ${k}) dokumentuje inną sprzedaż i jest wystawiona — obowiązuje, bo jest w KSeF. Zapiszemy ją w FaktWay z danymi z KSeF — trafi do JPK i KPiR za ${okres}.`,
       LINE_2: (nr: string) =>
-        `Dokument ${nr} wycofamy: zostanie w FaktFlow jako szkic bez numeru, którego nie wyślesz do KSeF ani nie usuniesz. Sprzedaż z tego dokumentu wystawisz jako nową fakturę — z nowym numerem i dzisiejszą datą.`,
+        `Dokument ${nr} wycofamy: zostanie w FaktWay jako szkic bez numeru, którego nie wyślesz do KSeF ani nie usuniesz. Sprzedaż z tego dokumentu wystawisz jako nową fakturę — z nowym numerem i dzisiejszą datą.`,
       ALREADY_REISSUED: 'Jeśli sprzedaż z tego dokumentu jest już wystawiona ponownie pod innym numerem, nie wystawiaj kolejnej faktury.',
       ZERO: (nrK: string) => `Jeśli sprzedaż z faktury ${nrK} nie doszła do skutku, fakturę ${nrK} trzeba skorygować do zera.`,
     },
     DIALOG_RECORD: {
-      TITLE: (nrK: string) => `Zapisać fakturę ${nrK} z KSeF w FaktFlow?`,
+      TITLE: (nrK: string) => `Zapisać fakturę ${nrK} z KSeF w FaktWay?`,
       LINE_1: (nrK: string, okres: string) =>
-        `Zapiszemy w FaktFlow fakturę ${nrK} z danymi z KSeF — trafi do JPK i KPiR za ${okres}. To ona jest fakturą tej sprzedaży.`,
+        `Zapiszemy w FaktWay fakturę ${nrK} z danymi z KSeF — trafi do JPK i KPiR za ${okres}. To ona jest fakturą tej sprzedaży.`,
       LINE_2: (nr: string) =>
-        `Dokument ${nr} wycofamy: zostanie w FaktFlow jako szkic bez numeru, którego nie wyślesz do KSeF ani nie usuniesz. Numer ${nr} przejdzie na fakturę z KSeF.`,
+        `Dokument ${nr} wycofamy: zostanie w FaktWay jako szkic bez numeru, którego nie wyślesz do KSeF ani nie usuniesz. Numer ${nr} przejdzie na fakturę z KSeF.`,
       LINE_DIFF: (nrK: string) => `Dane z KSeF różnią się od tego dokumentu. Obowiązują dane z KSeF — zmienisz je tylko korektą faktury ${nrK}.`,
       CHECKBOX: (k: string, nr: string) => `Rozumiem skutki: obowiązują dane faktury ${k} z KSeF, nie dane dokumentu ${nr}.`,
       CONFIRM_BUTTON: 'Zapisz fakturę z KSeF',
     },
     REISSUED: 'Jeśli sprzedaż z tego dokumentu jest już wystawiona ponownie pod innym numerem, są teraz dwie faktury tej samej sprzedaży — fakturę wystawioną ponownie trzeba skorygować do zera.',
-    CORRECTION_PERSON: ' Korekty faktury dla nabywcy bez NIP i bez numeru VAT-UE FaktFlow jeszcze nie wystawia — jeśli trzeba ją skorygować, napisz do nas: pomoc@faktflow.pl.',
+    CORRECTION_PERSON: ` Korekty faktury dla nabywcy bez NIP i bez numeru VAT-UE FaktWay jeszcze nie wystawia — jeśli trzeba ją skorygować, napisz do nas: ${SUPPORT_EMAIL}.`,
     SALE_DATE_AS_ISSUE: 'jak data wystawienia',
     DATA_FROM_KSEF: (nrK: string) => `Obowiązują dane z KSeF. Jeśli trzeba je zmienić, wystaw korektę faktury ${nrK}.`,
-    HELD_CORRECTIONS: ' Korekty do produkcyjnego KSeF są teraz wstrzymane przez FaktFlow — napisz do nas: pomoc@faktflow.pl.',
+    HELD_CORRECTIONS: ` Korekty do produkcyjnego KSeF są teraz wstrzymane przez FaktWay — napisz do nas: ${SUPPORT_EMAIL}.`,
     BUYER_DIFFERS: (nrK: string) =>
       `Nabywca w KSeF jest inny niż w tym dokumencie. Jeśli tę sprzedaż dostał inny nabywca, fakturę ${nrK} trzeba skorygować do zera, a sprzedaż wystawić jako nową fakturę z nowym numerem.`,
     PAST_PERIOD: (okres: string) =>
       `Jeśli JPK_V7 za ${okres} jest już złożony albo KPiR za ten miesiąc zamknięta bez tej faktury, sprawdź z księgową, czy trzeba je skorygować.`,
-    TOAST_SAME: (nrK: string) => `Zapisano: ta sama sprzedaż. Faktura ${nrK} z KSeF jest w FaktFlow.`,
-    TOAST_OTHER: (nrK: string) => `Zapisano: inna sprzedaż. Faktura ${nrK} z KSeF jest w FaktFlow — sprzedaż z wycofanego dokumentu wystaw jako nową fakturę z nowym numerem, jeśli nie jest już wystawiona.`,
-    TOAST_RECORD: (nrK: string) => `Zapisano fakturę ${nrK} z KSeF w FaktFlow.`,
+    TOAST_SAME: (nrK: string) => `Zapisano: ta sama sprzedaż. Faktura ${nrK} z KSeF jest w FaktWay.`,
+    TOAST_OTHER: (nrK: string) => `Zapisano: inna sprzedaż. Faktura ${nrK} z KSeF jest w FaktWay — sprzedaż z wycofanego dokumentu wystaw jako nową fakturę z nowym numerem, jeśli nie jest już wystawiona.`,
+    TOAST_RECORD: (nrK: string) => `Zapisano fakturę ${nrK} z KSeF w FaktWay.`,
     // Po oddaniu przez operatora (FO-ODDANA)
-    RELEASED_NOTE: 'Plik tej faktury w KSeF ma oznaczenie FaktFlow, ale sprawdziliśmy go: nie powstał w FaktFlow. Rozstrzygnij ją jak fakturę z innego programu — FaktFlow jej nie zapisze.',
-    PROGRAM_RELEASED: 'oznaczenie FaktFlow — plik nie powstał w FaktFlow',
+    RELEASED_NOTE: 'Plik tej faktury w KSeF ma oznaczenie FaktWay, ale sprawdziliśmy go: nie powstał w FaktWay. Rozstrzygnij ją jak fakturę z innego programu — FaktWay jej nie zapisze.',
+    PROGRAM_RELEASED: 'oznaczenie FaktWay — plik nie powstał w FaktWay',
     // Odmowy w akcji i na stronie
     // Odmowa w chwili zapisu (archiwum, inna ocena pliku, niezgodność projekcji) — zawsze ze znacznikiem recheckNeeded (INV-25)
     RECHECK: (nr: string) =>
-      `Fakturę z KSeF dla dokumentu ${nr} musimy sprawdzić jeszcze raz — tej decyzji nie zapiszesz teraz. Sprawdzimy ją automatycznie, zwykle w ciągu 2 dni; potem decyzję zapiszesz na karcie dokumentu. Nie wystawiaj go ponownie; jeśli ten komunikat zostanie dłużej, napisz do nas: pomoc@faktflow.pl.`,
+      `Fakturę z KSeF dla dokumentu ${nr} musimy sprawdzić jeszcze raz — tej decyzji nie zapiszesz teraz. Sprawdzimy ją automatycznie, zwykle w ciągu 2 dni; potem decyzję zapiszesz na karcie dokumentu. Nie wystawiaj go ponownie; jeśli ten komunikat zostanie dłużej, napisz do nas: ${SUPPORT_EMAIL}.`,
     READ_FAILED: (nr: string) =>
       `Nie udało się teraz sprawdzić faktury z KSeF dla dokumentu ${nr} — odśwież stronę za chwilę. Nie wystawiaj go ponownie.`,
     // Szkic wycofany po zapisie (karta X)
     BANNER_TITLE: (nrOld: string) => `Dokument wycofany — numer ${nrOld} ma teraz faktura z KSeF`,
     BANNER_SAME: (data: string, via: string, nrK: string, k: string) =>
-      `Zapisano ${data}${via}: to ta sama sprzedaż co faktura ${nrK} z KSeF (numer KSeF ${k}). Zapisaliśmy ją w FaktFlow — przy niej zapisujesz wpłaty i wystawiasz korekty. Tego dokumentu nie wyślesz do KSeF ani nie usuniesz. Jeśli sprzedaż z tego dokumentu jest jednak inna, wystaw ją jako nową fakturę z nowym numerem — chyba że jest już wystawiona.`,
+      `Zapisano ${data}${via}: to ta sama sprzedaż co faktura ${nrK} z KSeF (numer KSeF ${k}). Zapisaliśmy ją w FaktWay — przy niej zapisujesz wpłaty i wystawiasz korekty. Tego dokumentu nie wyślesz do KSeF ani nie usuniesz. Jeśli sprzedaż z tego dokumentu jest jednak inna, wystaw ją jako nową fakturę z nowym numerem — chyba że jest już wystawiona.`,
     BANNER_OTHER: (data: string, via: string, nrK: string, k: string) =>
-      `Zapisano ${data}${via}: to inna sprzedaż niż faktura ${nrK} z KSeF (numer KSeF ${k}) — zapisaliśmy ją w FaktFlow jako osobną fakturę. Sprzedaż z tego dokumentu wystaw jako nową fakturę — z nowym numerem i dzisiejszą datą; jeśli jest już wystawiona ponownie pod innym numerem, nie wystawiaj kolejnej. Tego dokumentu nie wyślesz do KSeF ani nie usuniesz. Jeśli to jednak ta sama sprzedaż: nie wystawiaj nowej faktury — fakturą tej sprzedaży jest faktura ${nrK}; jeśli nową już wystawiono, trzeba ją skorygować do zera.`,
+      `Zapisano ${data}${via}: to inna sprzedaż niż faktura ${nrK} z KSeF (numer KSeF ${k}) — zapisaliśmy ją w FaktWay jako osobną fakturę. Sprzedaż z tego dokumentu wystaw jako nową fakturę — z nowym numerem i dzisiejszą datą; jeśli jest już wystawiona ponownie pod innym numerem, nie wystawiaj kolejnej. Tego dokumentu nie wyślesz do KSeF ani nie usuniesz. Jeśli to jednak ta sama sprzedaż: nie wystawiaj nowej faktury — fakturą tej sprzedaży jest faktura ${nrK}; jeśli nową już wystawiono, trzeba ją skorygować do zera.`,
     BANNER_RECORD: (data: string, via: string, nrK: string, k: string) =>
-      `Zapisano ${data}${via}: fakturą tej sprzedaży jest faktura ${nrK} z KSeF (numer KSeF ${k}), zapisana w FaktFlow — przy niej zapisujesz wpłaty i wystawiasz korekty. Tego dokumentu nie wyślesz do KSeF ani nie usuniesz. Jeśli sprzedaż z tego dokumentu jest jednak inna, wystaw ją jako nową fakturę z nowym numerem — chyba że jest już wystawiona.`,
+      `Zapisano ${data}${via}: fakturą tej sprzedaży jest faktura ${nrK} z KSeF (numer KSeF ${k}), zapisana w FaktWay — przy niej zapisujesz wpłaty i wystawiasz korekty. Tego dokumentu nie wyślesz do KSeF ani nie usuniesz. Jeśli sprzedaż z tego dokumentu jest jednak inna, wystaw ją jako nową fakturę z nowym numerem — chyba że jest już wystawiona.`,
     IMPORTED_LINK: (nrK: string) => `Zobacz fakturę ${nrK}`,
     RETIRED_DOCUMENT_REFUSAL: (nrOld: string) =>
-      `Wycofany dokument (dawniej ${nrOld}) nie jest fakturą — numer ${nrOld} ma teraz faktura z KSeF zapisana w FaktFlow. Nie pobierzesz PDF tego dokumentu ani nie wyślesz go e-mailem; pobierz PDF faktury ${nrOld}.`,
+      `Wycofany dokument (dawniej ${nrOld}) nie jest fakturą — numer ${nrOld} ma teraz faktura z KSeF zapisana w FaktWay. Nie pobierzesz PDF tego dokumentu ani nie wyślesz go e-mailem; pobierz PDF faktury ${nrOld}.`,
     RETIRED_PDF_LINK: (nrOld: string) => `Pobierz PDF faktury ${nrOld}`,
     // Karta faktury z KSeF (K)
     IMPORTED_CARD: (data: string, via: string, nrOld: string, wybor: string) =>
-      `Faktura zapisana z KSeF ${data}${via}: KSeF nie przyjął dokumentu ${nrOld} z FaktFlow, bo miał już fakturę o tym numerze (${wybor}).`,
+      `Faktura zapisana z KSeF ${data}${via}: KSeF nie przyjął dokumentu ${nrOld} z FaktWay, bo miał już fakturę o tym numerze (${wybor}).`,
     IMPORTED_CARD_CHOICE: { same_sale: 'ta sama sprzedaż', other_sale: 'inna sprzedaż', record: 'zapis faktury z KSeF' },
     IMPORTED_CARD_RETIRED_LINK: 'Zobacz wycofany dokument',
     IMPORTED_CARD_REMINDERS: 'Przypomnienia o płatności nie obejmują faktur zapisanych z KSeF.',
     IMPORTED_CARD_PAYMENTS: 'Jeśli nabywca już zapłacił za tę fakturę, zapisz wpłatę przy niej.',
     // Powiadomienia
     NOTICE_BODY_RECORD: (nr: string, k: string) =>
-      `KSeF nie przyjął faktury ${nr}, bo ma już jej wersję z oznaczeniem FaktFlow (numer KSeF ${k}). Otwórz fakturę w FaktFlow i zapisz fakturę z KSeF — do tego czasu nie trafi ona do JPK ani KPiR. Nie wystawiaj jej ponownie. Pytania: pomoc@faktflow.pl.`,
-    NOTICE_PUSH_BODY_RECORD: 'KSeF ma już tę fakturę z oznaczeniem FaktFlow — zapisz ją w FaktFlow.',
+      `KSeF nie przyjął faktury ${nr}, bo ma już jej wersję z oznaczeniem FaktWay (numer KSeF ${k}). Otwórz fakturę w FaktWay i zapisz fakturę z KSeF — do tego czasu nie trafi ona do JPK ani KPiR. Nie wystawiaj jej ponownie. Pytania: ${SUPPORT_EMAIL}.`,
+    NOTICE_PUSH_BODY_RECORD: 'KSeF ma już tę fakturę z oznaczeniem FaktWay — zapisz ją w FaktWay.',
     NOTICE_BODY_RELEASED: (nr: string, k: string) =>
-      `Sprawdziliśmy fakturę z KSeF (numer KSeF ${k}), przez którą KSeF nie przyjął dokumentu ${nr}: ma oznaczenie FaktFlow, ale nie powstała w FaktFlow. Otwórz dokument w FaktFlow, porównaj dane i zdecyduj, czy to ta sama sprzedaż, czy inna — FaktFlow tej faktury nie zapisze. Do tego czasu nie wystawiaj dokumentu ponownie. Pytania: pomoc@faktflow.pl.`,
+      `Sprawdziliśmy fakturę z KSeF (numer KSeF ${k}), przez którą KSeF nie przyjął dokumentu ${nr}: ma oznaczenie FaktWay, ale nie powstała w FaktWay. Otwórz dokument w FaktWay, porównaj dane i zdecyduj, czy to ta sama sprzedaż, czy inna — FaktWay tej faktury nie zapisze. Do tego czasu nie wystawiaj dokumentu ponownie. Pytania: ${SUPPORT_EMAIL}.`,
     NOTICE_REVIEW_SUBJECT: (nr: string) => `Faktura ${nr}: sprawdzamy fakturę z KSeF`,
     NOTICE_BODY_REVIEW: (nr: string, k: string) =>
-      `KSeF nie przyjął faktury ${nr}, bo ma już fakturę Twojej firmy o tym numerze (numer KSeF ${k}). Sprawdzamy fakturę z KSeF — nie wystawiaj jej ponownie, damy znać. Pytania: pomoc@faktflow.pl.`,
+      `KSeF nie przyjął faktury ${nr}, bo ma już fakturę Twojej firmy o tym numerze (numer KSeF ${k}). Sprawdzamy fakturę z KSeF — nie wystawiaj jej ponownie, damy znać. Pytania: ${SUPPORT_EMAIL}.`,
     NOTICE_PUSH_TITLE_REVIEW: (nr: string) => `Faktura ${nr}: sprawdzamy fakturę z KSeF`,
     NOTICE_PUSH_BODY_REVIEW: 'Nie wystawiaj jej ponownie — damy znać.',
     // last_error werdyktu (runner, 5.1)
     LAST_ERROR: (k: string) =>
-      `KSeF ma już fakturę o tym numerze z oznaczeniem FaktFlow (numer KSeF ${k}) — szczegóły są na karcie faktury; nie wystawiaj jej ponownie.`,
+      `KSeF ma już fakturę o tym numerze z oznaczeniem FaktWay (numer KSeF ${k}) — szczegóły są na karcie faktury; nie wystawiaj jej ponownie.`,
     LAST_ERROR_REVIEW: (k: string) =>
-      `KSeF ma już fakturę o tym numerze z oznaczeniem FaktFlow (numer KSeF ${k}). Sprawdzamy fakturę z KSeF — nie wystawiaj jej ponownie, damy znać.`,
+      `KSeF ma już fakturę o tym numerze z oznaczeniem FaktWay (numer KSeF ${k}). Sprawdzamy fakturę z KSeF — nie wystawiaj jej ponownie, damy znać.`,
   },
 } as const;
 
-// ─── Polityka jsonb (lustro `ksef_duplicate_check_allows`, 2.1.1; 00149 4.2) ──
+// ─── Polityka jsonb (lustro `ksef_duplicate_check_allows`, 2.1.1; 00156 4.2) ──
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const hasKey = (v: Record<string, unknown>, key: string): boolean => Object.prototype.hasOwnProperty.call(v, key);
@@ -845,18 +847,18 @@ const jsonText = (v: unknown): string | null => {
 
 /** `archivePath` oryginału: `<firma (36 znaków)>/ksef-import/<numer KSeF>.xml` (4.2). */
 const FAKTFLOW_ARCHIVE_PATH = /^[0-9a-f-]{36}\/ksef-import\/[A-Za-z0-9-]{1,64}\.xml$/;
-/** Przyszła postać `<SystemInfo>` plików FaktFlow (D-A4-1b-3-SYS). */
+/** Przyszła postać `<SystemInfo>` plików z naszego generatora (D-A4-1b-3-SYS) — wzorzec dosłownie jak w funkcji bazy 00156, w nazwie sprzed zmiany marki. */
 const FAKTFLOW_SYSTEM_INFO_NEXT = /^FaktFlow [0-9]/;
 /** `sizeBytes` jako tekst jsonb: liczba całkowita dodatnia, najwyżej 10 cyfr (potem ≤ int4). */
 const SIZE_BYTES_TEXT = /^[1-9][0-9]{0,9}$/;
 
-/** `SystemInfo` pliku z FaktFlow — dziś `KSeF SaaS v1.0`, w przyszłości `FaktFlow <wersja>`. */
+/** `SystemInfo` pliku z naszego generatora — dziś `KSeF SaaS v1.0`, w przyszłości `<nazwa> <wersja>` (wzorzec wyżej). */
 const isFaktflowSystemInfo = (v: unknown): boolean =>
   typeof v === 'string' && (v === FAKTFLOW_SYSTEM_INFO || FAKTFLOW_SYSTEM_INFO_NEXT.test(v));
 
 /**
- * Gałąź `faktflow-original` z 4.2 (00149): `ownHistory` logiczne, treść
- * logiczna / `null` / brak klucza, SystemInfo FaktFlow, `archivePath`
+ * Gałąź `faktflow-original` z 4.2 (00156): `ownHistory` logiczne, treść
+ * logiczna / `null` / brak klucza, SystemInfo FaktWay, `archivePath`
  * i `sizeBytes` oryginału; `other_sale` tylko przy `ownHistory = false`
  * i treści różnej od `true` (część JSON reguły „tylko zapis” — część z bazy
  * rozstrzyga oferta, 4.4). `importGate` NIE wchodzi do `allows`.
@@ -879,7 +881,7 @@ function faktflowCheckAllows(raw: Record<string, unknown>, summary: Record<strin
  * tak jak SQL (typy sprawdzane jawnie: `v:"1"`, liczbowe `knownInvoice.id`
  * odmawiają). `choice` null = dowolny wybór. `recheck` nie blokuje: dane
  * z wcześniejszego udanego sprawdzenia są ważne (faktura w KSeF się nie zmienia).
- * PR C (00149, 4.2): powód `faktflow-original` z własną gałęzią
+ * PR C (00156, 4.2): powód `faktflow-original` z własną gałęzią
  * (`faktflowCheckAllows`); gałąź powodów PR B bez zmian (INV-14).
  */
 export function duplicateCheckAllows(raw: unknown, choice: DuplicateChoice | null): boolean {
@@ -898,7 +900,7 @@ export function duplicateCheckAllows(raw: unknown, choice: DuplicateChoice | nul
   return true;
 }
 
-// ─── PR C (00149): lustra oferty, bramy i znacznika „sprawdź ponownie” ───────
+// ─── PR C (00156): lustra oferty, bramy i znacznika „sprawdź ponownie” ───────
 
 /**
  * Lustro kroku 11c blokady (`recheck-needed`, 4.5) na surowym jsonb znacznika
@@ -1084,7 +1086,7 @@ interface RowDecision {
   choice: DuplicateChoice;
   via: DuplicateVia;
   at: string;
-  /** PR C (00149): tryb decyzji `faktflow-original`; `null` — decyzja PR B (bez klucza `mode`). */
+  /** PR C (00156): tryb decyzji `faktflow-original`; `null` — decyzja PR B (bez klucza `mode`). */
   mode: DuplicateDecisionMode | null;
   /** PR C: oferta pokazana przy decyzji; `null` — decyzja PR B. */
   offer: DuplicateOriginalOffer | null;
@@ -1113,11 +1115,11 @@ function decisionOf(row: Pick<DuplicateDecisionSubmissionRow, 'original_check'>)
   };
 }
 
-/** Korekta faktury K istnieje w FaktFlow tylko dla nabywcy z NIP albo numerem VAT-UE (F44). */
+/** Korekta faktury K istnieje w FaktWay tylko dla nabywcy z NIP albo numerem VAT-UE (F44). */
 const isCorrectableBuyer = (kind: unknown): boolean =>
   typeof kind === 'string' && (ORIGINAL_CORRECTABLE_BUYER_ID_KINDS as readonly string[]).includes(kind);
 
-/** Decyzja z zapisem oryginału K na wpisie `number_taken` (lustro kroku 2 wyzwalacza 00149, 4.11). */
+/** Decyzja z zapisem oryginału K na wpisie `number_taken` (lustro kroku 2 wyzwalacza 00156, 4.11). */
 interface ImportedDecision {
   importedInvoiceId: string;
   /** `COALESCE(retiredInternalNumber, numer dokumentu, 'bez numeru')` — numer, który przeszedł na K. */
@@ -1242,7 +1244,7 @@ function comparisonOf(inv: DuplicateDecisionInvoiceRow, summary: Record<string, 
     { label: L.buyer, ksef: ksefBuyer, ours: oursBuyer, same: sameText(ksefBuyer, oursBuyer) },
     { label: L.buyerNip, ksef: ksefNip, ours: oursNip, same: nipSame },
     { label: L.gross, ksef: money(ksefGross, ksefCurrency), ours: money(oursGross, oursCurrency), same: grossSame },
-    { label: L.program, ksef: programKsef, ours: 'FaktFlow', same: null },
+    { label: L.program, ksef: programKsef, ours: 'FaktWay', same: null },
   ];
   return { rows, nipSame, grossSame };
 }
@@ -1275,7 +1277,7 @@ function environmentRefusal(
 
 /**
  * Kod blokady SQL, którego TS nie obsłużył wcześniej (wyścig — baza ma ostatnie
- * słowo): odmowa z tekstem kodu; kod spoza listy 00149 → `state-unknown`.
+ * słowo): odmowa z tekstem kodu; kod spoza listy 00156 → `state-unknown`.
  */
 function blockerRefusal(code: string, k: string, nr: string, refused: Refuse): DuplicateDecisionView {
   if (!(DUPLICATE_DECISION_BLOCKER_CODES as readonly string[]).includes(code)) {
@@ -1348,7 +1350,7 @@ function faktflowViewParts(ctx: FaktflowContext, offer: DuplicateOriginalOffer, 
   const gate = isRecord(check.importGate) ? check.importGate : null;
   // Podgląd z `importGate.preview` — strona nie czyta archiwum (INV-13).
   const preview = gate && isRecord(gate.preview) ? (gate.preview as unknown as OriginalPreview) : null;
-  const comparison = comparisonOf(inv, summary, offer === 'released' ? FF.PROGRAM_RELEASED : 'FaktFlow');
+  const comparison = comparisonOf(inv, summary, offer === 'released' ? FF.PROGRAM_RELEASED : 'FaktWay');
   if (preview) comparison.rows.splice(2, 0, saleDateRow(preview, inv));
   const sameContent = typeof check.sameContentExceptHeader === 'boolean' ? check.sameContentExceptHeader : null;
   const recordOnly = offer === 'record' || offer === 'review-record';
@@ -1438,7 +1440,7 @@ function faktflowOriginalOptions(ctx: FaktflowContext): DuplicateDecisionView {
       sameContent: parts.sameContent,
       markedDifference: parts.markedDifference,
       heldCorrections: parts.heldCorrections,
-      program: 'FaktFlow',
+      program: 'FaktWay',
       releasable: offer === 'review-pair',
       correctionForPerson: parts.correctionForPerson,
       ...(parts.recordIntro ? { recordIntro: parts.recordIntro } : {}),
@@ -1462,8 +1464,8 @@ function faktflowOriginalOptions(ctx: FaktflowContext): DuplicateDecisionView {
     markedDifference: parts.markedDifference,
     sameContent: parts.sameContent,
     needsConfirmation: parts.needsConfirmation,
-    // Po oddaniu plik „nie powstał w FaktFlow” — program nieznany (dialogi PR B z `program = null`).
-    program: offer === 'released' ? null : 'FaktFlow',
+    // Po oddaniu plik „nie powstał w FaktWay” — program nieznany (dialogi PR B z `program = null`).
+    program: offer === 'released' ? null : 'FaktWay',
     knownInvoice: null,
     heldCorrections: parts.heldCorrections,
     offer,
@@ -1481,7 +1483,7 @@ function faktflowOriginalOptions(ctx: FaktflowContext): DuplicateDecisionView {
  * środowisko sprawdzenia oryginału i — na końcu, tylko klient — rola: członek
  * firmy widzi prawdziwą blokadę. Szkic z zapisaną decyzją daje widok `decided`
  * (ponowienie po zgubionej odpowiedzi; RPC odpowiada wtedy `already_decided`).
- * PR C: `faktflow-original` — `faktflowOriginalOptions` (kody 00149, 4.5).
+ * PR C: `faktflow-original` — `faktflowOriginalOptions` (kody 00156, 4.5).
  */
 export function duplicateDecisionOptions(input: DuplicateDecisionOptionsInput): DuplicateDecisionView {
   const { facts, actor, environment } = input;
@@ -1576,7 +1578,7 @@ export function duplicateDecisionOptions(input: DuplicateDecisionOptionsInput): 
     }
   }
   const sha256 = check.sha256 as string;
-  // PR C (00149): faktflow-original — known-now, cross-tenant, recheck-needed, oferta, przegląd.
+  // PR C (00156): faktflow-original — known-now, cross-tenant, recheck-needed, oferta, przegląd.
   if (reason === 'faktflow-original') {
     return faktflowOriginalOptions({ input, inv, subs, marker, check, k, nr, sha256, refused });
   }
@@ -1729,7 +1731,7 @@ export function retiredDraftView(input: RetiredDraftViewInput): RetiredDraftView
     const via = decision.via === 'operator' ? T.BANNER_VIA_OPERATOR : '';
     const summary = isRecord(check.summary) ? check.summary : {};
     const nrK = trimmed(summary.number) ?? nr;
-    // PR C: decyzja po oddaniu (`no-import`) — plik nie powstał w FaktFlow: teksty PR B z programem „nieznanym”, bez K.
+    // PR C: decyzja po oddaniu (`no-import`) — plik nie powstał w FaktWay: teksty PR B z programem „nieznanym”, bez K.
     const faktflow = check.reason === 'faktflow-original' || decision.mode !== null;
     const extra = faktflow ? { imported: null } : {};
     if (decision.choice === 'other_sale') {

@@ -271,7 +271,7 @@ const ROWS = (patch: { nip?: boolean | null; date?: boolean | null } = {}): Deci
   { label: T.ROW_LABELS.buyer, ksef: 'Nabywca testowy', ours: 'Nabywca testowy', same: true },
   { label: T.ROW_LABELS.buyerNip, ksef: '5252241585', ours: '5252241585', same: patch.nip ?? true },
   { label: T.ROW_LABELS.gross, ksef: '123.00 PLN', ours: '123.00 PLN', same: true },
-  { label: T.ROW_LABELS.program, ksef: 'FaktFlow', ours: 'FaktFlow', same: null },
+  { label: T.ROW_LABELS.program, ksef: 'FaktWay', ours: 'FaktWay', same: null },
 ];
 
 /** FO-PARA: oferta `pair`, tryb `import`, oba wybory. */
@@ -286,7 +286,7 @@ function pairView(patch: Partial<DecidableView> = {}): DecidableView {
     markedDifference: true,
     sameContent: false,
     needsConfirmation: { same_sale: false, other_sale: true },
-    program: 'FaktFlow',
+    program: 'FaktWay',
     knownInvoice: null,
     heldCorrections: false,
     offer: 'pair',
@@ -337,14 +337,14 @@ describe('KsefDuplicateDecision — FO-PARA, oferta pair (D-A4-1b-3 PR C)', () =
     expect(buttonsLabelled(T.BUTTON_OTHER)).toHaveLength(1);
     expect(buttonsLabelled(F.BUTTON_RECORD)).toHaveLength(0);
     // Wstęp PR B (program w bierniku) zastąpiony wstępem pary.
-    expect(t).not.toContain(T.INTRO(NR, K, 'FaktFlow'));
+    expect(t).not.toContain(T.INTRO(NR, K, 'FaktWay'));
     // Dialog zamknięty: skutków jeszcze nie widać.
     expect(t).not.toContain(F.DIALOG_SAME.LINE_2(NR));
   });
 
   it.each([
     ['treść pozycji inna niż plik oryginału (sameContent=false)', false, T.CONTENT_DIFFERENT, T.NO_OWN_FILE],
-    ['FaktFlow nie ma pliku tej próby (sameContent=null)', null, T.NO_OWN_FILE, T.CONTENT_DIFFERENT],
+    ['FaktWay nie ma pliku tej próby (sameContent=null)', null, T.NO_OWN_FILE, T.CONTENT_DIFFERENT],
   ])('ZE1: %s — linia treści pod tabelą obok wstępu pary', async (_label, sameContent, shown, hidden) => {
     await renderPanel(pairView({ sameContent }));
 
@@ -561,7 +561,7 @@ describe('KsefDuplicateDecision — FO-PARA, oferta pair (D-A4-1b-3 PR C)', () =
 });
 
 describe('KsefDuplicateDecision — FO-WŁASNA i FO-TA-SAMA-TREŚĆ, oferta record', () => {
-  it('ZG1 (FO-WŁASNA): wstęp INTRO_RECORD_OWN z dniem nadania numeru, LEDGER, jeden przycisk „Zapisz fakturę z KSeF w FaktFlow”, bez przycisków pary i bez NOT_RECORDED', async () => {
+  it('ZG1 (FO-WŁASNA): wstęp INTRO_RECORD_OWN z dniem nadania numeru, LEDGER, jeden przycisk „Zapisz fakturę z KSeF w FaktWay”, bez przycisków pary i bez NOT_RECORDED', async () => {
     await renderPanel(ownView());
 
     const t = text();
@@ -1026,7 +1026,7 @@ describe('strona karty X — faktflow-original (6.1, INV-13)', () => {
       offer: 'pair',
       mode: 'import',
       choices: ['same_sale', 'other_sale'],
-      program: 'FaktFlow',
+      program: 'FaktWay',
       original: { preview: PAGE_GATE.preview, pastPeriod: true },
     });
     expect(m.archiveRead).not.toHaveBeenCalled();

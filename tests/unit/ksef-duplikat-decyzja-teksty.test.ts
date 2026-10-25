@@ -6,7 +6,7 @@ import { DUPLICATE_DECISION_SQL_TEXTS, DUPLICATE_DECISION_TEXTS } from '@/lib/ks
  * Strażnik tekstów D-A4-1b-3 PR B dla prawnika (decyzje Bartosza 07.10.2026
  * (A) i (8)): dialogi decyzji, odmowy w panelu, komunikaty P0001 z RPC
  * i wyzwalaczy 00148, baner szkicu wycofanego każdego rodzaju, odmowa e-maila,
- * powiadomienie; od D-A4-1b-3 PR C (00149, spec v3 6.2, 6.3, 6.7) także
+ * powiadomienie; od D-A4-1b-3 PR C (00156, spec v3 6.2, 6.3, 6.7) także
  * `DUPLICATE_DECISION_TEXTS.FAKTFLOW` i nowe klucze SQL (zapis oryginału z KSeF).
  * Przegląd przed KSeF PROD (TEST bez blokady); zmiana
  * któregokolwiek tekstu po przeglądzie czerwieni ten test — nowa wersja

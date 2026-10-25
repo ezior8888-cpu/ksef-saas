@@ -49,7 +49,7 @@ import {
 } from './unit/helpers/ksef-duplicate-decision-cases';
 
 /**
- * D-A4-1b-3 PR C (00149) na prawdziwej bazie — zapis oryginału z oznaczeniem
+ * D-A4-1b-3 PR C (00156, dawniej rezerwacja 00149) na prawdziwej bazie — zapis oryginału z oznaczeniem
  * FaktFlow (`faktflow-original`) przy nierozstrzygniętym 440 (spec v3, 7.1;
  * kontrakt `.agents/pr-c-contract.md`, rozstrzygnięcia commitów 2 i 3).
  *
@@ -57,7 +57,7 @@ import {
  * (moduły czyste z commitu 3): plik oryginału = `generateFA3Xml(finalizeInvoice(…))`,
  * `summary` = `summarizeInvoiceXml`, SHA i rozmiar z bajtów, `importGate` =
  * `evaluateOriginalGate`, `p_import` = `buildOriginalImportProjection(parseFa3Xml(…))`.
- * Czerwień przed 00149 wynika wyłącznie z bazy: nowych funkcji nie ma
+ * Czerwień przed 00156 wynika wyłącznie z bazy: nowych funkcji nie ma
  * (PGRST202 przez PostgREST, 42883 przez `pg`), a stare (`ksef_duplicate_decision_blocker`,
  * `decide_ksef_duplicate`, `ksef_lifecycle_violations`, `guard_ksef_retired_draft`)
  * mają zachowanie 00148 (kod `reason`, I5 zamiast I5D/I5R, teksty bez importu).
@@ -117,7 +117,7 @@ const BANK_ACCOUNT = '61109010140000071219812874';
 const ART_43 = 'art. 43 ust. 1 pkt 19 ustawy o VAT';
 /** Skrót naszego pliku próby (`request_payload_hash` znacznika) — inny niż oryginału. */
 const OUR_HASH = 'aa'.repeat(32);
-const SEEDED_ERROR = 'KSeF ma już fakturę o tym numerze z oznaczeniem FaktFlow — decyzja na karcie faktury.';
+const SEEDED_ERROR = 'KSeF ma już fakturę o tym numerze z oznaczeniem FaktWay — decyzja na karcie faktury.';
 const OPERATOR_NOTE = 'telefon od właściciela 10.10, Jan Kowalski — plik sprawdzony ręcznie';
 const ISSUE = '2026-09-01';
 const GENERATED_AT = new Date('2026-09-01T08:00:00Z');
@@ -199,9 +199,9 @@ function choiceLabel(offer: DuplicateOriginalOffer, choice: DuplicateChoice): st
   return DUPLICATE_DECISION_TEXTS.FAKTFLOW.IMPORTED_CARD_CHOICE[decisionLabel(offer, choice)];
 }
 
-/** `error_message` wpisów po zapisie oryginału (4.6 krok 7). */
+/** `error_message` wpisów po zapisie oryginału (4.6 krok 7; marka FaktWay jak teksty 00151). */
 function importedEntryMessage(via: 'client' | 'operator', offer: DuplicateOriginalOffer, choice: DuplicateChoice, nr: string, k: string): string {
-  return `Decyzja klienta${via === 'operator' ? ' (zapisał operator)' : ''}: ${choiceLabel(offer, choice)} — numer ${nr} ma faktura ${k} z KSeF, zapisana w FaktFlow`;
+  return `Decyzja klienta${via === 'operator' ? ' (zapisał operator)' : ''}: ${choiceLabel(offer, choice)} — numer ${nr} ma faktura ${k} z KSeF, zapisana w FaktWay`;
 }
 
 /** `error_message` wpisów decyzji bez zapisu (PR B, 00148 — także `no-import`). */
@@ -308,7 +308,7 @@ interface PendingOpts {
   /**
    * `importGate` znacznika: `importable` — prawdziwa ocena pliku (domyślnie przy
    * `faktflow-original`); `review` — ta sama ocena z problemem `rates` (poprawny
-   * kształt 4.4a, plik nadal zapisywalny wg 1.1); `none` — brak klucza (znacznik sprzed 00149).
+   * kształt 4.4a, plik nadal zapisywalny wg 1.1); `none` — brak klucza (znacznik sprzed 00156).
    */
   gate?: 'importable' | 'review' | 'none';
   /** Nadpisania `original_check` (ownHistory, sameContentExceptHeader, acquiredAt, recheckNeeded…). */
@@ -1155,7 +1155,7 @@ function planNodes(node: PlanNode): PlanNode[] {
   return [node, ...(node.Plans ?? []).flatMap(planNodes)];
 }
 
-describe.skipIf(!hasDatabase)('D-A4-1b-3 PR C (00149): zapis oryginału z oznaczeniem FaktFlow', { timeout: 120_000 }, () => {
+describe.skipIf(!hasDatabase)('D-A4-1b-3 PR C (00156): zapis oryginału z oznaczeniem FaktWay', { timeout: 120_000 }, () => {
   beforeAll(async () => {
     ids.owner = await userId(EMAIL.owner);
     ids.operator = await userId(EMAIL.operator);
@@ -1200,7 +1200,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR C (00149): zapis oryginału z oznacz
 
       const { data, error } = await decideOriginal(p);
 
-      // Dziś: PGRST202 — decide_ksef_duplicate_original nie istnieje (00149 puste).
+      // Dziś: PGRST202 — decide_ksef_duplicate_original nie istnieje (00156 puste).
       expect(error, error?.message).toBeNull();
       await expectImported(p, data, { choice: 'same_sale', offer: 'pair', via: 'client', actorUserId: ids.owner, note: null });
     });
@@ -1337,7 +1337,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR C (00149): zapis oryginału z oznacz
         await setup(p);
         const before = await state(p);
 
-        // Dziś 00148: `reason` (allows odrzuca faktflow-original), kodu 00149 nie zna.
+        // Dziś 00148: `reason` (allows odrzuca faktflow-original), kodu 00156 nie zna.
         expect(await blocker(p.id)).toBe('cross-tenant');
         const invariants = await invariantsOf(p.id);
         expect(invariants).toContain('I5');
@@ -1371,7 +1371,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR C (00149): zapis oryginału z oznacz
       await acceptedInvoice(ORG, `FV/ZO/Y/${p.n}`, p.k);
       const before = await state(p);
 
-      // Dziś 00148: `reason` (allows odrzuca faktflow-original), kodu 00149 nie zna.
+      // Dziś 00148: `reason` (allows odrzuca faktflow-original), kodu 00156 nie zna.
       expect(await blocker(p.id)).toBe('known-now');
       const invariants = await invariantsOf(p.id);
       expect(invariants).toContain('I5');
@@ -1814,7 +1814,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR C (00149): zapis oryginału z oznacz
     });
 
     it.each<{ name: string; opts: PendingOpts }>([
-      { name: 'znacznik bez importGate (sprzed 00149)', opts: { gate: 'none' } },
+      { name: 'znacznik bez importGate (sprzed 00156)', opts: { gate: 'none' } },
       { name: 'importGate w złym kształcie (importable z problemem)', opts: { checkPatch: { importGate: { v: 1, rules: 1, kind: 'importable', problems: ['rates'], preview: null } } } },
       { name: 'znacznik z recheckNeeded (odmowa w chwili zapisu)', opts: { checkPatch: { recheckNeeded: { kind: 'gate-drift', at: '2026-09-02T10:00:00.000Z' } } } },
     ])('R-C16: $name → I5 (stary znacznik), nie I5R ani I5D; blokada recheck-needed = TS (lustro 11c)', async ({ opts }) => {
@@ -1909,7 +1909,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR C (00149): zapis oryginału z oznacz
       expect(error?.code, error?.message).toBe('P0001');
       const [key, ...args] = text(p);
       expect(error?.message).toBe(sqlText(key, ...args));
-      // `payments` to kod 00148 bez DETAIL; nowe kody 00149 niosą DETAIL (4.14).
+      // `payments` to kod 00148 bez DETAIL; nowe kody 00156 niosą DETAIL (4.14).
       if (details !== 'payments') expect(error?.details).toBe(details);
       expect(await state(p)).toEqual(before);
     });
@@ -1948,7 +1948,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR C (00149): zapis oryginału z oznacz
 
     const { data, error } = await decideRetire(p);
 
-    // Zielony przed i po 00149: tryb `retire` core = 00148 bajt w bajt.
+    // Zielony przed i po 00156: tryb `retire` core = 00151 (00148 w marce FaktWay) bajt w bajt.
     expect(error, error?.message).toBeNull();
     expect(Object.keys(data as Json).sort()).toEqual(
       ['already_decided', 'choice', 'internal_number', 'invoice_id', 'original_ksef_number', 'reason', 'submissions_closed', 'via'],

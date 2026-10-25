@@ -196,12 +196,12 @@ const SQL_TEXT_KEYS_00148 = [
 ];
 
 /**
- * PR C (spec v3 7.4, 9.2 commit 1): klucze z 00149 (6.3) — ich szablony sprawdza
- * U16e-00149 w `tests/unit/zapis-oryginalu-migracja.test.ts`, nie ten strażnik
- * (00148 ich nie ma i mieć nie będzie). Każdy klucz lustra należy do dokładnie
- * jednej z tych list — nowy klucz bez migracji czerwieni U16e.
+ * PR C (spec v3 7.4, 9.2 commit 1): klucze z 00156 (6.3; rezerwacja 00149 przeszła
+ * na 00156) — ich szablony sprawdza U16e-00156 w `tests/unit/zapis-oryginalu-migracja.test.ts`,
+ * nie ten strażnik (00148 i 00151 ich nie mają i mieć nie będą). Każdy klucz lustra
+ * należy do dokładnie jednej z tych list — nowy klucz bez migracji czerwieni U16e.
  */
-const SQL_TEXT_KEYS_00149 = [
+const SQL_TEXT_KEYS_00156 = [
   'known-now', 'cross-tenant', 'recheck-needed', 'provenance-review', 'CHOICE', 'IMPORT_MISMATCH', 'ALREADY_IMPORTED',
   'TRIGGER_SAME_IMPORTED', 'TRIGGER_OTHER_IMPORTED', 'TRIGGER_DELETE_IMPORTED', 'TRIGGER_RENUMBER_IMPORTED', 'TRIGGER_DIRECTION_IMPORTED',
 ];
@@ -395,14 +395,14 @@ describe('strażnik tekstu migracji 00148 (D-A4-1b-3 PR B)', () => {
     expect(closing!.endsWith(tight(`${where};`))).toBe(true);
   });
 
-  it('U16e (C1): każdy szablon 00148 z DUPLICATE_DECISION_SQL_TEXTS stoi dosłownie po RAISE EXCEPTION z kodem z 2.11.A, nigdy w format(); CATALOG w UPDATE katalogu (klucze 00149 — U16e-00149)', async () => {
+  it('U16e (C1): każdy szablon 00148 z DUPLICATE_DECISION_SQL_TEXTS stoi dosłownie po RAISE EXCEPTION z kodem z 2.11.A, nigdy w format(); CATALOG w UPDATE katalogu (klucze 00156 — U16e-00156)', async () => {
     const m148 = read(M148);
     const m151 = read(M151);
     const { DUPLICATE_DECISION_SQL_TEXTS } = await import('@/lib/ksef/duplicate-decision');
     const all = Object.entries(DUPLICATE_DECISION_SQL_TEXTS) as Array<[string, { template: string; arity: number }]>;
     expect(all.map(([key]) => key)).toEqual(expect.arrayContaining(SQL_TEXT_KEYS_00148));
-    // PR C: lustro = dokładnie klucze 00148 ∪ 00149 (bez powtórzeń); tu tylko szablony 00148.
-    expect([...all.map(([key]) => key)].sort()).toEqual([...SQL_TEXT_KEYS_00148, ...SQL_TEXT_KEYS_00149].sort());
+    // PR C: lustro = dokładnie klucze 00148 ∪ 00156 (bez powtórzeń); tu tylko szablony 00148 (od 00151 w marce FaktWay).
+    expect([...all.map(([key]) => key)].sort()).toEqual([...SQL_TEXT_KEYS_00148, ...SQL_TEXT_KEYS_00156].sort());
     const entries = all.filter(([key]) => SQL_TEXT_KEYS_00148.includes(key));
     expect(entries).toHaveLength(SQL_TEXT_KEYS_00148.length);
 

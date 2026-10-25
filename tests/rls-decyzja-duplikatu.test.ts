@@ -1037,10 +1037,10 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
         name: 'original_check NULL (znacznik sprzed 00144) → no-check', setup: () => pendingDuplicate({ check: null }),
         code: 'P0001', text: (p) => ['no-check', p.number],
       },
-      // PR C (00149, spec 7.4): faktflow-original z SystemInfo FaktFlow (F28) bez importGate przechodzi `allows`
+      // PR C (00156, spec 7.4): faktflow-original z SystemInfo FaktFlow (F28) bez importGate przechodzi `allows`
       // (4.2) i dostaje blokadę recheck-needed (4.5 krok 11c) — nie `reason`. Dwa pozostałe powody bez zmian.
       {
-        name: 'faktflow-original bez importGate (sprzed 00149) → recheck-needed', setup: () => pendingDuplicate({ reason: 'faktflow-original' }),
+        name: 'faktflow-original bez importGate (sprzed 00156) → recheck-needed', setup: () => pendingDuplicate({ reason: 'faktflow-original' }),
         code: 'P0001', text: (p) => ['recheck-needed', p.number],
       },
       ...(['same-content-other-program', 'download-refused'] as const).map((reason): RefusalCase => ({
@@ -1261,7 +1261,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
         },
       },
       { name: 'zaliczka', code: 'kind', setup: () => pendingDuplicate({ kind: 'advance' }) },
-      // PR C (00149, spec 7.4): intencja bez zmian (I5, bez I5D), kod recheck-needed — znacznik bez importGate (4.5 krok 11c).
+      // PR C (00156, spec 7.4): intencja bez zmian (I5, bez I5D), kod recheck-needed — znacznik bez importGate (4.5 krok 11c).
       { name: 'faktflow-original', code: 'recheck-needed', setup: () => pendingDuplicate({ reason: 'faktflow-original' }) },
       { name: 'original_check NULL', code: 'no-check', setup: () => pendingDuplicate({ check: null }) },
       {
@@ -1299,7 +1299,7 @@ describe.skipIf(!hasDatabase)('D-A4-1b-3 PR B (00148): decyzja klienta przy dupl
 
   it('R6: ksef_duplicate_check_allows = duplicateCheckAllows = oczekiwanie wspólnej tabeli (każdy wiersz)', async () => {
     // PR C: R6 zostaje strażnikiem PR B — iteruje tabelę bez wierszy `faktflow-original`, bo SQL 00148 i polityka
-    // TS dopuszczają je dopiero po 00149 i implementacji grupy B; pełną tabelę (R-C15) sprawdza `rls-zapis-oryginalu`.
+    // TS dopuszczają je dopiero po 00156 i implementacji grupy B; pełną tabelę (R-C15) sprawdza `rls-zapis-oryginalu`.
     const { PR_B_DUPLICATE_CHECK_CASES: DUPLICATE_CHECK_CASES } = await import('./unit/helpers/ksef-duplicate-decision-cases');
     expect(DUPLICATE_CHECK_CASES.length).toBeGreaterThan(0);
 

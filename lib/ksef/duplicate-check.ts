@@ -44,12 +44,12 @@ export type DuplicateDecisionChoice = 'same_sale' | 'other_sale';
 /** Kto zapisał decyzję: klient w panelu albo operator na jego prośbę. */
 export type DuplicateDecisionVia = 'client' | 'operator';
 
-// ─── D-A4-1b-3 PR C (00149): brama pochodzenia, oferta, zapis oryginału ──────
+// ─── D-A4-1b-3 PR C (00156): brama pochodzenia, oferta, zapis oryginału ──────
 //
 // Kontrakt PR C (spec v3, 5.2–5.5, 9.3) — wspólny dla polityki (grupa B),
 // bramy, projekcji i runnera (C), klienta (D) i operatora (E). Typy są
 // serializowalne: runner zapisuje bramę w `original_check.importGate`, SQL
-// z 00149 czyta ją w ofercie i blokadzie.
+// z 00156 czyta ją w ofercie i blokadzie.
 
 /** Wersja reguł bramy w chwili oceny (`importGate.rules`) — informacyjnie: zmiana bramy to inny `kind` albo inne `problems` (5.3 krok 4). */
 export const ORIGINAL_GATE_RULES = 1;
@@ -103,7 +103,7 @@ export type OriginalRecheckKind = (typeof ORIGINAL_RECHECK_KINDS)[number];
 /** Rodzaj identyfikatora nabywcy w pliku (`nip` → `vat-ue` → `pesel` → `nr-inny` → `brak-id` → `none`). */
 export type OriginalBuyerIdKind = 'nip' | 'vat-ue' | 'pesel' | 'nr-inny' | 'brak-id' | 'none';
 
-/** Korekta faktury istnieje w FaktFlow tylko dla tych nabywców (F44; inaczej `FAKTFLOW.CORRECTION_PERSON`). */
+/** Korekta faktury istnieje w FaktWay tylko dla tych nabywców (F44; inaczej `FAKTFLOW.CORRECTION_PERSON`). */
 export const ORIGINAL_CORRECTABLE_BUYER_ID_KINDS = ['nip', 'vat-ue'] as const satisfies readonly OriginalBuyerIdKind[];
 
 export type OriginalPreviewAnnotation = 'cashMethod' | 'splitPayment' | 'reverseCharge' | 'exemption';
@@ -241,7 +241,7 @@ export interface KsefDuplicateDecisionRecord {
   via: DuplicateDecisionVia;
   /** Moment decyzji (ISO z bazy, `now()` w RPC). */
   at: string;
-  // PR C (00149) — tylko decyzje `faktflow-original`; decyzje PR B tych kluczy nie mają.
+  // PR C (00156) — tylko decyzje `faktflow-original`; decyzje PR B tych kluczy nie mają.
   mode?: DuplicateDecisionMode;
   offer?: DuplicateOriginalOffer;
   actorUserId?: string | null;
@@ -455,7 +455,7 @@ function parseDecision(value: unknown): KsefDuplicateDecisionRecord | null {
   return { choice, via, at };
 }
 
-// ─── PR C (00149): brama pochodzenia przy odczycie ───────────────────────────
+// ─── PR C (00156): brama pochodzenia przy odczycie ───────────────────────────
 
 /**
  * Lustro `ksef_duplicate_gate_ok` (4.4a): `v = 1`, `rules` liczbą, `kind`

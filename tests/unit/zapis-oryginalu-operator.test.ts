@@ -699,7 +699,7 @@ describe('D-A4-1b-3 PR C: operator zapisuje decyzję — oferta released (FO-ODD
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Przegląd pliku (I5R) — „Zapisz fakturę z KSeF w FaktFlow”
+// Przegląd pliku (I5R) — „Zapisz fakturę z KSeF w FaktWay”
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('D-A4-1b-3 PR C: operator w przeglądzie pliku (review-pair) — zapis faktury z KSeF', () => {
@@ -898,7 +898,7 @@ describe('D-A4-1b-3 PR C: originalDecisionAlarms na każdej ścieżce sukcesu op
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// „Oddaj decyzję klientowi (plik nie z FaktFlow)”
+// „Oddaj decyzję klientowi (plik nie z FaktWay)”
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('D-A4-1b-3 PR C: operatorReleaseOriginalReviewAction — oddanie decyzji klientowi (T8)', () => {

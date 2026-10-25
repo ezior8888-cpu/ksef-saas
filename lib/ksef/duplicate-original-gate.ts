@@ -1,14 +1,14 @@
 /**
- * Brama pochodzenia oryginału z oznaczeniem FaktFlow (D-A4-1b-3 PR C, plan
+ * Brama pochodzenia oryginału z oznaczeniem FaktWay (D-A4-1b-3 PR C, plan
  * „zero zgubionych faktur”, spec v3 5.2; decyzje Bartosza 08.10.2026 C1–C8).
  *
  * Przy werdykcie `faktflow-original` runner ocenia plik oryginału z KSeF:
- * czy wygląda na plik z generatora FaktFlow zwykłej faktury (`importable` —
- * klient zapisze go w FaktFlow sam), czy nie (`review` — przegląd operatora,
- * I5R). Wynik trafia na znacznik jako `original_check.importGate`; SQL z 00149
+ * czy wygląda na plik z generatora FaktWay zwykłej faktury (`importable` —
+ * klient zapisze go w FaktWay sam), czy nie (`review` — przegląd operatora,
+ * I5R). Wynik trafia na znacznik jako `original_check.importGate`; SQL z 00156
  * czyta go w ofercie (`ksef_duplicate_original_offer`) i w blokadzie.
  *
- * Reguły są jawne (T2): każda odpowiada temu, czego generator FaktFlow
+ * Reguły są jawne (T2): każda odpowiada temu, czego generator FaktWay
  * zwykłej faktury nie pisze; `parsed.warnings` NIE jest używane. Reguły
  * 1 (`currency`) i 2 (`parse`) kończą ocenę, pozostałe zbierane naraz,
  * w kolejności `ORIGINAL_GATE_PROBLEMS`. `preview` liczony, gdy plik się
@@ -72,7 +72,7 @@ const PREVIEW_NAME_MAX = 120;
 /** NIP nabywcy: dokładnie tyle cyfr (reguła 7 `buyer-id`, `buyerIdentityFromParsed`). */
 const BUYER_NIP_DIGITS = 10;
 
-/** Wartości `P_12`, które pisze generator FaktFlow (`VAT_RATE_MAP`) — reguła 11 `rates`. */
+/** Wartości `P_12`, które pisze generator FaktWay (`VAT_RATE_MAP`) — reguła 11 `rates`. */
 const GENERATOR_P12: ReadonlySet<string> = new Set(Object.values(FA3_P12_BY_VAT_RATE));
 
 const present = (value: string | undefined): boolean => value !== undefined && value.trim() !== '';
@@ -107,7 +107,7 @@ function centsOf(raw: string | undefined): number | null {
  * Reguła 13: brak P_15 (albo nieczytelne sumy) albo P_15 ≠ Σ P_13_x + Σ P_14_x co do grosza.
  * Ściśle (nie ±0,01 jak w spec 5.2): kontrola zapisu 4.8 `totals` wymaga równości, a plik
  * „importable”, którego nie da się zapisać, krążyłby w ponownym sprawdzeniu bez wyjścia.
- * Generator FaktFlow sumuje P_15 dokładnie, więc każda różnica = plik do przeglądu.
+ * Generator FaktWay sumuje P_15 dokładnie, więc każda różnica = plik do przeglądu.
  */
 function totalsDoNotAddUp(sums: ParsedInvoice['ksefSums']): boolean {
   if (!sums) return true;
@@ -123,7 +123,7 @@ function totalsDoNotAddUp(sums: ParsedInvoice['ksefSums']): boolean {
   return gross !== parts;
 }
 
-/** Reguła 14: adnotacje, których generator FaktFlow zwykłej faktury nie pisze, albo niespójne ze stawkami pozycji. */
+/** Reguła 14: adnotacje, których generator FaktWay zwykłej faktury nie pisze, albo niespójne ze stawkami pozycji. */
 function annotationsBreakRules(parsed: ParsedInvoice, content: ImportContent): boolean {
   if (content.annotationProblems.length > 0) return true;
   const file = parsed.ksefAnnotations;

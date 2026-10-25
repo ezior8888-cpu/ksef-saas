@@ -194,7 +194,7 @@ export const OPERATOR_DUPLICATE_MESSAGES = {
   runbook: (code: string) => `${code}: runbook KSEF_DUPLICATE_RECONCILE — sprawdź w KSeF i zgłoś Bartoszowi.`,
   /** Alarm monitora i podpowiedź w tabeli I5D `/admin/ksef` (2.7.4). */
   i5dEnv: 'I5D-env: faktura czeka na decyzję klienta, ale dane oryginału sprawdzono w innym środowisku KSeF niż obecne — klient nie zapisze decyzji (runbook KSEF_DUPLICATE_RECONCILE, przełączenie środowiska).',
-  // ── PR C (00149, spec v3 6.6; bez przeglądu prawnika). Nowe klucze; zmienione `reason`
+  // ── PR C (00156, spec v3 6.6; bez przeglądu prawnika). Nowe klucze; zmienione `reason`
   // i `OPERATOR_MESSAGES.duplicateRequeue` dostają brzmienie 6.6 razem z zachowaniem (grupa E,
   // przypięte `admin-ksef-cykl-dane.test.ts`).
   knownNow: (k: string) =>
@@ -202,25 +202,25 @@ export const OPERATOR_DUPLICATE_MESSAGES = {
   crossTenant: (k: string) =>
     `cross-tenant: numer KSeF ${k} albo numer tego dokumentu ma faktura sprzedaży innej firmy z tym samym NIP — nie zapisuj decyzji; runbook KSEF_DUPLICATE_RECONCILE „Oryginał w innej firmie”, decyzja Bartosza.`,
   provenanceReview: (problems: string) =>
-    `provenance-review: plik z oznaczeniem FaktFlow nie wygląda na plik z generatora FaktFlow (${problems}). Przejrzyj plik i wybierz: „Zapisz fakturę z KSeF w FaktFlow” (po rozmowie z klientem, notatka; tylko gdy plik da się zapisać) albo „Oddaj decyzję klientowi (plik nie z FaktFlow)”. Po decyzji poinformuj klienta (oddanie wysyła e-mail samo).`,
+    `provenance-review: plik z oznaczeniem FaktWay nie wygląda na plik z generatora FaktWay (${problems}). Przejrzyj plik i wybierz: „Zapisz fakturę z KSeF w FaktWay” (po rozmowie z klientem, notatka; tylko gdy plik da się zapisać) albo „Oddaj decyzję klientowi (plik nie z FaktWay)”. Po decyzji poinformuj klienta (oddanie wysyła e-mail samo).`,
   recheckPending: (kind: string | null, at: string | null) =>
     `recheck-needed (${kind ?? 'brak oceny pliku'}, ${at ?? '—'}): faktura czeka na nowy werdykt — cron „Tylko uzgodnij” po 48 h od próby; możesz od razu „Tylko uzgodnij”. Decyzji i przypomnienia teraz nie ma.`,
-  reviewRecordHint: 'Zapis z plikiem spoza generatora FaktFlow: faktura trafi do FaktFlow z danymi z pliku jak z Magicznego importu. Stawka spoza FaktFlow (0 WDT, 0 EX, 22, 7, 4, 3) albo oznaczenia FP/TP/GTU/procedury wstrzymają JPK za ten miesiąc z komunikatem nazywającym fakturę — powiedz to klientowi.',
+  reviewRecordHint: 'Zapis z plikiem spoza generatora FaktWay: faktura trafi do FaktWay z danymi z pliku jak z Magicznego importu. Stawka spoza FaktWay (0 WDT, 0 EX, 22, 7, 4, 3) albo oznaczenia FP/TP/GTU/procedury wstrzymają JPK za ten miesiąc z komunikatem nazywającym fakturę — powiedz to klientowi.',
   releaseNoGate: 'Ocena pliku nie jest zapisana na wpisie — najpierw „Tylko uzgodnij” (nowa ocena), potem oddanie.',
   releaseFailed: 'Oddanie nie zadziałało (stan po zapisie niezgodny) — nic nie zapisano; zgłoś Bartoszowi.',
   releaseAlreadyEmailed: (at: string) =>
     `Decyzja była już oddana; e-mail do klienta wysłany ${at}.`,
-  reviewRecordOnly: 'Plik jest w historii tego dokumentu albo ma tę samą treść — to plik z FaktFlow: „Oddaj decyzję klientowi” niedostępne. Zapisz fakturę z KSeF albo zgłoś Bartoszowi (runbook).',
-  recordButton: 'Zapisz fakturę z KSeF w FaktFlow',
+  reviewRecordOnly: 'Plik jest w historii tego dokumentu albo ma tę samą treść — to plik z FaktWay: „Oddaj decyzję klientowi” niedostępne. Zapisz fakturę z KSeF albo zgłoś Bartoszowi (runbook).',
+  recordButton: 'Zapisz fakturę z KSeF w FaktWay',
   choiceRecord: 'Klient: zapisać fakturę z KSeF (ta sama sprzedaż)',
   choiceSameRecord: 'Klient: to ta sama sprzedaż — zapisz fakturę z KSeF',
   choiceOtherRecord: 'Klient: to inna sprzedaż — zapisz fakturę z KSeF',
   confirmRecord: (k: string, nr: string) =>
     `Klient potwierdził „Rozumiem skutki”: obowiązują dane faktury ${k} z KSeF, nie dane dokumentu ${nr}.`,
   noteStoredHint: 'Notatka trafi do zapisu decyzji przy fakturze (przechowywany 10 lat, firma ma do niego dostęp) — bez uwag wewnętrznych.',
-  releaseButton: 'Oddaj decyzję klientowi (plik nie z FaktFlow)',
-  releaseLead: 'Oddajesz decyzję klientowi jak przy fakturze z innego programu: bez zapisu faktury z KSeF w FaktFlow, numer zostaje przy dokumencie. Klient dostanie e-mail z prośbą o decyzję.',
-  releaseNoteLabel: 'Co sprawdziłeś w pliku i dlaczego to nie plik z FaktFlow',
+  releaseButton: 'Oddaj decyzję klientowi (plik nie z FaktWay)',
+  releaseLead: 'Oddajesz decyzję klientowi jak przy fakturze z innego programu: bez zapisu faktury z KSeF w FaktWay, numer zostaje przy dokumencie. Klient dostanie e-mail z prośbą o decyzję.',
+  releaseNoteLabel: 'Co sprawdziłeś w pliku i dlaczego to nie plik z FaktWay',
   releaseSuccess: (email: string) =>
     `Oddano decyzję klientowi; e-mail z prośbą o decyzję wysłany do ${email}.`,
   releaseSentNoEmail: (reason: string) =>
@@ -228,7 +228,7 @@ export const OPERATOR_DUPLICATE_MESSAGES = {
   releaseNotReview: 'Faktura nie czeka na przegląd pliku (stan się zmienił) — odśwież kartę.',
   releaseStale: 'Dane oryginału zmieniły się od otwarcia karty — odśwież kartę.',
   notBuildable: (reason: string) =>
-    `Nie da się zapisać tej faktury w FaktFlow z pliku z KSeF (${reason}) — przy review-pair oddaj decyzję klientowi; przy review-record zgłoś Bartoszowi (runbook „Zapis oryginału odmówiony”).`,
+    `Nie da się zapisać tej faktury w FaktWay z pliku z KSeF (${reason}) — przy review-pair oddaj decyzję klientowi; przy review-record zgłoś Bartoszowi (runbook „Zapis oryginału odmówiony”).`,
   archive: (path: string, detail: string) =>
     `Archiwum oryginału ${path}: ${detail === 'missing' ? 'brak pliku' : 'inny SHA-256 albo rozmiar niż w original_check'} — oznaczone do ponownego sprawdzenia (cron „Tylko uzgodnij”; runner zapisze plik, gdy go brak; inny plik pod tym kluczem = archive-conflict, runbook).`,
   gateDrift: 'Bieżący kod ocenia plik inaczej (inny wynik albo inne problemy) niż ocena zapisana na wpisie — oznaczone do ponownego sprawdzenia; nowy werdykt zapisze nową ocenę.',
@@ -242,11 +242,11 @@ export const OPERATOR_DUPLICATE_MESSAGES = {
   noDate: (nrK: string) =>
     `Brak daty nadania numeru KSeF faktury ${nrK} (I3K) — ./scripts/ops/oryginal-ksef-data-nadania.sh <id faktury> <data z KSeF> (runbook).`,
   successImport: (choice: DuplicateChoice, nrK: string) =>
-    `Zapisano decyzję klienta (${choice === 'same_sale' ? 'ta sama sprzedaż' : 'inna sprzedaż'}). Faktura ${nrK} z KSeF jest w FaktFlow; dokument wycofany bez numeru.`,
+    `Zapisano decyzję klienta (${choice === 'same_sale' ? 'ta sama sprzedaż' : 'inna sprzedaż'}). Faktura ${nrK} z KSeF jest w FaktWay; dokument wycofany bez numeru.`,
   successRecord: (nrK: string) =>
-    `Zapisano fakturę ${nrK} z KSeF w FaktFlow; dokument wycofany bez numeru.`,
+    `Zapisano fakturę ${nrK} z KSeF w FaktWay; dokument wycofany bez numeru.`,
   remindReview: 'provenance-review: klient nie zdecyduje, dopóki nie przejrzysz pliku — przypomnienie nic nie da.',
-  i5r72h: 'I5R-72h: plik z oznaczeniem FaktFlow czeka na przegląd operatora dłużej niż 72 h — klient usłyszał „damy znać”.',
+  i5r72h: 'I5R-72h: plik z oznaczeniem FaktWay czeka na przegląd operatora dłużej niż 72 h — klient usłyszał „damy znać”.',
 } as const;
 
 /**
@@ -264,10 +264,10 @@ export const ORIGINAL_GATE_PROBLEM_LABELS: Readonly<Record<OriginalGateProblem, 
   'no-lines': 'brak pozycji',
   'gross-prices': 'ceny brutto (P_9B/P_11A)',
   'line-fields': 'pozycja bez P_9A/P_11/P_12 albo z P_10/P_11Vat',
-  rates: 'stawka P_12 spoza FaktFlow',
+  rates: 'stawka P_12 spoza FaktWay',
   amounts: 'kwoty pozycji niezgodne z sumami stawek (C5c)',
   totals: 'P_15 ≠ suma P_13 + P_14',
-  annotations: 'adnotacje, których FaktFlow nie wystawia, albo nieczytelne',
+  annotations: 'adnotacje, których FaktWay nie wystawia, albo nieczytelne',
   markers: 'FP/TP/GTU/procedura/podmiot upoważniony',
   'sale-date': 'OkresFa, P_6A albo nieczytelna data sprzedaży',
 };

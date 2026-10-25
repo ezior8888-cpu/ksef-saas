@@ -1,5 +1,5 @@
 /**
- * Projekcja oryginału K do zapisu w FaktFlow (D-A4-1b-3 PR C, spec v3 5.3):
+ * Projekcja oryginału K do zapisu w FaktWay (D-A4-1b-3 PR C, spec v3 5.3):
  * nagłówek i pozycje faktury z KSeF zbudowane tymi samymi budowniczymi co
  * Magiczny import (`lib/import/imported-invoice-row.ts`, PR C0), przekazywane
  * do `decide_ksef_duplicate_original` jako `p_import` (jsonb). Kolumny stałe
@@ -7,7 +7,7 @@
  * ustawia SQL — projekcja ich nie niesie (`ORIGINAL_IMPORT_SQL_COLUMNS`).
  *
  * `originalImportProjectionProblem` to lustro `ksef_original_import_mismatch`
- * (00149, 4.8): te same kody w tej samej kolejności, wspólna tabela przypadków
+ * (00156, 4.8): te same kody w tej samej kolejności, wspólna tabela przypadków
  * `originalImportMismatchCases()` (test TS i R-C6 na bazie). Listy kluczy
  * i stawek niżej = listy w SQL 4.8 (pilnuje `tests/unit/zapis-oryginalu-migracja.test.ts`).
  *
@@ -99,7 +99,7 @@ export const ORIGINAL_IMPORT_INVOICE_KEYS = Object.keys(INVOICE_KEY_SET) as read
 /** Klucze `p_import->'lines'[]` (4.8 `lines`) = klucze `ImportedLineInsert` z C0. */
 export const ORIGINAL_IMPORT_LINE_KEYS = Object.keys(LINE_KEY_SET) as readonly OriginalImportLineKey[];
 
-/** Stawki przyjmowane przez 4.8: FaktFlow zawsze, FA(3) spoza FaktFlow tylko przy ofercie `review-*` (F42); `nieznana` nigdy. */
+/** Stawki przyjmowane przez 4.8: FaktWay zawsze, FA(3) spoza FaktWay tylko przy ofercie `review-*` (F42); `nieznana` nigdy. */
 export const ORIGINAL_IMPORT_VAT_RATES = { faktflow: VAT_RATES, reviewOnly: FA3_ONLY_VAT_RATES } as const;
 
 /** `buyer_id_type` przyjmowane przez 4.8 `shape` (enum bazy). */
@@ -181,7 +181,7 @@ export interface OriginalImportProblemContext {
   ksefNumber: string;
   /** `original_check` znacznika (`summary`, `archivePath`, `sha256`, `sizeBytes`). */
   check: KsefDuplicateCheck;
-  /** Oferta: `pair`/`record` — 8 stawek FaktFlow; `review-*` — także `FA3_ONLY_VAT_RATES`. */
+  /** Oferta: `pair`/`record` — 8 stawek FaktWay; `review-*` — także `FA3_ONLY_VAT_RATES`. */
   offer: DuplicateOriginalOffer;
 }
 
@@ -388,7 +388,7 @@ const REVIEW_RATES: ReadonlySet<string> = new Set<string>([
   ...ORIGINAL_IMPORT_VAT_RATES.reviewOnly,
 ]);
 
-/** `pair`/`record` (i każda inna): 8 stawek FaktFlow; `review-*`: także FA(3) spoza FaktFlow. `nieznana` nigdy. */
+/** `pair`/`record` (i każda inna): 8 stawek FaktWay; `review-*`: także FA(3) spoza FaktWay. `nieznana` nigdy. */
 const ratesFor = (offer: unknown): ReadonlySet<string> =>
   offer === 'review-pair' || offer === 'review-record' ? REVIEW_RATES : FAKTFLOW_RATES;
 

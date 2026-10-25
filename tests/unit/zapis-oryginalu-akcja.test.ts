@@ -932,7 +932,7 @@ describe('decideKsefDuplicateAction — po decyzji: alarmy ze stanu bazy i toast
     expect(m.rpc).not.toHaveBeenCalled();
   });
 
-  it('ZF4: wczesny widok decided — zapisany import, a stara karta przysłała mode=no-import / offer=released: toast z zapisanej decyzji („jest w FaktFlow”), nie z wejścia', async () => {
+  it('ZF4: wczesny widok decided — zapisany import, a stara karta przysłała mode=no-import / offer=released: toast z zapisanej decyzji („jest w FaktWay”), nie z wejścia', async () => {
     const decided = decidedImport({ choice: 'other_sale' });
     seed({ invoice: decided.invoice, submissions: decided.submissions });
 
@@ -958,8 +958,8 @@ describe('decideKsefDuplicateAction — po decyzji: alarmy ze stanu bazy i toast
   });
 
   // STRAŻNIK (spec 7.2 wymienia ten przypadek, ale zachowanie PR B już go spełnia — zielony przed i po):
-  // zgubiona odpowiedź po decyzji no-import nie może dostać toastu „jest w FaktFlow” ani alarmów K.
-  it('ZF6 strażnik: zgubiona odpowiedź po decyzji no-import — stara karta (mode=import, offer=pair) dostaje toast PR B, nie „jest w FaktFlow”, bez alarmów K i bez RPC', async () => {
+  // zgubiona odpowiedź po decyzji no-import nie może dostać toastu „jest w FaktWay” ani alarmów K.
+  it('ZF6 strażnik: zgubiona odpowiedź po decyzji no-import — stara karta (mode=import, offer=pair) dostaje toast PR B, nie „jest w FaktWay”, bez alarmów K i bez RPC', async () => {
     const decided = decidedNoImport();
     seed({ invoice: decided.invoice, submissions: decided.submissions, k: null });
 
