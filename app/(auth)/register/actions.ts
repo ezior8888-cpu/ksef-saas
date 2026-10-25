@@ -11,6 +11,7 @@ import { getClientIp } from '@/lib/auth/get-client-ip';
 import { validatePassword } from '@/lib/auth/password';
 import { isSignupClosed } from '@/lib/feature-flags/signups';
 import { checkRegisterRateLimit } from '@/lib/rate-limit/auth';
+import { isHoneypotTripped } from '@/lib/security/honeypot';
 import { verifyTurnstile } from '@/lib/security/turnstile';
 import { userRegistered } from '@/lib/jobs/events';
 import { recordTermsAcceptance } from '@/lib/legal/record';
@@ -40,6 +41,11 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
     redirect('/register?error=terms_required');
   }
   const marketingConsent = formData.get('marketing') === 'on';
+
+  // Pole-pułapka przed Turnstile (jak w logowaniu).
+  if (isHoneypotTripped(formData)) {
+    redirect('/register?error=bot_check_failed');
+  }
 
   const ip = await getClientIp();
 

@@ -16,6 +16,7 @@ import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { GoogleIcon } from '@/components/auth/finora/google-icon'
 import { PasswordInput } from '@/components/auth/finora/password-input'
+import { HoneypotField } from '@/components/auth/honeypot-field'
 import { TurnstileWidget } from '@/components/auth/turnstile-widget'
 import { LegalInline } from '@/components/legal/legal-document'
 import { Button } from '@/components/ui/button'
@@ -201,6 +202,7 @@ export default async function RegisterPage({
               />
               <span>{MARKETING_STATEMENT.text} (dobrowolne)</span>
             </label>
+            <HoneypotField />
             <TurnstileWidget action='register' theme='light' />
             <Field>
               <Button className='w-full' type='submit'>
