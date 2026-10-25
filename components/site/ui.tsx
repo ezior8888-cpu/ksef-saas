@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ComponentProps, ReactNode } from 'react';
 
+import { FaktWayLogo } from '@/components/brand/faktway-logo';
 import { cn } from '@/lib/utils';
 
 import { Reveal } from './motion';
@@ -10,16 +11,9 @@ export function Container({ className, ...props }: ComponentProps<'div'>) {
   return <div className={cn('mx-auto max-w-6xl px-4 sm:px-6 lg:px-8', className)} {...props} />;
 }
 
-/**
- * Napis FaktWay w barwach panelu (jak logowanie). Logo graficzne czeka na
- * nowy znak, zielony zdjęty 23.10.2026.
- */
+/** Logo FaktWay (znak + napis) w nagłówku, stopce i ekranach stanu. */
 export function Wordmark({ className }: { className?: string }) {
-  return (
-    <span className={cn('text-xl font-bold tracking-tight text-foreground', className)}>
-      Fakt<span className="text-primary">Way</span>
-    </span>
-  );
+  return <FaktWayLogo className={cn('h-7', className)} />;
 }
 
 const BUTTON_VARIANTS = {

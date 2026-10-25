@@ -32,7 +32,7 @@ vi.mock('@/lib/audit/log', () => ({ logAudit: mocks.audit }));
 vi.mock('@/lib/jobs/events', () => ({ userRegistered: { create: (data: unknown) => ({ data }) } }));
 vi.mock('@/lib/auth/verified-user', () => ({ getVerifiedUserContext: mocks.userContext, requireVerifiedUserForPage: mocks.requirePage }));
 vi.mock('@/components/onboarding/form', () => ({ OnboardingForm: () => null }));
-vi.mock('@/components/brand/brand-wordmark', () => ({ BrandWordmark: () => null }));
+vi.mock('@/components/brand/faktway-logo', () => ({ FaktWayLogo: () => null, FaktWayMark: () => null }));
 vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn() }));
 vi.mock('@/lib/dashboard-shell-data', () => ({
   getCachedMembershipRowsWithTenants: vi.fn(), getDashboardSessionUser: vi.fn(), mapMembershipRowsToOrgSwitcher: vi.fn(),
