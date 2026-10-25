@@ -10,6 +10,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 export interface PaymentFailedProps {
   appUrl: string;
   tenantName: string;
@@ -38,6 +40,7 @@ export default function PaymentFailed({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={headingStyle}>
             Nie udało się pobrać płatności
           </Heading>

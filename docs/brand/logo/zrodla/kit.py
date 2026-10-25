@@ -47,10 +47,16 @@ def wordmark_geometry(reversed_=False):
     return d, (0.0, max(xs), wm.ASC, wm.DESC)
 
 
+def transform(x, y, scale):
+    """Przesunięcie i skala napisu z 4 miejscami po przecinku (2 miejsca zmieniały skalę o 0,6%)."""
+    num = lambda v: f"{v:.4f}".rstrip("0").rstrip(".")
+    return f"translate({num(x)} {num(y)}) scale({num(scale)})"
+
+
 def wordmark_path(x, y, scale, fill, reversed_=False):
     """Napis przesunięty tak, że punkt (0, 0) jego układu trafia w (x, y)."""
     d, _ = wordmark_geometry(reversed_)
-    return f'<path id="napis" fill="{fill}" transform="translate({fmt(x)} {fmt(y)}) scale({fmt(scale)})" d="{d}"/>'
+    return f'<path id="napis" fill="{fill}" transform="{transform(x, y, scale)}" d="{d}"/>'
 
 
 # ---------- znak ----------
