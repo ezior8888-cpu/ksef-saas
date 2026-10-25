@@ -23,10 +23,15 @@ naprawiamy i w jakiej kolejności.
 
 ## Wynik w skrócie
 
-- **Dziś obecny sprzęt i kod nie uciągną 3000 aktywnych userów.** Po
-  sesjach 1–24 (każda mała) sprzęt powinien wystarczyć do ok. 1500–2000
-  userów. Dalej wchodzą etapy z sekcji 4: większy db-1, repliki aplikacji
-  z jednego obrazu, worker na osobnej maszynie. Żaden z nich nie wymaga
+- **Dziś obecny sprzęt i kod nie uciągną 3000 aktywnych userów.** Według
+  Bartosza (25.10) serwer bazy nie ma 4 rdzeni i 8 GB. Najpewniej to
+  „wariant budżetowy” z `docs/migration/PRZEPROWADZKA-HETZNER.md` §1.7:
+  3× CX23, każdy 2 vCPU / 4 GB / 40 GB (typ do potwierdzenia). Na takim
+  db-1 jest dziś miejsce na ok. 200–500 aktywnych. Po sesjach kodu,
+  Storage Boxie, wyłączeniu Logflare i strojeniu bazy pod 4 GB: ok.
+  800–1500 (środek 1000–1200). Na 3000 trzeba db-1 z 8 vCPU / 16 GB
+  i dysku poza 40 GB, a do tego etapów z sekcji 4 (repliki aplikacji
+  z jednego obrazu, worker na osobnej maszynie). Żaden z nich nie wymaga
   przebudowy architektury.
 - **Największa dźwignia to sprawdzanie sesji.** Produkcja podpisuje sesje
   kluczem HS256 (publiczny JWKS jest pusty), więc `getClaims()` woła GoTrue
@@ -41,7 +46,8 @@ naprawiamy i w jakiej kolejności.
   `singletonKey` na polityce `standard` niczego nie deduplikuje.
 - **Czas jest groźniejszy niż userzy:** nocna kopia JSON trzyma całą bazę
   w pamięci workera, sprzątanie dzienników nie mieści się w limicie 8 s,
-  a dysk db-1 zapełnią zrzuty i pełnowymiarowe zdjęcia paragonów.
+  dysk db-1 (przy CX23 tylko 40 GB) zapełnią 14 lokalnych zrzutów
+  i dzienniki, a dysk z plikami — pełnowymiarowe zdjęcia paragonów.
 - **Już dziś nie działa:** upload zdjęcia paragonu powyżej 1 MB (domyślny
   limit Server Actions).
 
@@ -83,16 +89,23 @@ naprawiamy i w jakiej kolejności.
 | Szczyt | 9–11 w dni robocze: 400–600 sesji naraz; dni terminów (20., 25., koniec i początek miesiąca) ×3 |
 | Ruch | 20–40 żądań/s z kliknięć zwykle, 100–150 w dni terminów, plus ruch w tle |
 | Dokumenty | 40 wystawionych + 60 odebranych faktur na firmę miesięcznie; szczyt wysyłek 1–2 tys./h; 15 paragonów OCR na firmę |
-| Serwery | app-1 CX23 (2 vCPU, 4 GB): aplikacja, worker, Redis, buildy; db-1 CPX32 (4 vCPU, 8 GB): Supabase. Parametry z dokumentów, do potwierdzenia |
+| Serwery | app-1 CX23 (2 vCPU, 4 GB): aplikacja, worker, Redis, buildy. db-1: cały Supabase; analiza 24.10 liczyła CPX32 (4 vCPU, 8 GB, 160 GB), korekta 25.10: najpewniej CX23 (2 vCPU, 4 GB, 40 GB). Typy do potwierdzenia (sekcja 5) |
 
 Po pierwszych tygodniach z prawdziwym ruchem podmień założenia na liczby
 z produkcji (sekcja 5).
 
 ## 3. Sesje
 
-Kolejność: najpierw to, co boli przed 3000 i jest tanie. Rozmiar: S = do
-kilku godzin, M = dzień. Identyfikatory ustaleń odsyłają do prywatnego
-raportu (numeracja inna niż w „Rejestrze braków” z 17.10).
+Numer sesji to identyfikator, nie kolejność. Rozmiar: S = do kilku godzin,
+M = dzień. Identyfikatory ustaleń odsyłają do prywatnego raportu (numeracja
+inna niż w „Rejestrze braków” z 17.10).
+
+**Kolejność wykonania (25.10, dla db-1 = CX23: mały dysk i RAM idą
+pierwsze):** 23 → 22 → 20 → 26 → 4 → 1 → 2 → 8 → 9 → 19 → 21 → 13 → 14 →
+17 → 5 → 6 → 7 → 3 → 12 → 18 → 10 → 11 → 24, a na końcu 15 i 16.
+Sesje 15 i 16 dokładają obciążenie bazy, więc na CX23 robi się je po
+pomiarze i z niższymi wartościami: wysyłka 6–8 slotów, OCR
+i kategoryzacja 2–3.
 
 | # | Sesja | Typ | Kto | Rozmiar | Ustalenia | Gotowe, gdy |
 |---|---|---|---|---|---|---|
@@ -120,14 +133,16 @@ raportu (numeracja inna niż w „Rejestrze braków” z 17.10).
 | 22 | Skrypt kopii `db-backup.sh`: sprzątanie `.partial`, kontrola wolnego miejsca przed zrzutem, bez drugiej kopii w `.outbox`, retencja przed wysyłką | infra | razem | S | BCK-01, DBC-01, BCK-04, BCK-05 | Test skryptu na katalogu tymczasowym; wdrożenie na db-1 przez Bartosza |
 | 23 | Pomiar: opóźnienie pętli zdarzeń, pamięć i czas żądań w logu web i workera co 60 s; `scripts/ops/pojemnosc-db.sh` (tylko odczyt); próbkowanie Sentry bez health i telemetrii | operacje | sesja | S | CPU-12, DBC-10, EXT-15 | Linia JSON z metrykami w logach obu procesów; skrypt uruchamiany jedną linią |
 | 24 | Przygotowanie replik: lekki `/api/live` do HEALTHCHECK, `deploymentId` i ID z SHA, stały klucz Server Actions, `stop-timeout` | infra | razem | M | HOR-01, REQ-09, CPU-05, HOR-11, DBC-05 | Healthcheck nie dotyka bazy ani Redisa; dwa buildy tego samego commita mają te same ID akcji |
-| 25 | Decyzje i konfiguracja Bartosza: limity GoTrue i przekazywanie IP klienta, klucze JWT asymetryczne, pula PostgREST i strojenie Postgresa, Storage Box + kopia MinIO + WAL, audyt pollingu KSeF tylko przy zmianie, Realtime czy endpoint statusu, model klasyfikatora | decyzja | Bartosz | M | GTR-*, DBC-04, DBC-08, BCK-02, BCK-03, EXT-03, DB-05, EXT-16 | Każda decyzja zapisana z datą; zmiany w oknie serwisowym za zgodą |
+| 25 | Decyzje i konfiguracja Bartosza: limity GoTrue i przekazywanie IP klienta, klucze JWT asymetryczne, pula PostgREST (na 2 vCPU 8–10) i strojenie Postgresa pod rozmiar serwera, Storage Box + kopia MinIO + WAL, wyłączenie Logflare i Vector (na 4 GB od razu), Realtime czy endpoint statusu, model klasyfikatora | decyzja | Bartosz | M | GTR-*, DBC-04, DBC-08, BCK-02, BCK-03, DB-05, EXT-16 | Każda decyzja zapisana z datą; zmiany w oknie serwisowym za zgodą |
+| 26 | Audyt odpytywania KSeF: wiersz w `audit_logs` tylko przy zmianie albo błędzie, nie przy każdym żądaniu HTTP (ok. 70% wierszy audytu) | kod | sesja | S | EXT-03 | Test: zwykłe odpytanie bez zmian nie zapisuje audytu; błąd i zmiana stanu zapisują |
 
 ## 4. Etapy skalowania (sprzęt)
 
 | Etap | Kiedy (metryka) | Co | Kod potrzebny wcześniej |
 |---|---|---|---|
-| 0 | teraz, przed launchem | sesje 1–24 na obecnym sprzęcie | — |
-| 1 | CPU db-1 > 70% w godz. 9–11 dnia terminu, p95 `/rest/v1` > 300 ms albo trafność cache < 99% | db-1 CPX32 → CPX42 (8 vCPU, 16 GB), potem pula PostgREST 15–20 i strojenie Postgresa | 8, 9, 19, 23 |
+| 0 | teraz, przed launchem | sesje kodu na obecnym sprzęcie + Storage Box (lokalnie 2–3 kopie), wyłączenie Logflare i Vector, Studio na żądanie, strojenie bazy pod rozmiar serwera | — |
+| 1a | przed pierwszym płacącym klientem (twarda zasada z `PRZEPROWADZKA-HETZNER.md` §1.7) albo którykolwiek sygnał: na db-1 wolne < 200 MB RAM, swap Postgresa > 0,5 GB, CPU > 70% w godz. 9–11, dysk > 70%, trafność cache < 99% | db-1 CX23 → CX33 (4 vCPU, 8 GB); opcja „tylko CPU i RAM” da się cofnąć, ale zostawia dysk 40 GB, więc dane i kopie na Volume albo Storage Box | 22, 23 |
+| 1b | ~1500 aktywnych albo te same sygnały na CX33 | db-1 → 8 vCPU / 16 GB (CX43 albo CPX42), potem pula PostgREST i strojenie Postgresa pod nowy rozmiar | 8, 9, 19, 21 |
 | 2 | wykorzystanie pętli zdarzeń web > 0,6 w szczycie przez 3 dni albo p99 opóźnienia pętli > 100 ms | obraz budowany w CI (koniec buildów na produkcji), app-1 4 vCPU, 2–3 kontenery web z jednego obrazu, limity pamięci kontenerów | 23, 24 |
 | 3 | cykl skrzynki > 10 min po sesji 14, p95 oczekiwania wysyłki > 30 s, dysk db-1 > 70% | worker na osobnej maszynie w sieci prywatnej, Redis na adresie prywatnym, MinIO na Volume albo Object Storage, archiwizacja WAL | 13, 14 + stan KSeF z pamięci procesu do Redisa/bazy |
 | 4 | CPX42 > 70% CPU w zwykłe dni | Postgres na osobnym serwerze, usługi Supabase na drugim, osobny PostgREST dla workera, replika do odczytu dla raportów | 25 |
@@ -137,8 +152,11 @@ raportu (numeracja inna niż w „Rejestrze braków” z 17.10).
 Rozstrzygają ustalenia „do sprawdzenia” i kalibrują progi. Sesja 23
 zamienia je w jeden skrypt.
 
-- `nproc`, `free -h`, `swapon --show`, `df -h`, `docker stats --no-stream` na app-1 i db-1 (rano 9–11 i o 02:00).
-- Położenie MinIO (db-1 czy ops-1) i jego zajętość.
+- **Najpierw:** typ każdego serwera (konsola Hetznera albo `nproc; free -h; df -h /`). Od tego zależą wszystkie progi.
+- `swapon --show`, `docker stats --no-stream` na app-1 i db-1 (rano 9–11 i o 02:00), `vmstat` (kradzież CPU na linii CX).
+- Które kontenery stosu Supabase działają na db-1 (Logflare/analytics, Vector, Studio, Storage, imgproxy, Supavisor) i rozmiar bazy `_supabase`.
+- Położenie MinIO aplikacji (dokumenty są sprzeczne: db-1 czy ops-1) i jego zajętość.
+- `KEEP` i `RCLONE_REMOTE` w `/etc/faktflow-backup.env`, liczba i rozmiar zrzutów w katalogu kopii.
 - Pula i limity PostgREST (`PGRST_DB_POOL`, `PGRST_DB_MAX_ROWS`), limity czasu ról.
 - Ustawienia Postgresa (`shared_buffers`, `work_mem`, `max_connections`, `archive_mode`) i trafność cache z `pg_stat_database`.
 - 25 najdroższych zapytań z `pg_stat_statements`.
@@ -152,5 +170,7 @@ zamienia je w jeden skrypt.
 | Data | Sesja | PR | Stan |
 |---|---|---|---|
 | 24.10.2026 | Analiza i plan | #329 | plan gotowy, czeka na akceptację Bartosza |
+| 25.10.2026 | Korekta: db-1 nie ma 4 vCPU / 8 GB (najpewniej CX23) | #329 | przeliczone progi, nowa kolejność, sesja 26, etap 1 podzielony na 1a/1b |
 
-**Następny krok:** sesja 1 (baner KSeF), po akceptacji planu przez Bartosza.
+**Następny krok:** po akceptacji planu przez Bartosza i potwierdzeniu typów
+serwerów sesja 23 (pomiar i skrypt odczytu), potem 22, 20, 26, 4.
