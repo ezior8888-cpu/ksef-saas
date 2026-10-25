@@ -177,7 +177,7 @@ ginie): „Po Twoim eksporcie doszły faktury z KSeF za okresy …”.
 
 ## 7. Rozmiar
 
-Na fakturę ≈ XML 4–12 KB (MinIO na db-1) + `fa3_data` 3–6 KB + pozycje
+Na fakturę ≈ XML 4–12 KB (MinIO na ops-1) + `fa3_data` 3–6 KB + pozycje
 ~1,2 KB + dziennik ~0,5 KB ≈ 15–20 KB. 100 firm × 2 000 faktur × 2 kierunki
 ≈ 8 GB w najgorszym razie. Twardy limit 25 000 pozycji na strumień
 (≈ 0,5 GB). Przed wdrożeniem i co tydzień: `ksef-historia.sh stan` (sekcja
