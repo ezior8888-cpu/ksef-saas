@@ -30,7 +30,7 @@ vi.mock('@/components/onboarding/form', () => ({ OnboardingForm: () => null }));
 vi.mock('@/components/onboarding/import-source-selector', () => ({ ImportSourceSelector: () => null }));
 vi.mock('@/components/onboarding/import-progress-view', () => ({ ImportProgressView: () => null }));
 vi.mock('@/components/invite/invite-accept-form', () => ({ InviteAcceptForm: () => null }));
-vi.mock('@/components/brand/brand-wordmark', () => ({ BrandWordmark: () => null }));
+vi.mock('@/components/brand/faktway-logo', () => ({ FaktWayLogo: () => null, FaktWayMark: () => null }));
 vi.mock('next/link', () => ({ default: () => null }));
 vi.mock('lucide-react', () => ({ ArrowLeft: () => null, CheckCircle2: () => null }));
 

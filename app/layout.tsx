@@ -62,9 +62,13 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+  // Pliki z docs/brand/logo/zrodla/aplikacja.py. `icon.svg` w trybie ciemnym
+  // przełącza się na jasny niebieski; `favicon.ico` (16/32/48 px) dla reszty.
   icons: {
-    icon: '/icons/icon-192x192.png',
-    shortcut: '/icons/icon-96x96.png',
+    icon: [
+      { url: '/favicon.ico', sizes: '48x48' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
     apple: '/icons/apple-touch-icon.png',
   },
 };

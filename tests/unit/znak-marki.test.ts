@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * 23.10.2026: Bartosz kazał zdjąć zielony znak marki (`faktflow-mark.png`,
- * zielony kwadrat z kartką) ze wszystkich ekranów. Nowe logo przyjdzie
- * osobno, do tego czasu marka to sam napis FaktWay. Strażnik pilnuje, żeby
- * stary znak nie wrócił przy kolejnej zmianie wyglądu.
+ * zielony kwadrat z kartką) ze wszystkich ekranów. Od 25.10.2026 jest nowe
+ * logo (`components/brand/faktway-logo.tsx`, test `logo-faktway`). Strażnik
+ * pilnuje, żeby stary znak nie wrócił przy kolejnej zmianie wyglądu.
  */
 
 const ROOT = process.cwd();

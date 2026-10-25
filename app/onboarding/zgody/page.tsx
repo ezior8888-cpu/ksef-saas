@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { signOut } from '@/app/(auth)/login/actions';
-import { BrandWordmark } from '@/components/brand/brand-wordmark';
+import { FaktWayLogo } from '@/components/brand/faktway-logo';
 import { LegalInline } from '@/components/legal/legal-document';
 import { Button } from '@/components/ui/button';
 import { requireVerifiedUserForPage } from '@/lib/auth/verified-user';
@@ -48,7 +48,9 @@ export default async function LegalGatePage({
       <div className="relative z-[1] w-full max-w-2xl">
         <div className="ff-glass-pane rounded-3xl p-8 lg:p-12">
           <div className="mb-6 flex justify-center">
-            <BrandWordmark variant="app" href="/" />
+            <Link href="/" aria-label="FaktWay, strona główna" className="transition-opacity hover:opacity-80">
+              <FaktWayLogo className="h-8" />
+            </Link>
           </div>
           <h1 className="mb-3 text-center text-2xl font-semibold tracking-tight">
             {isUpdate ? 'Zmieniliśmy dokumenty FaktWay' : 'Zanim zaczniesz — dokumenty FaktWay'}

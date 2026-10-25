@@ -10,6 +10,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 export interface TrialEndingProps {
   appUrl: string;
   tenantName: string;
@@ -49,6 +51,7 @@ export default function TrialEnding({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={{ ...headingStyle, color: accentColor }}>
             {headline}
           </Heading>
