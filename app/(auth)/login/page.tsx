@@ -14,6 +14,7 @@ import { AuthSplitLayout } from '@/components/auth/finora/auth-split-layout'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { GoogleIcon } from '@/components/auth/finora/google-icon'
 import { PasswordInput } from '@/components/auth/finora/password-input'
+import { HoneypotField } from '@/components/auth/honeypot-field'
 import { TurnstileWidget } from '@/components/auth/turnstile-widget'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -129,6 +130,7 @@ export default async function LoginPage({
                 {FORGOT_PASSWORD_LABEL}
               </Link>
             </div>
+            <HoneypotField />
             <TurnstileWidget action='login' theme='light' />
             <Field>
               <Button className='w-full' type='submit'>

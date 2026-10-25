@@ -9,6 +9,7 @@ import { trackServer } from '@/lib/analytics/server';
 import { getClientIp } from '@/lib/auth/get-client-ip';
 import { isGoogleLoginEnabled } from '@/lib/auth/oauth-providers';
 import { checkLoginRateLimit } from '@/lib/rate-limit/auth';
+import { isHoneypotTripped } from '@/lib/security/honeypot';
 import { verifyTurnstile } from '@/lib/security/turnstile';
 import { createClient } from '@/lib/supabase/server';
 import { signOutCurrentSession } from '@/lib/auth/sign-out';
@@ -24,6 +25,12 @@ export async function loginWithEmail(formData: FormData): Promise<void> {
 
   if (!email || !password) {
     redirect('/login?error=missing_fields');
+  }
+
+  // Pole-pułapka: człowiek go nie widzi, prosty bot wypełnia. Przed
+  // Turnstile, żeby taki bot nie kosztował nawet zapytania do Cloudflare.
+  if (isHoneypotTripped(formData)) {
+    redirect('/login?error=bot_check_failed');
   }
 
   const ip = await getClientIp();

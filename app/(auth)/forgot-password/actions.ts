@@ -7,6 +7,7 @@ import { logAudit } from '@/lib/audit/log';
 import { getClientIp } from '@/lib/auth/get-client-ip';
 import { getTrustedAppOrigin } from '@/lib/auth/trusted-origin';
 import { checkPasswordRecoveryRequestRateLimit } from '@/lib/rate-limit/password';
+import { isHoneypotTripped } from '@/lib/security/honeypot';
 import { verifyTurnstile } from '@/lib/security/turnstile';
 import { createClient } from '@/lib/supabase/server';
 
@@ -22,6 +23,8 @@ export async function requestPasswordReset(formData: FormData): Promise<void> {
 
   const ip = await getClientIp().catch(() => null);
   if (!ip) redirect('/forgot-password?error=verification_unavailable');
+  // Pole-pułapka przed Turnstile (jak w logowaniu).
+  if (isHoneypotTripped(formData)) redirect('/forgot-password?error=bot_check_failed');
   const token = formData.get('cf-turnstile-response');
   if (token !== null && (typeof token !== 'string' || token.length > 2048)) {
     redirect('/forgot-password?error=bot_check_failed');
