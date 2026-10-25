@@ -48,7 +48,7 @@ export const POLITYKA_COOKIES: LegalDocument = {
           ['sidebar_state', 'cookie (własne)', 'zapamiętanie, czy menu boczne panelu jest rozwinięte, czy zwinięte', 'do 7 dni'],
           ['install-prompt-dismissed-at, klucze zamkniętych komunikatów', 'localStorage / sessionStorage', 'żeby nie pokazywać ponownie komunikatu, który zamknąłeś', 'jw. (sessionStorage — do zamknięcia karty)'],
           ['pamięć aplikacji (Service Worker)', 'pamięć PWA', 'działanie aplikacji instalowanej z przeglądarki, w tym praca przy słabym połączeniu', 'do odinstalowania aplikacji lub wyczyszczenia danych'],
-          ['Cloudflare Turnstile', 'skrypt dostawcy (challenges.cloudflare.com)', 'sprawdzenie, czy formularz logowania, rejestracji lub resetu hasła wypełnia człowiek', 'na czas weryfikacji'],
+          ['Cloudflare Turnstile', 'skrypt dostawcy (challenges.cloudflare.com)', 'sprawdzenie, czy formularz logowania, rejestracji, resetu hasła albo potwierdzenia hasła w ustawieniach wypełnia człowiek', 'na czas weryfikacji'],
           ['Sentry', 'skrypt w aplikacji (bez cookies)', 'wykrywanie błędów aplikacji; zgłoszenia są oczyszczane z danych osobowych', 'nie zapisuje danych w przeglądarce'],
         ],
       ),
