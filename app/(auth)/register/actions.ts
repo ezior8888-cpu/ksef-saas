@@ -12,7 +12,7 @@ import { validatePassword } from '@/lib/auth/password';
 import { isSignupClosed } from '@/lib/feature-flags/signups';
 import { checkRegisterRateLimit } from '@/lib/rate-limit/auth';
 import { isHoneypotTripped } from '@/lib/security/honeypot';
-import { verifyTurnstile } from '@/lib/security/turnstile';
+import { checkBotBeforeGoTrue, isGoTrueCaptchaRejection } from '@/lib/security/bot-check';
 import { userRegistered } from '@/lib/jobs/events';
 import { recordTermsAcceptance } from '@/lib/legal/record';
 import { createClient } from '@/lib/supabase/server';
@@ -49,12 +49,10 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
 
   const ip = await getClientIp();
 
-  // Bot protection — pierwsza linia obrony przed spam signup.
-  const turnstile = await verifyTurnstile(
-    formData.get('cf-turnstile-response') as string | null,
-    ip,
-  );
-  if (!turnstile.success) {
+  // Bot protection — pierwsza linia obrony przed spam signup. Przy
+  // włączonym AUTH_CAPTCHA_IN_GOTRUE token sprawdza GoTrue (`captchaToken`).
+  const bot = await checkBotBeforeGoTrue(formData, ip);
+  if (!bot.ok) {
     redirect('/register?error=bot_check_failed');
   }
 
@@ -83,10 +81,12 @@ export async function signupWithEmail(formData: FormData): Promise<void> {
     options: {
       data: { full_name: name },
       emailRedirectTo: `${origin}/auth/callback`,
+      ...(bot.captchaToken ? { captchaToken: bot.captchaToken } : {}),
     },
   });
 
   if (error) {
+    if (isGoTrueCaptchaRejection(error)) redirect('/register?error=bot_check_failed');
     redirect(`/register?error=${encodeURIComponent(error.message)}`);
   }
 

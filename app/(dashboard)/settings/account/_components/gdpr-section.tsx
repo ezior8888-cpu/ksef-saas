@@ -6,6 +6,7 @@ import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TurnstileWidget } from '@/components/auth/turnstile-widget';
 import { Separator } from '@/components/ui/separator';
 import {
   cancelOwnGdprDeletionAction, requestGdprDeletionAction,
@@ -135,6 +136,7 @@ export function GdprSection({ initialRequest = null }: { initialRequest?: Schedu
                     <p role="alert" className="text-destructive text-xs">{ERROR_MESSAGES[cancellation.error]}</p>
                   )}
                 </Field>
+                <TurnstileWidget action="reauth" theme="auto" />
                 <div>
                   <Button type="submit" variant="outline" disabled={isPending}>
                     {isPending ? 'Potwierdzanie...' : 'Anuluj usunięcie konta'}
@@ -181,6 +183,7 @@ export function GdprSection({ initialRequest = null }: { initialRequest?: Schedu
                   </p>
                 )}
               </Field>
+              <TurnstileWidget action="reauth" theme="auto" />
               <div className="flex gap-3">
                 <Button type="submit" variant="destructive" disabled={isPending}>
                   {isPending ? 'Zapisywanie...' : 'Potwierdź żądanie'}

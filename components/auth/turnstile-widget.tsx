@@ -17,8 +17,8 @@ import { useCallback, useEffect, useRef } from 'react';
  * tylko wtedy, gdy Cloudflare chce dodatkowego potwierdzenia.
  */
 
-type TurnstileAction = 'login' | 'register' | 'forgot-password';
-type TurnstileTheme = 'light' | 'dark';
+type TurnstileAction = 'login' | 'register' | 'forgot-password' | 'reauth';
+type TurnstileTheme = 'light' | 'dark' | 'auto';
 
 interface TurnstileRenderOptions {
   sitekey: string;
@@ -44,6 +44,15 @@ declare global {
 }
 
 const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+const REFRESH_EVENT = 'faktway:turnstile-refresh';
+
+/**
+ * Nowy token po akcji wysłanej poza zdarzeniem `submit` (np. przycisk
+ * „Wyślij kod” w zmianie hasła). Wołać zaraz po odczytaniu tokenu z formularza.
+ */
+export function refreshTurnstileToken(form: HTMLFormElement | null) {
+  form?.dispatchEvent(new Event(REFRESH_EVENT));
+}
 
 export function TurnstileWidget({
   action,
@@ -141,8 +150,16 @@ function ExplicitTurnstile({
         if (widgetIdRef.current === widgetId) window.turnstile?.reset(widgetId);
       }, 0);
     };
+    const onRefresh = () => {
+      const widgetId = widgetIdRef.current;
+      if (widgetId !== null) window.turnstile?.reset(widgetId);
+    };
     form.addEventListener('submit', onSubmit);
-    return () => form.removeEventListener('submit', onSubmit);
+    form.addEventListener(REFRESH_EVENT, onRefresh);
+    return () => {
+      form.removeEventListener('submit', onSubmit);
+      form.removeEventListener(REFRESH_EVENT, onRefresh);
+    };
   }, []);
 
   return (
