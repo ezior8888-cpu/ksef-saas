@@ -1643,18 +1643,6 @@ html:not(.dark) .ff-dashboard tbody tr:not([data-slot])[class*='hover:bg-']:hove
   --ff-emerald-soft: oklch(0.76 0.17 162 / 0.12);
 }
 
-/* Wordmark marki (landing + panel) — SF / Apple system UI, pochylony, gruby. */
-.marketing-wordmark {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
-    var(--font-geist-sans), system-ui, sans-serif;
-  font-style: italic;
-  font-weight: 800;
-  font-synthesis: weight style;
-  letter-spacing: -0.04em;
-  -webkit-font-smoothing: antialiased;
-}
-
 /* Italic Fraunces — emphasis w hero/headlines (np. "Automatyzacja").
  * `--font-fraunces` ustawia tylko `app/(marketing)/layout.tsx` (od 24.10.2026,
  * żeby panel nie pobierał fontu) — poza tą grupą klasa spada na Georgię.

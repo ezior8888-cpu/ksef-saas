@@ -154,9 +154,10 @@ def uzycie():
     # faktura (fragment A4)
     x, y, W, H = 24, 24, 380, 300
     b.append(f'<rect x="{x}" y="{y}" width="{W}" height="{H}" fill="#FFFFFF" stroke="#E2E6EE"/>')
-    b.append(place("faktway-logo", x + 28, y + 28, 120)[0])
-    b.append(label(x + W - 28, y + 40, "Faktura VAT", 15, NAVY, "end", 600))
-    b.append(label(x + W - 28, y + 58, "FV/2026/10/001", 11, GREY, "end"))
+    b.append(label(x + 28, y + 44, "Faktura VAT", 15, NAVY, "start", 600))
+    b.append(label(x + 28, y + 62, "FV/2026/10/001", 11, GREY))
+    b.append(f'<rect x="{x + W - 118}" y="{y + 28}" width="90" height="36" rx="6" fill="none" stroke="#D5DAE3" stroke-dasharray="4 3"/>')
+    b.append(label(x + W - 73, y + 50, "logo sprzedawcy", 9, GREY, "middle"))
     for col in (0, 1):
         cx = x + 28 + col * 170
         b.append(label(cx, y + 100, "Sprzedawca" if col == 0 else "Nabywca", 10, GREY))
@@ -165,8 +166,10 @@ def uzycie():
     b.append(f'<rect x="{x + 28}" y="{y + 175}" width="{W - 56}" height="22" fill="#F3F5F9"/>')
     for j in range(3):
         b.append(f'<rect x="{x + 28}" y="{y + 207 + j * 18}" width="{W - 56}" height="1" fill="#E4E8F0"/>')
-    b.append(label(x + W - 28, y + H - 24, "Wystawiono w FaktWay", 9, GREY, "end"))
-    b.append(label(x, y + H + 24, "PDF faktury: logo poziome, szerokość 30-40 mm, lewy górny róg.", 13))
+    b.append(f'<rect x="{x + 28}" y="{y + H - 38}" width="{W - 56}" height="1" fill="#EEEEEE"/>')
+    b.append(place("faktway-znak", x + W / 2 - 74, y + H - 30, 11)[0])
+    b.append(label(x + W / 2 + 6, y + H - 21, "Wygenerowano w FaktWay", 9, GREY, "middle"))
+    b.append(label(x, y + H + 24, "PDF faktury: znak FaktWay tylko w stopce.", 13))
     # mail
     x2 = x + W + 32
     b.append(f'<rect x="{x2}" y="{y}" width="{W}" height="{H}" fill="#F3F5F9" stroke="#E2E6EE"/>')
@@ -177,7 +180,7 @@ def uzycie():
         b.append(f'<rect x="{x2 + 54}" y="{y + 124 + j * 14}" width="{ln}" height="6" rx="3" fill="#E4E8F0"/>')
     b.append(f'<rect x="{x2 + 54}" y="{y + 182}" width="132" height="34" rx="8" fill="{BLUE}"/>')
     b.append(label(x2 + 120, y + 204, "Zobacz fakturę", 12, "#FFFFFF", "middle", 600))
-    b.append(label(x2, y + H + 24, "Mail: logo poziome, 120-140 px szerokości, na białym tle.", 13))
+    b.append(label(x2, y + H + 24, "Mail: logo poziome, 140 px szerokości.", 13))
     return page(2 * W + 80, H + 64, "".join(b), "#FFFFFF")
 
 

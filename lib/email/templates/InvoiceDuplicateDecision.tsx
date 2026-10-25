@@ -9,6 +9,8 @@ import {
   Text,
 } from '@react-email/components';
 
+import { EmailLogo } from './EmailLogo';
+
 import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
 
 /**
@@ -39,6 +41,7 @@ export default function InvoiceDuplicateDecision({
       <Head />
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
+          <EmailLogo />
           <Heading style={headingStyle}>
             {reminder ? T.REMINDER_SUBJECT(invoiceNumber) : T.SUBJECT(invoiceNumber)}
           </Heading>
