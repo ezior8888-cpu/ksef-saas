@@ -234,7 +234,7 @@ export const OPERATOR_DUPLICATE_MESSAGES = {
     `provenance-review: plik z oznaczeniem FaktWay nie wygląda na plik z generatora FaktWay (${problems}). Przejrzyj plik i wybierz: „Zapisz fakturę z KSeF w FaktWay” (po rozmowie z klientem, notatka; tylko gdy plik da się zapisać) albo „Oddaj decyzję klientowi (plik nie z FaktWay)”. Po decyzji poinformuj klienta (oddanie wysyła e-mail samo).`,
   recheckPending: (kind: string | null, at: string | null) =>
     `recheck-needed (${kind ?? 'brak oceny pliku'}, ${at ?? '—'}): faktura czeka na nowy werdykt — cron „Tylko uzgodnij” po 48 h od próby; możesz od razu „Tylko uzgodnij”. Decyzji i przypomnienia teraz nie ma.`,
-  reviewRecordHint: 'Zapis z plikiem spoza generatora FaktWay: faktura trafi do FaktWay z danymi z pliku jak z Magicznego importu. Stawka spoza FaktWay (0 WDT, 0 EX, 22, 7, 4, 3) albo oznaczenia FP/TP/GTU/procedury wstrzymają JPK za ten miesiąc z komunikatem nazywającym fakturę — powiedz to klientowi.',
+  reviewRecordHint: 'Zapis z plikiem spoza generatora FaktWay: faktura trafi do FaktWay z danymi z pliku jak z Magicznego importu. Stawka spoza FaktWay (0 WDT, 0 EX, 22, 7, 4, 3) albo oznaczenia FP/TP/GTU/procedury wstrzymają JPK za ten miesiąc z komunikatem nazywającym fakturę — powiedz to klientowi. Korekty faktury z pozycją zw (do czasu C3), ze stawką spoza FaktWay albo bez ceny netto (ceny brutto, brak P_9A) FaktWay nie wystawi: powiedz klientowi, że korektę uzgadnia przez pomoc FaktWay.',
   releaseNoGate: 'Ocena pliku nie jest zapisana na wpisie — najpierw „Tylko uzgodnij” (nowa ocena), potem oddanie.',
   releaseFailed: 'Oddanie nie zadziałało (stan po zapisie niezgodny) — nic nie zapisano; zgłoś Bartoszowi.',
   releaseAlreadyEmailed: (at: string) =>

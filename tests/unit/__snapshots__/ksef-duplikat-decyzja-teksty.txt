@@ -55,6 +55,7 @@ TEXTS.FAKTFLOW.BANNER_TITLE({1}) = Dokument wycofany — numer {1} ma teraz fakt
 TEXTS.FAKTFLOW.BUTTON_RECORD = Zapisz fakturę z KSeF w FaktWay
 TEXTS.FAKTFLOW.BUYER_DIFFERS({1}) = Nabywca w KSeF jest inny niż w tym dokumencie. Jeśli tę sprzedaż dostał inny nabywca, fakturę {1} trzeba skorygować do zera, a sprzedaż wystawić jako nową fakturę z nowym numerem.
 TEXTS.FAKTFLOW.CORRECTION_PERSON =  Korekty faktury dla nabywcy bez NIP i bez numeru VAT-UE FaktWay jeszcze nie wystawia — jeśli trzeba ją skorygować, napisz do nas: pomoc@faktway.pl.
+TEXTS.FAKTFLOW.CORRECTION_RATE({1}) =  Korekt faktury {1} z pozycją o stawce zwolnionej, o stawce spoza FaktWay albo bez ceny netto jeszcze nie wystawiamy. Jeśli trzeba coś w niej zmienić, napisz do nas: pomoc@faktway.pl.
 TEXTS.FAKTFLOW.DATA_FROM_KSEF({1}) = Obowiązują dane z KSeF. Jeśli trzeba je zmienić, wystaw korektę faktury {1}.
 TEXTS.FAKTFLOW.DIALOG_OTHER.ALREADY_REISSUED = Jeśli sprzedaż z tego dokumentu jest już wystawiona ponownie pod innym numerem, nie wystawiaj kolejnej faktury.
 TEXTS.FAKTFLOW.DIALOG_OTHER.LINE_1({1}, {2}, {3}) = Faktura {1} z KSeF (numer KSeF {2}) dokumentuje inną sprzedaż i jest wystawiona — obowiązuje, bo jest w KSeF. Zapiszemy ją w FaktWay z danymi z KSeF — trafi do JPK i KPiR za {3}.

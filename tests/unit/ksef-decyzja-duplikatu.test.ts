@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { formatWarsawDateTime } from '@/lib/format/warsaw-date';
 import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
-import { DUPLICATE_ORIGINAL_OFFERS, ORIGINAL_IMPORT_SOURCE } from '@/lib/ksef/duplicate-check';
+import { DUPLICATE_ORIGINAL_OFFERS, ORIGINAL_IMPORT_SOURCE, originalHasUncorrectableLine } from '@/lib/ksef/duplicate-check';
 import {
   DUPLICATE_DECISION_SQL_TEXTS,
   DUPLICATE_DECISION_TEXTS,
@@ -19,6 +19,7 @@ import {
   retiredDraftSendRefusal,
   retiredDraftView,
 } from '@/lib/ksef/duplicate-decision';
+import { SUPPORT_EMAIL } from '@/lib/site';
 
 import {
   decisionFacts,
@@ -1490,5 +1491,136 @@ describe('U1u (PR C): lustra funkcji SQL na wspólnych tabelach (INV-15) — ofe
     ] as const)('%s', (_name, check, ownHistoryDb, blocker, expected) => {
       expect(duplicateNoticeVariant(check, ownHistoryDb, blocker)).toBe(expected);
     });
+  });
+});
+
+describe('U1r (D-A4-1b-3-KORZW): korekta K, której FaktWay jeszcze nie wystawi (stawka zw, stawka spoza FaktWay, brak ceny netto)', () => {
+  const line = (over: Record<string, unknown> = {}) => ({
+    ordinal: 1, name: 'Usługa', quantity: '1', unit: 'usł.', unitPriceNet: '100.00', vatRate: '23', gross: '123.00', ...over,
+  });
+  /** Brama z podglądem o podanych pozycjach (liczba pozycji = liczba widocznych, chyba że `lineCount` podano). */
+  const gateOf = (lines: unknown[], problems: string[] = [], previewOver: Record<string, unknown> = {}) => {
+    const preview = faktflowPreview({ lines, lineCount: lines.length, ...previewOver });
+    return problems.length > 0 ? faktflowReviewGate(problems, { preview }) : faktflowGate({ preview });
+  };
+  const manyLines = (n: number, over: Record<string, unknown> = {}) => Array.from({ length: n }, (_, i) => line({ ordinal: i + 1, ...over }));
+  const zw = () => gateOf([line({ vatRate: 'zw' })]);
+
+  describe('polityka originalHasUncorrectableLine', () => {
+    it('sama pozycja zw → true; nabywca z NIP i stawka 23% → false', () => {
+      expect(originalHasUncorrectableLine(zw())).toBe(true);
+      expect(originalHasUncorrectableLine(faktflowGate())).toBe(false);
+    });
+
+    it.each(['23', '8', '5', '0', 'oo', 'np', 'np_ii'])('stawka %s, którą FaktWay koryguje → false', (vatRate) => {
+      expect(originalHasUncorrectableLine(gateOf([line({ vatRate })]))).toBe(false);
+    });
+
+    it.each(['zw', '0 WDT', '0 EX', '22', '7', '4', '3', 'nieznana'])('stawka %s bez korekty w FaktWay → true (nawet gdy inne pozycje są w porządku)', (vatRate) => {
+      expect(originalHasUncorrectableLine(gateOf([line(), line({ ordinal: 2, vatRate })]))).toBe(true);
+    });
+
+    it('pozycja bez ceny netto (null albo pusta) → true', () => {
+      expect(originalHasUncorrectableLine(gateOf([line({ unitPriceNet: null })]))).toBe(true);
+      expect(originalHasUncorrectableLine(gateOf([line({ unitPriceNet: '' })]))).toBe(true);
+    });
+
+    it('pozycji jest więcej niż widocznych (20): problem rates, gross-prices albo line-fields → true, inny problem albo brak → false', () => {
+      const visible = manyLines(20);
+      expect(originalHasUncorrectableLine(gateOf(visible, ['rates'], { lineCount: 25 }))).toBe(true);
+      expect(originalHasUncorrectableLine(gateOf(visible, ['gross-prices'], { lineCount: 25 }))).toBe(true);
+      expect(originalHasUncorrectableLine(gateOf(visible, ['line-fields'], { lineCount: 25 }))).toBe(true);
+      expect(originalHasUncorrectableLine(gateOf(visible, ['amounts', 'totals'], { lineCount: 25 }))).toBe(false);
+      expect(originalHasUncorrectableLine(gateOf(visible, [], { lineCount: 25 }))).toBe(false);
+      // Warunek dodatni: te same problemy przy kompletnej liście pozycji nic nie dopisują (widać wszystko).
+      expect(originalHasUncorrectableLine(gateOf(visible, ['rates'], { lineCount: 20 }))).toBe(false);
+    });
+
+    it('widoczna pozycja zw wygrywa także przy skróconej liście', () => {
+      expect(originalHasUncorrectableLine(gateOf([...manyLines(19), line({ ordinal: 20, vatRate: 'zw' })], [], { lineCount: 25 }))).toBe(true);
+    });
+
+    it('brak bramy, podglądu albo pozycji (zły kształt) → false: nie ma na czym oprzeć obietnicy ani jej cofnięcia', () => {
+      for (const gate of [null, undefined, 'importable', [], {}, faktflowGate({ preview: null }), faktflowGate({ preview: 'x' }), faktflowGate({ preview: { lines: 'x' } })]) {
+        expect(originalHasUncorrectableLine(gate), JSON.stringify(gate)).toBe(false);
+      }
+    });
+  });
+
+  describe('widok panelu (decidable) i przeglądu operatora', () => {
+    it('zw → correctionForRate; correctionForPerson bez zmian (nabywca z NIP)', () => {
+      const check = { importGate: zw() };
+      for (const ownHistory of [false, true]) {
+        const v = ffDecidable({ check: { ...check, ownHistory } });
+        expect(v, `ownHistory=${ownHistory}`).toMatchObject({ kind: 'decidable', correctionForRate: true, correctionForPerson: false });
+      }
+      expect(ffDecidable()).toMatchObject({ correctionForRate: false, correctionForPerson: false });
+    });
+
+    it('nabywca bez NIP i stawka zw → oba zdania; nabywca bez NIP i 23% → tylko osoba', () => {
+      const pesel = (lines: unknown[]) => ({ importGate: gateOf(lines, [], { buyerIdKind: 'pesel' }) });
+      expect(ffDecidable({ check: pesel([line({ vatRate: 'zw' })]) })).toMatchObject({ correctionForPerson: true, correctionForRate: true });
+      expect(ffDecidable({ check: pesel([line()]) })).toMatchObject({ correctionForPerson: true, correctionForRate: false });
+    });
+
+    it('skrócona lista pozycji z problemem rates (oferta review) → true także w widoku operatora', () => {
+      const gate = gateOf(manyLines(20), ['rates'], { lineCount: 25 });
+      const v = view(
+        faktflowFacts({ check: { importGate: gate }, sqlBlocker: 'provenance-review' }),
+        { actor: 'operator' },
+      );
+      expect(v).toMatchObject({ kind: 'review', correctionForRate: true, correctionForPerson: false });
+    });
+
+    it('powód PR B (bez oferty): correctionForRate false, jak correctionForPerson', () => {
+      const v = decidableView(decisionFacts({}));
+      expect(v).toMatchObject({ correctionForPerson: false, correctionForRate: false });
+    });
+  });
+
+  describe('baner szkicu wycofanego po zapisie K (z importGate.preview znacznika)', () => {
+    const retiredOf = (choice: 'same_sale' | 'other_sale', over: Parameters<typeof numberTakenFaktflowRow>[1] = {}) =>
+      retiredDraftView({
+        invoiceNumber: null,
+        invoiceKind: 'regular',
+        submissions: [numberTakenFaktflowRow('import', { choice, summaryNumber: 'FV/2026/10/7-K', ...over })],
+        kindHeld: false,
+      });
+    const nrK = 'FV/2026/10/7-K';
+
+    it.each(['same_sale', 'other_sale'] as const)('%s: K z pozycją zw → CORRECTION_RATE(numer K) dokładnie raz; K z 23% → brak', (choice) => {
+      const sentence = FF.CORRECTION_RATE(nrK).trim();
+      const withZw = retiredOf(choice, { check: { importGate: zw() } })!;
+      expect(withZw.body.split(sentence).length - 1).toBe(1);
+      expect(withZw.body.endsWith(FF.CORRECTION_RATE(nrK))).toBe(true);
+      expect(retiredOf(choice)!.body).not.toContain(sentence);
+    });
+
+    it('nabywca bez NIP i stawka zw → oba zdania po jednym razie, osoba przed stawką', () => {
+      const v = retiredOf('same_sale', { buyerIdKind: 'pesel', check: { importGate: zw() } })!;
+      expect(v.body.endsWith(FF.CORRECTION_PERSON + FF.CORRECTION_RATE(nrK))).toBe(true);
+      expect(v.body.split(FF.CORRECTION_PERSON.trim()).length - 1).toBe(1);
+      expect(v.body.split(FF.CORRECTION_RATE(nrK).trim()).length - 1).toBe(1);
+    });
+
+    it('baner po oddaniu (no-import) i decyzje PR B nie dostają zdania o stawce', () => {
+      const released = retiredDraftView({
+        invoiceNumber: DUP_NR,
+        invoiceKind: 'regular',
+        submissions: [numberTakenFaktflowRow('no-import', { choice: 'same_sale', offer: 'released', check: { importGate: zw() } })],
+        kindHeld: false,
+      })!;
+      expect(released.body).not.toContain(FF.CORRECTION_RATE(DUP_NR).trim());
+    });
+  });
+
+  it('CORRECTION_RATE: krótko, z numerem K i adresem pomocy, bez długiego myślnika', () => {
+    const t = FF.CORRECTION_RATE('FV/1/K');
+    expect(t.startsWith(' Korekt faktury FV/1/K ')).toBe(true);
+    expect(t).toContain('zwolnion');
+    expect(t).toContain('spoza FaktWay');
+    expect(t).toContain('bez ceny netto');
+    expect(t).toContain(SUPPORT_EMAIL);
+    expect(t).not.toMatch(/[—–]/);
   });
 });

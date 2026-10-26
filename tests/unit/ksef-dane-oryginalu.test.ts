@@ -431,3 +431,34 @@ describe('U2h (PR C): mergeDuplicateCheck — oddanie decyzji (release) przechod
     expect(merged).toEqual({ ...known, recheck: null });
   });
 });
+
+describe('U2i (PR C, INV-16): mergeDuplicateCheck — znana data nadania K zostaje przy kolejnym werdykcie tego samego pliku (INV-16)', () => {
+  const ACQ = '2026-09-28T07:15:00.000Z';
+  const previous = (over: Partial<KsefDuplicateCheck> = {}) =>
+    check({ acquiredAt: ACQ, importGate: asGate(faktflowReviewGate(['rates'], { release: faktflowRelease() })), ...over });
+  /** Kolejny werdykt: pytanie o datę w KSeF nie powiodło się (429/5xx), więc `acquiredAt` jest `null`. */
+  const next = (over: Partial<KsefDuplicateCheck> = {}) =>
+    check({ checkedAt: '2026-10-11T12:00:00Z', acquiredAt: null, importGate: asGate(faktflowReviewGate(['rates'])), ...over });
+
+  it('(a) ten sam plik i środowisko, nowa data nieznana → data z poprzedniego zapisu; znacznik „sprawdź ponownie” nadal znika', () => {
+    const merged = mergeDuplicateCheck(previous({ recheckNeeded: { kind: 'gate-drift', at: '2026-10-09T08:00:00.000Z' } }), next());
+    expect(merged.acquiredAt).toBe(ACQ);
+    expect(merged.checkedAt).toBe('2026-10-11T12:00:00Z');
+    expect(merged).not.toHaveProperty('recheckNeeded');
+    expect(merged.recheck).toBeNull();
+  });
+
+  it('(b) inny plik albo inne środowisko → data zostaje nieznana (to nie jest ten sam K)', () => {
+    // Warunek dodatni: przy tym samym pliku data wraca — inaczej `null` poniżej nic nie dowodzi.
+    expect(mergeDuplicateCheck(previous(), next()).acquiredAt).toBe(ACQ);
+    expect(mergeDuplicateCheck(previous(), next({ sha256: 'b'.repeat(64) })).acquiredAt).toBeNull();
+    expect(mergeDuplicateCheck(previous(), next({ env: 'production' })).acquiredAt).toBeNull();
+    expect(mergeDuplicateCheck(previous({ sha256: null }), next({ sha256: null })).acquiredAt).toBeNull();
+    expect(mergeDuplicateCheck(previous({ acquiredAt: null }), next()).acquiredAt).toBeNull();
+  });
+
+  it('(c) nowy werdykt ma własną datę → wygrywa nowa', () => {
+    const NEW = '2026-09-28T07:16:00.000Z';
+    expect(mergeDuplicateCheck(previous(), next({ acquiredAt: NEW })).acquiredAt).toBe(NEW);
+  });
+});

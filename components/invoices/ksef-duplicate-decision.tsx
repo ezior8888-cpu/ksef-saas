@@ -86,8 +86,12 @@ interface OriginalFacts {
   buyerDiffers: boolean;
   /** Korekty do KSeF wstrzymane (PROD) — dopisek `HELD_CORRECTIONS` do zdań o korekcie. */
   held: string;
-  /** Nabywca bez NIP i bez numeru VAT-UE — dopisek `CORRECTION_PERSON` po ostatnim zdaniu o korekcie. */
-  person: string;
+  /**
+   * Dopisek „korekty K jeszcze nie wystawiamy” po ostatnim zdaniu o korekcie: `CORRECTION_PERSON` (nabywca bez NIP
+   * i bez numeru VAT-UE) i/albo `CORRECTION_RATE` (pozycja zw, stawka spoza FaktWay, brak ceny netto) — każde
+   * najwyżej raz, osoba przed stawką; pusty, gdy korekta K jest możliwa.
+   */
+  noCorrection: string;
 }
 
 /** `MM.RRRR` z daty `RRRR-MM-DD` — tylko gdy widok nie niesie podglądu (nieosiągalne przy poprawnej bramie). */
@@ -99,7 +103,7 @@ function periodFromIssueDate(issueDate: string | null): string {
 /**
  * Skutki wyboru przy zapisie oryginału z FaktWay (PR C, 6.1): oferta `pair` — dwa dialogi (ta sama / inna
  * sprzedaż, oba zapisują fakturę z KSeF); oferta `record` — jeden dialog „zapisz”. Zdania o korekcie niosą
- * dopiski na PROD (`held`) i dla nabywcy bez NIP (`person`), doklejone raz — do ostatniego zdania o korekcie.
+ * dopiski na PROD (`held`) i o braku korekty K (`noCorrection`: nabywca bez NIP, pozycja zw / stawka spoza FaktWay), doklejone raz — do ostatniego zdania o korekcie.
  */
 function originalConsequences(
   choice: DuplicateChoice,
@@ -115,7 +119,7 @@ function originalConsequences(
       R.LINE_1(f.nrK, f.period),
       R.LINE_2(nr),
       ...(view.sameContent !== true ? [R.LINE_DIFF(f.nrK) + f.held] : []),
-      F.REISSUED + f.held + f.person,
+      F.REISSUED + f.held + f.noCorrection,
       ...pastPeriod,
     ];
   }
@@ -126,7 +130,7 @@ function originalConsequences(
       S.LINE_2(nr),
       ...(view.markedDifference || view.sameContent !== true ? [F.DATA_FROM_KSEF(f.nrK) + f.held] : []),
       ...(f.buyerDiffers ? [F.BUYER_DIFFERS(f.nrK) + f.held] : []),
-      F.REISSUED + f.held + f.person,
+      F.REISSUED + f.held + f.noCorrection,
       ...pastPeriod,
       T.DIALOG_SAME.LINE_4,
     ];
@@ -137,7 +141,7 @@ function originalConsequences(
     O.LINE_2(nr),
     O.ALREADY_REISSUED,
     O.ZERO(f.nrK) + f.held,
-    (f.held ? T.DIALOG_OTHER.LINE_3 + T.DIALOG_OTHER.LINE_3_HELD : T.DIALOG_OTHER.LINE_3) + f.person,
+    (f.held ? T.DIALOG_OTHER.LINE_3 + T.DIALOG_OTHER.LINE_3_HELD : T.DIALOG_OTHER.LINE_3) + f.noCorrection,
     ...pastPeriod,
   ];
 }
@@ -207,7 +211,7 @@ export function KsefDuplicateDecision({ invoiceId, view, env = null }: Props) {
     pastPeriod: original?.pastPeriod ?? false,
     buyerDiffers: view.comparison.find((row) => row.label === T.ROW_LABELS.buyerNip)?.same === false,
     held: view.heldCorrections ? F.HELD_CORRECTIONS : '',
-    person: view.correctionForPerson ? F.CORRECTION_PERSON : '',
+    noCorrection: (view.correctionForPerson ? F.CORRECTION_PERSON : '') + (view.correctionForRate ? F.CORRECTION_RATE(nrK) : ''),
   };
   const annotations = writesOriginal && preview ? annotationsLine(preview) : null;
   // Wstęp przy ofercie „tylko zapis”: pole widoku (`recordIntro`); bez niego — jak liczy polityka (5.5).
@@ -274,7 +278,7 @@ export function KsefDuplicateDecision({ invoiceId, view, env = null }: Props) {
         <>
           <p>
             {recordIntro === 'own'
-              ? F.INTRO_RECORD_OWN(nr, k, original?.assignedDay ?? null, nrK) + facts.person
+              ? F.INTRO_RECORD_OWN(nr, k, original?.assignedDay ?? null, nrK) + facts.noCorrection
               : F.INTRO_RECORD_SAME(nr, k, original?.assignedDay ?? null)}
           </p>
           <p>{F.LEDGER(k, facts.period)}</p>

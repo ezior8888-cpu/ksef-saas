@@ -223,6 +223,17 @@ describe('PR C: „Zapisz decyzję klienta” przy faktflow-original — karta w
 });
 
 describe('PR C: przegląd pliku (widok review, I5R) — „Zapisz fakturę z KSeF w FaktWay” i „Oddaj decyzję klientowi”', () => {
+  it('reviewRecordHint (D-A4-1b-3-KORZW): mówi też o korektach (zw do C3, stawka spoza FaktWay, brak ceny netto) i odsyła do pomocy FaktWay, bez adresu w treści', () => {
+    const hint = M.reviewRecordHint;
+    expect(hint).toContain('Korekty faktury z pozycją zw');
+    expect(hint).toContain('ze stawką spoza FaktWay');
+    expect(hint).toContain('bez ceny netto');
+    expect(hint).toContain('przez pomoc FaktWay');
+    expect(hint).not.toMatch(/@/);
+    // Zdanie o JPK zostaje (ten sam tekst co wcześniej).
+    expect(hint).toContain('wstrzymają JPK za ten miesiąc');
+  });
+
   it('review-pair, plik zapisywalny: oba przyciski włączone; zapis wysyła ofertę review-pair z trybem import i środowiskiem', async () => {
     const view = review('review-pair');
     render({ view, env: 'test', recordable: { ok: true } });

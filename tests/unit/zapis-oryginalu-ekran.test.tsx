@@ -497,6 +497,46 @@ describe('KsefDuplicateDecision — FO-PARA, oferta pair (D-A4-1b-3 PR C)', () =
   });
 
   it.each([
+    ['ta sama sprzedaż', 'same_sale' as const],
+    ['inna sprzedaż', 'other_sale' as const],
+  ])('ZE6 (KORZW): K z pozycją zw albo stawką spoza FaktWay — CORRECTION_RATE w dialogu „%s” dokładnie raz, nie ma w panelu; przy K bez takiej pozycji nie ma', async (_label, choice) => {
+    const open = async (view: DecidableView) => {
+      await renderPanel(view);
+      await click(button(choice === 'same_sale' ? T.BUTTON_SAME : T.BUTTON_OTHER));
+    };
+
+    await open(pairView({ correctionForRate: true }));
+    expect(occurrences(dialogText(), F.CORRECTION_RATE(NR).trim())).toBe(1);
+    expect(occurrences(outsideDialogText(), F.CORRECTION_RATE(NR).trim())).toBe(0);
+    expect(dialogText()).not.toContain(F.CORRECTION_PERSON.trim());
+
+    await open(pairView());
+    expect(text()).not.toContain(F.CORRECTION_RATE(NR).trim());
+  });
+
+  it('ZE6 (KORZW): nabywca bez NIP i pozycja zw — w dialogu oba zdania po jednym razie', async () => {
+    await renderPanel(pairView({
+      correctionForPerson: true,
+      correctionForRate: true,
+      original: { preview: { ...PREVIEW, buyerIdKind: 'pesel' }, assignedDay: ASSIGNED_DAY, pastPeriod: false },
+    }));
+    await click(button(T.BUTTON_SAME));
+
+    expect(occurrences(dialogText(), F.CORRECTION_PERSON.trim())).toBe(1);
+    expect(occurrences(dialogText(), F.CORRECTION_RATE(NR).trim())).toBe(1);
+  });
+
+  it('ZG3 (KORZW): dialog „zapisz” (record) z pozycją zw — CORRECTION_RATE raz w dialogu i raz w panelu, za REISSUED i HELD_CORRECTIONS', async () => {
+    await renderPanel(ownView({ heldCorrections: true, correctionForRate: true }));
+    await click(button(F.BUTTON_RECORD));
+
+    const dlg = dialogText();
+    expect(dlg).toContain(F.REISSUED + F.HELD_CORRECTIONS + F.CORRECTION_RATE(NR));
+    expect(occurrences(dlg, F.CORRECTION_RATE(NR).trim())).toBe(1);
+    expect(occurrences(outsideDialogText(), F.CORRECTION_RATE(NR).trim())).toBe(1);
+  });
+
+  it.each([
     ['ta sama sprzedaż', T.BUTTON_SAME],
     ['inna sprzedaż', T.BUTTON_OTHER],
   ])('ZE7: okres już minął (pastPeriod) — dialog „%s” ma PAST_PERIOD z okresem JPK; bez pastPeriod go nie ma', async (_label, trigger) => {
@@ -590,6 +630,28 @@ describe('KsefDuplicateDecision — FO-WŁASNA i FO-TA-SAMA-TREŚĆ, oferta reco
     const t = text();
     expect(t).toContain(F.INTRO_RECORD_OWN(NR, K, ASSIGNED_DAY, NR) + F.CORRECTION_PERSON);
     expect(occurrences(t, F.CORRECTION_PERSON.trim())).toBe(1);
+  });
+
+  it('ZG1 (KORZW): FO-WŁASNA, K z pozycją zw albo stawką spoza FaktWay — CORRECTION_RATE doklejone raz, zaraz po INTRO_RECORD_OWN; bez CORRECTION_PERSON', async () => {
+    await renderPanel(ownView({ correctionForRate: true }));
+
+    const t = text();
+    expect(t).toContain(F.INTRO_RECORD_OWN(NR, K, ASSIGNED_DAY, NR) + F.CORRECTION_RATE(NR));
+    expect(occurrences(t, F.CORRECTION_RATE(NR).trim())).toBe(1);
+    expect(t).not.toContain(F.CORRECTION_PERSON.trim());
+  });
+
+  it('ZG1 (KORZW): nabywca bez NIP i pozycja zw — oba zdania po jednym razie, osoba przed stawką', async () => {
+    await renderPanel(ownView({
+      correctionForPerson: true,
+      correctionForRate: true,
+      original: { preview: { ...PREVIEW, buyerIdKind: 'pesel' }, assignedDay: ASSIGNED_DAY, pastPeriod: false },
+    }));
+
+    const t = text();
+    expect(t).toContain(F.INTRO_RECORD_OWN(NR, K, ASSIGNED_DAY, NR) + F.CORRECTION_PERSON + F.CORRECTION_RATE(NR));
+    expect(occurrences(t, F.CORRECTION_PERSON.trim())).toBe(1);
+    expect(occurrences(t, F.CORRECTION_RATE(NR).trim())).toBe(1);
   });
 
   // Wstęp wybiera pole widoku `recordIntro` (I1, kontrakt commitu 2): 'own' ma pierwszeństwo przed 'same' (spec 5.5),
@@ -747,9 +809,10 @@ describe('KsefDuplicateDecision — FO-ODDANA, oferta released (tryb no-import)'
 // ─── Baner szkicu wycofanego po zapisie (karta X) ───────────────────────────
 
 /** Widok banera z PRAWDZIWEGO `retiredDraftView` dla wpisu `number_taken` z decyzją, która zapisała K. */
-function importedBanner(decision: Record<string, unknown> = {}, buyerIdKind: string | null = 'nip') {
+function importedBanner(decision: Record<string, unknown> = {}, buyerIdKind: string | null = 'nip', extraCheck: Record<string, unknown> = {}) {
   const row = numberTakenRow(TENANT, X_ID, 'automatic', {
     original_check: {
+      ...extraCheck,
       v: 1,
       env: 'test',
       reason: 'faktflow-original',
@@ -802,6 +865,29 @@ describe('RetiredDraftBanner — szkic wycofany po zapisie oryginału (karta X, 
     mount(<RetiredDraftBanner view={importedBanner({}, kind)} />);
 
     expect(occurrences(text(), F.CORRECTION_PERSON.trim())).toBe(1);
+  });
+
+  const WITH_ZW = { importGate: { v: 1, rules: 1, kind: 'importable', problems: [], preview: { ...PREVIEW, lineCount: 1, lines: [{ ...PREVIEW.lines[0], vatRate: 'zw' }] } } };
+
+  it.each([
+    ['sama sprzedaż', { choice: 'same_sale', offer: 'pair' }],
+    ['inna sprzedaż', { choice: 'other_sale', offer: 'pair' }],
+    ['zapis operatora (review-record)', { choice: 'same_sale', offer: 'review-record' }],
+  ])('ZB3 (KORZW): %s, K z pozycją zw w pliku — CORRECTION_RATE w banerze dokładnie raz, bez CORRECTION_PERSON (nabywca z NIP)', (_label, decision) => {
+    mount(<RetiredDraftBanner view={importedBanner(decision, 'nip', WITH_ZW)} />);
+
+    expect(occurrences(text(), F.CORRECTION_RATE(NR).trim())).toBe(1);
+    expect(text()).not.toContain(F.CORRECTION_PERSON.trim());
+  });
+
+  it('ZB3 (KORZW): K z 23% i nabywca z NIP — baner bez zdań o korekcie; nabywca bez NIP i zw — oba po jednym razie', () => {
+    mount(<RetiredDraftBanner view={importedBanner({}, 'nip', { importGate: { v: 1, rules: 1, kind: 'importable', problems: [], preview: PREVIEW } })} />);
+    expect(text()).not.toContain(F.CORRECTION_RATE(NR).trim());
+    expect(text()).not.toContain(F.CORRECTION_PERSON.trim());
+
+    mount(<RetiredDraftBanner view={importedBanner({}, 'pesel', WITH_ZW)} />);
+    expect(occurrences(text(), F.CORRECTION_PERSON.trim())).toBe(1);
+    expect(occurrences(text(), F.CORRECTION_RATE(NR).trim())).toBe(1);
   });
 
   it.each(['nip', 'vat-ue'])('ZB3: nabywca K z identyfikatorem „%s” — baner bez CORRECTION_PERSON (korekta K istnieje)', (kind) => {

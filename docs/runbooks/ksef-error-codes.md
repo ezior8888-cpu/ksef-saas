@@ -588,7 +588,10 @@ sprawdzenia pliku (`checkedAt`); potem monitor wysyła alarm krytyczny `I5R-72h`
    `4`, `3`) albo oznaczenia FP, TP, GTU, procedury nie blokują zapisu: K trafia
    do FaktWay jak z Magicznego importu, ale JPK za ten miesiąc zostaje
    wstrzymany z komunikatem nazywającym fakturę. Powiedz to klientowi, zanim
-   zapiszesz (tekst `reviewRecordHint` jest na karcie).
+   zapiszesz (tekst `reviewRecordHint` jest na karcie). To samo dotyczy korekt:
+   FaktWay nie wystawi korekty faktury z pozycją `zw` (do czasu C3), ze stawką
+   spoza FaktWay ani bez ceny netto pozycji (ceny brutto, brak P_9A). Powiedz
+   klientowi, że korektę uzgadnia przez pomoc FaktWay (D-A4-1b-3-KORZW).
 5. **Rozmowa z klientem, potem jedno z dwóch:**
    - **„Zapisz fakturę z KSeF w FaktWay”.** Notatka co najmniej 10 znaków: kanał,
      data, osoba. Notatka trafia do zapisu decyzji przy fakturze (10 lat, firma
@@ -829,7 +832,14 @@ wpłaty na szkic wycofany (D-A4-1b-3-PAY).
   (`KOR_HOLD`, C7), a dialogi mówią klientowi „napisz do nas”. Korekty faktury dla
   nabywcy bez NIP i bez numeru VAT-UE (PESEL, inny numer, brak identyfikatora)
   FaktWay jeszcze nie wystawia, także dla K z tej decyzji (D-A4-1b-3-KORB2C): klient
-  dostaje zdanie z adresem pomoc@faktway.pl, sprawa do Bartosza.
+  dostaje zdanie z adresem pomoc@faktway.pl, sprawa do Bartosza. Tak samo korekty
+  faktury z pozycją `zw` (do czasu C3), ze stawką FA(3) spoza FaktWay (`0 WDT`, `0 EX`,
+  `22`, `7`, `4`, `3`) albo z pozycją bez ceny netto (ceny brutto, brak P_9A): panel,
+  dialogi i baner po zapisie mają zdanie `CORRECTION_RATE` (D-A4-1b-3-KORZW), liczone
+  z podglądu pliku na znaczniku. Przy więcej niż 20 pozycjach zdanie dochodzi tylko
+  wtedy, gdy ocena pliku ma problem `rates`, `gross-prices` albo `line-fields`;
+  pozycja `zw` poza pierwszymi 20 nie jest wykrywalna. Gdy klient napisze o takiej
+  korekcie: sprawa do Bartosza, nie obiecuj terminu.
 - **Płatności.** K ma `origin = 'ksef_import'`, więc przypomnienia o płatności jej
   nie obejmują (karta mówi to klientowi).
 
@@ -878,6 +888,15 @@ akcji wystarcza; I5 `recheck-needed` alarmuje jak każde I5.
 - **D-A4-1b-3-XEDIT.** Treść szkicu wycofanego da się zmienić surowym PATCH z sesji
   klienta; kopia treści X jest w decyzji na znaczniku.
 - **D-A4-1b-3-KORB2C.** Brak korekty dla nabywcy bez NIP i VAT-UE.
+- **D-A4-1b-3-KORZW.** Brak korekty K z pozycją `zw`, ze stawką FA(3) spoza FaktWay
+  (`0 WDT`, `0 EX`, `22`, `7`, `4`, `3`) albo z pozycją bez ceny netto
+  (`unit_price_net` NULL: ceny brutto, brak P_9A). Klik „Korekta” kończy się odmową
+  `vatRateFromDbForCorrectionLine` / `fetchParentInvoiceLines` bez nazwy dokumentu i
+  kontaktu. W PR C klient widzi zdanie `CORRECTION_RATE` (jak `CORRECTION_PERSON`), a
+  operator ostrzeżenie w `reviewRecordHint`. Pełne wyjście: C3 w planie dla `zw`
+  (także dla K zapisanej przez PR C); K z przeglądu operatora ze stawką FA(3) albo
+  z NULL ceny netto zostaje otwarte po C3. Osobno: komunikaty odmowy w
+  `correction-actions.ts` nie mają kontaktu (wyjście dla każdej niekorygowalnej faktury).
 - **D-A4-1b-3-FLO-NUM.** Audyt numeracji FLO liczy tylko `origin = 'app'`, więc po
   zapisie K zgłosi fałszywą lukę (naprawić przed wdrożeniem FLO).
 - **D-A4-1b-3-TESTENV.** KSeF TEST jest wspólny: plik z oznaczeniem z innej instancji
@@ -929,7 +948,7 @@ wdrożeniu PR C oczekiwane:
 | (o) decyzje wg trybu | `import` dla ofert `pair`, `record` i `review-*`; `no-import` tylko dla `released` (po oddaniu) |
 | (p) oddania bez decyzji | puste albo świeże (klient ma e-mail) |
 
-Po wdrożeniu sprawdź też: brak nowych I3, w logu workera „27/27 cronów” bez zmian,
+Po wdrożeniu sprawdź też: brak nowych I3, w logu workera „29/29 cronów” bez zmian,
 sekcja 10 (b) bez kodów, których nie znasz.
 
 ## Najczęstsze kody — co znaczą, co robić

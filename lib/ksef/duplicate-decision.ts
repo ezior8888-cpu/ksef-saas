@@ -49,6 +49,7 @@ import {
   ORIGINAL_RECHECK_KINDS,
   originalAssignedDay,
   originalGateOk,
+  originalHasUncorrectableLine,
   type DuplicateDecisionChoice,
   type DuplicateDecisionMode,
   type DuplicateDecisionVia,
@@ -271,6 +272,8 @@ export interface DuplicateDecisionReviewView {
   releasable: boolean;
   /** `preview.buyerIdKind ∉ ORIGINAL_CORRECTABLE_BUYER_ID_KINDS` — zdanie `FAKTFLOW.CORRECTION_PERSON`. */
   correctionForPerson: boolean;
+  /** Pozycja zw, stawka spoza FaktWay albo brak ceny netto w pliku (`originalHasUncorrectableLine`) — zdanie `FAKTFLOW.CORRECTION_RATE`. */
+  correctionForRate: boolean;
   /** Wstęp przy `review-record` — jak w widoku `decidable` (patrz tam). */
   recordIntro?: DuplicateRecordIntro;
 }
@@ -312,6 +315,12 @@ export type DuplicateDecisionView =
       original?: DuplicateOriginalViewData | null;
       /** `preview.buyerIdKind ∉ ORIGINAL_CORRECTABLE_BUYER_ID_KINDS` — zdanie `FAKTFLOW.CORRECTION_PERSON`. */
       correctionForPerson?: boolean;
+      /**
+       * Plik K ma pozycję, której FaktWay jeszcze nie skoryguje (zw do czasu C3, stawka FA(3) spoza FaktWay,
+       * brak ceny netto; `originalHasUncorrectableLine` z `importGate`) — zdanie `FAKTFLOW.CORRECTION_RATE`.
+       * Niezależne od `correctionForPerson`: gdy dotyczą obie, panel pokazuje oba zdania po jednym razie.
+       */
+      correctionForRate?: boolean;
       /**
        * Który wstęp pokazuje panel przy ofercie `record`: `'own'` — `FAKTFLOW.INTRO_RECORD_OWN`, gdy
        * `ownHistory` z JSON albo z bazy (sesja / skrót); ma PIERWSZEŃSTWO przed `'same'` —
@@ -771,6 +780,9 @@ export const DUPLICATE_DECISION_TEXTS = {
     },
     REISSUED: 'Jeśli sprzedaż z tego dokumentu jest już wystawiona ponownie pod innym numerem, są teraz dwie faktury tej samej sprzedaży — fakturę wystawioną ponownie trzeba skorygować do zera.',
     CORRECTION_PERSON: ` Korekty faktury dla nabywcy bez NIP i bez numeru VAT-UE FaktWay jeszcze nie wystawia — jeśli trzeba ją skorygować, napisz do nas: ${SUPPORT_EMAIL}.`,
+    // D-A4-1b-3-KORZW: pozycja zw (do C3), stawka FA(3) spoza FaktWay albo pozycja bez ceny netto. Krótko, bez długiego myślnika.
+    CORRECTION_RATE: (nrK: string) =>
+      ` Korekt faktury ${nrK} z pozycją o stawce zwolnionej, o stawce spoza FaktWay albo bez ceny netto jeszcze nie wystawiamy. Jeśli trzeba coś w niej zmienić, napisz do nas: ${SUPPORT_EMAIL}.`,
     SALE_DATE_AS_ISSUE: 'jak data wystawienia',
     DATA_FROM_KSEF: (nrK: string) => `Obowiązują dane z KSeF. Jeśli trzeba je zmienić, wystaw korektę faktury ${nrK}.`,
     HELD_CORRECTIONS: ` Korekty do produkcyjnego KSeF są teraz wstrzymane przez FaktWay — napisz do nas: ${SUPPORT_EMAIL}.`,
@@ -1131,6 +1143,8 @@ interface ImportedDecision {
   at: string;
   /** `decision.original.buyerIdKind ∉ ('nip','vat-ue')` — zdanie `FAKTFLOW.CORRECTION_PERSON` (6.4). */
   correctionForPerson: boolean;
+  /** `originalHasUncorrectableLine(original_check.importGate)` — zdanie `FAKTFLOW.CORRECTION_RATE` (D-A4-1b-3-KORZW); bez bramy `false`. */
+  correctionForRate: boolean;
 }
 
 /**
@@ -1153,6 +1167,8 @@ function importedDecisionOf(row: TakenRowFields, invoiceNumber: string | null): 
     via: d.via === 'operator' ? 'operator' : 'client',
     at: typeof d.at === 'string' ? d.at : '',
     correctionForPerson: !isCorrectableBuyer(original?.buyerIdKind),
+    // Podgląd pliku zostaje na znaczniku po decyzji (`importGate` nie jest ruszany) — baner liczy z niego jak panel.
+    correctionForRate: originalHasUncorrectableLine(row.original_check.importGate),
   };
 }
 
@@ -1376,6 +1392,8 @@ function faktflowViewParts(ctx: FaktflowContext, offer: DuplicateOriginalOffer, 
     original,
     // `buyerIdKind` nieznany (brak podglądu) — korekty nie obiecujemy (∉ nip, vat-ue).
     correctionForPerson: !isCorrectableBuyer(preview?.buyerIdKind),
+    // Pozycja zw / stawka spoza FaktWay / brak ceny netto: korekty K nie obiecujemy (D-A4-1b-3-KORZW).
+    correctionForRate: originalHasUncorrectableLine(gate),
     // Środowisko jest tu znane (odmowa `env-unknown` stoi wcześniej).
     heldCorrections: input.environment !== null && isCorrectionHeldForEnv(input.environment),
     ...(recordIntro ? { recordIntro } : {}),
@@ -1443,6 +1461,7 @@ function faktflowOriginalOptions(ctx: FaktflowContext): DuplicateDecisionView {
       program: 'FaktWay',
       releasable: offer === 'review-pair',
       correctionForPerson: parts.correctionForPerson,
+      correctionForRate: parts.correctionForRate,
       ...(parts.recordIntro ? { recordIntro: parts.recordIntro } : {}),
     };
   }
@@ -1473,6 +1492,7 @@ function faktflowOriginalOptions(ctx: FaktflowContext): DuplicateDecisionView {
     choices: parts.choices,
     original: parts.original,
     correctionForPerson: parts.correctionForPerson,
+    correctionForRate: parts.correctionForRate,
     ...(parts.recordIntro ? { recordIntro: parts.recordIntro } : {}),
   };
 }
@@ -1620,6 +1640,7 @@ export function duplicateDecisionOptions(input: DuplicateDecisionOptionsInput): 
     choices: ['same_sale', 'other_sale'],
     original: null,
     correctionForPerson: false,
+    correctionForRate: false,
   };
 }
 
@@ -1716,7 +1737,9 @@ export function retiredDraftView(input: RetiredDraftViewInput): RetiredDraftView
     return {
       ...base,
       title: FF.BANNER_TITLE(imported.nrOld),
-      body: banner(data, via, nrK, k) + (imported.correctionForPerson ? FF.CORRECTION_PERSON : ''),
+      body: banner(data, via, nrK, k)
+        + (imported.correctionForPerson ? FF.CORRECTION_PERSON : '')
+        + (imported.correctionForRate ? FF.CORRECTION_RATE(nrK) : ''),
       // Jedyny przycisk tylko przy „inna sprzedaż” (C2).
       cta: label === 'other_sale' ? { ...T.CTA_REGULAR } : null,
       knownInvoice: null,

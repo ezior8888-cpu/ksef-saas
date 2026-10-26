@@ -106,6 +106,51 @@ export type OriginalBuyerIdKind = 'nip' | 'vat-ue' | 'pesel' | 'nr-inny' | 'brak
 /** Korekta faktury istnieje w FaktWay tylko dla tych nabywców (F44; inaczej `FAKTFLOW.CORRECTION_PERSON`). */
 export const ORIGINAL_CORRECTABLE_BUYER_ID_KINDS = ['nip', 'vat-ue'] as const satisfies readonly OriginalBuyerIdKind[];
 
+/**
+ * Stawki pozycji, przy których FaktWay wystawia korektę faktury K: lustro
+ * `correctionLineSchema` i `vatRateFromDbForCorrectionLine`
+ * (`components/invoices/correction-actions.ts`) — stawki FaktWay bez `zw`
+ * (`np I` i `np II` to dawny zapis P_12 z importu). Brak `zw` jest znany
+ * (pozycja planu C3); gdy C3 doda korektę dla `zw`, dopisz ją tu i zmień test.
+ * Kody FA(3) bez odpowiednika (0 WDT, 0 EX, 22, 7, 4, 3) oraz `nieznana` nigdy
+ * nie są korygowalne.
+ */
+export const ORIGINAL_CORRECTABLE_VAT_RATES: readonly string[] = ['23', '8', '5', '0', 'oo', 'np', 'np_ii', 'np I', 'np II'];
+
+/**
+ * Problemy bramy, które przy skróconej liście pozycji podglądu (`lineCount` >
+ * `lines.length`) mogą dotyczyć pozycji ukrytych: stawka spoza FaktWay
+ * (`rates`), ceny brutto (`gross-prices`) albo brak ceny netto (`line-fields`
+ * obejmuje brak P_9A). Stawka `zw` nie jest problemem bramy, więc pozycji `zw`
+ * poza podglądem nie wykryjemy (znane ograniczenie, D-A4-1b-3-KORZW).
+ */
+const HIDDEN_LINE_UNCORRECTABLE_PROBLEMS: readonly string[] = ['rates', 'gross-prices', 'line-fields'];
+
+/**
+ * Czy korekta faktury K zapisanej z tego pliku skończy się odmową w FaktWay
+ * (D-A4-1b-3-KORZW): któraś widoczna pozycja ma stawkę spoza
+ * `ORIGINAL_CORRECTABLE_VAT_RATES` albo nie ma ceny netto, a gdy pozycji jest
+ * więcej niż widocznych, brama zgłasza problem z `HIDDEN_LINE_UNCORRECTABLE_PROBLEMS`.
+ * Czysta, liczona z `importGate` (JSON z bazy, dowolny kształt): bez bramy,
+ * podglądu albo pozycji zwraca `false` (nie ma na czym oprzeć zdania; brak
+ * podglądu daje osobno zdanie o nabywcy, `correctionForPerson`).
+ */
+export function originalHasUncorrectableLine(importGate: unknown): boolean {
+  if (!isRecord(importGate) || !isRecord(importGate.preview) || !Array.isArray(importGate.preview.lines)) return false;
+  const { lines, lineCount } = importGate.preview;
+  const uncorrectable = (line: unknown): boolean => {
+    if (!isRecord(line)) return false;
+    const rate = typeof line.vatRate === 'string' ? line.vatRate.trim() : '';
+    const net = typeof line.unitPriceNet === 'string' ? line.unitPriceNet.trim() : '';
+    return !ORIGINAL_CORRECTABLE_VAT_RATES.includes(rate) || net === '';
+  };
+  if (lines.some(uncorrectable)) return true;
+  const truncated = typeof lineCount === 'number' && lineCount > lines.length;
+  return truncated
+    && Array.isArray(importGate.problems)
+    && importGate.problems.some((problem) => typeof problem === 'string' && HIDDEN_LINE_UNCORRECTABLE_PROBLEMS.includes(problem));
+}
+
 export type OriginalPreviewAnnotation = 'cashMethod' | 'splitPayment' | 'reverseCharge' | 'exemption';
 
 /** Pozycja podglądu oryginału (kwoty jako tekst z pliku — bez rzutu). */
@@ -333,6 +378,11 @@ const FAILED_FETCH_REASONS: readonly DuplicateCheckReason[] = ['download-pending
  * stronach i tej samej ocenie `review` (obie bramy poprawne, te same
  * `problems` jako zbiór); `recheckNeeded` poprzedniego zapisu nigdy nie
  * przechodzi (nowy werdykt = nowa ocena).
+ *
+ * INV-16: data nadania numeru K w KSeF (`acquiredAt`) się nie zmienia. Gdy
+ * kolejny werdykt tego samego pliku (ten sam `sha256` i `env`) nie ustalił
+ * daty (pytanie do KSeF dostało 429/5xx albo błąd sieci), zostaje data
+ * z poprzedniego zapisu; własna data nowego werdyktu zawsze wygrywa.
  */
 export function mergeDuplicateCheck(previous: KsefDuplicateCheck | null, next: KsefDuplicateCheck): KsefDuplicateCheck {
   const keepPrevious = previous !== null
@@ -344,6 +394,11 @@ export function mergeDuplicateCheck(previous: KsefDuplicateCheck | null, next: K
     return { ...previous, recheck: { reason: next.reason, httpStatus: next.httpStatus, checkedAt: next.checkedAt } };
   }
   const merged: KsefDuplicateCheck = { ...next, recheck: null };
+  // Data nadania K w KSeF jest stała: werdykt, któremu nie udało się jej ustalić, nie kasuje znanej (INV-16).
+  if (merged.acquiredAt === null && previous?.acquiredAt && previous.sha256 !== null
+    && previous.sha256 === next.sha256 && previous.env === next.env) {
+    merged.acquiredAt = previous.acquiredAt;
+  }
   const release = previous ? carriedRelease(previous, next) : null;
   if (release && next.importGate) merged.importGate = { ...next.importGate, release };
   return merged;
