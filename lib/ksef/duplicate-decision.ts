@@ -870,7 +870,7 @@ export const DUPLICATE_DECISION_TEXTS = {
     CANNOT: (nr: string) =>
       `Dokumentu ${nr} nie możemy teraz sprawdzić ponownie z tego miejsca. Napisz do nas: ${SUPPORT_EMAIL}, podając numer dokumentu. Nie wystawiaj go ponownie.`,
     PAUSED: (nr: string) =>
-      `Wysyłka do KSeF jest chwilowo wstrzymana przez operatora, więc dokumentu ${nr} nie sprawdziliśmy ponownie. Spróbuj ponownie, gdy wysyłka zostanie przywrócona. Nie wystawiaj go ponownie.`,
+      `Wysyłka do KSeF jest chwilowo wstrzymana przez FaktWay, więc dokumentu ${nr} nie sprawdziliśmy ponownie. Spróbuj ponownie, gdy wysyłka zostanie przywrócona. Nie wystawiaj go ponownie.`,
     PAUSE_UNKNOWN: (nr: string) =>
       `Nie możemy sprawdzić, czy KSeF jest teraz dostępny, więc dokumentu ${nr} nie sprawdziliśmy ponownie. Spróbuj ponownie za chwilę. Nie wystawiaj go ponownie.`,
     NO_CERTIFICATE: (nr: string) =>
