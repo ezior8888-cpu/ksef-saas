@@ -148,8 +148,6 @@ function render(initial: InvoiceDetailInitial): string {
   return (host.textContent ?? '').replace(/ /g, ' ');
 }
 
-const text = () => (host?.textContent ?? '').replace(/ /g, ' ');
-
 function buttonsLabelled(label: string): HTMLButtonElement[] {
   return Array.from(host?.querySelectorAll('button') ?? []).filter((b) => (b.textContent ?? '').trim() === label);
 }
