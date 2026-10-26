@@ -178,7 +178,7 @@ describe('PR D: polityka „Sprawdź ponownie” (D2): kiedy wolno', () => {
     // Brak wpisów w ogóle (440 bez numeru oryginału): bez przycisku, karta nie ma panelu.
     expect(await view({ facts: factsOf(check, { submissions: [] }) })).toBeNull();
     // Brak faktury w firmie.
-    expect(await view({ facts: { ...factsOf(check), invoice: null } })).toBeNull();
+    expect(await view({ facts: { ...factsOf(check), invoice: null } as unknown as RecheckInput["facts"] })).toBeNull();
   });
 
   it('znacznik w kształcie, którego nie rozumiemy (v ≠ 1): bez przycisku', async () => {
