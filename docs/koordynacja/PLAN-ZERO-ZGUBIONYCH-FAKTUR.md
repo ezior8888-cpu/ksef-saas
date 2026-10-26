@@ -252,8 +252,12 @@ agenta z weryfikacją Bartosza, nie obietnica.
   Teksty klienta PR C i komunikaty P0001 z 00156: przegląd prawnika przed
   KSeF PROD (punkt bramki, sekcja 8). Runbook: `ksef-error-codes.md`, sekcja
   „D-A4-1b-3 PR C”; kontrola: `kontrola-faktur-ksef.sh`, sekcja 10 (h) do (p).
-  Dalej: **PR D** („Sprawdź ponownie” dla powodów bez danych oryginału)
-  i **PR E** (K na wierszu X przy tej samej treści, C5). Bez decyzji
+  **PR D** („Sprawdź ponownie” dla powodów bez danych oryginału) zrobiony
+  w stosie na #248: właściciel albo administrator zleca uzgodnienie
+  (`requeue_ksef_send(p_reconcile_only)`, zdarzenie z `reconcileOnly: true`, runner
+  nie wysyła), cooldown 10 minut z audytu `invoice.duplicate_recheck`, wskazówka
+  o `InvoiceRead` przy 403; bez migracji (runbook `ksef-error-codes.md`,
+  „Sprawdź ponownie”). Dalej: **PR E** (K na wierszu X przy tej samej treści, C5). Bez decyzji
   w panelu zostają: KOR/ZAL/ROZ (D-A4-1b-3-S), `same-content-other-program`
   (D-A4-1b-2), `archive-conflict` (runbook).
   Zapisane osobno przy PR C (nie naprawiane w nim; szczegóły w runbooku):
@@ -657,6 +661,20 @@ są odhaczone (z datą i numerem PR/raportu):
       prawnika nie dotyczą. Zmiana tekstu P0001 po przeglądzie wymaga nowej
       migracji i tej samej zmiany w lustrze TS (strażnik
       `tests/unit/zapis-oryginalu-migracja.test.ts`).
+- [ ] Teksty „Sprawdź ponownie” D-A4-1b-3 PR D przejrzane przez prawnika
+      (rozszerzenie punktów wyżej); TEST bez blokady. Ta sama migawka
+      (`tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt`): 18 tekstów
+      `DUPLICATE_DECISION_TEXTS.RECHECK`: wstęp z numerem KSeF i dniem nadania
+      (`INTRO`), co robi przycisk (`WHAT_NEXT`), przycisk i „Nie wystawiaj tej
+      faktury ponownie” (`BUTTON`, `NO_REISSUE`), wskazówka przy 403: dane
+      logowania KSeF w FaktWay bez uprawnienia `InvoiceRead`, sprawdź je
+      w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach
+      (`HINT_403`, certyfikat, nie token), dane z innego
+      środowiska KSeF (`ENV_MISMATCH`), prośba o właściciela lub administratora
+      (`ROLE`), sprawdzanie w toku i cooldown (`IN_FLIGHT`, `COOLDOWN`,
+      `QUEUED`), odmowy (`NOT_AVAILABLE`, `CANNOT`, `PAUSED`, `PAUSE_UNKNOWN`,
+      `ENV_UNKNOWN`, `NO_CERTIFICATE`, `REFUSED`) i błąd ogólny (`GENERIC`). Bez nowych
+      komunikatów bazy (PR D nie ma migracji).
 - [ ] `scripts/ops/kontrola-faktur-ksef.sh` uruchamiany codziennie przez
       14 dni bez „nieznanych” stanów.
 
@@ -703,6 +721,7 @@ pierwszy kwartał; każdy nowy kod błędu lub blokada wchodzi tylko z wyjściem
 | 14.10.2026 | A5 — dokument cyklu życia | #262 | `cykl-zycia-faktury-ksef.md`: `offline_queued` bez wyjścia do `sending` od 02.10, jedyne wyjście `failed OFFLINE_DEADLINE_EXCEEDED` z crona kolejki (kod spoza katalogu — I4) | w wydaniu #257–#263; luka #5 (wyjście dla stojących faktur) po sekcji 4a z produkcji |
 | 14.10.2026 | A5 — certyfikat | #263 | `cert-expiry-alert`: ścisły odczyt adresu — błąd bazy/GoTrue nie jest „brakiem adresu” (dawniej push zamykał próg, a mail nie wychodził nigdy); firma z błędem odłożona i na liście operatora, pozostałe dalej, zadanie rzuca na końcu (ponowienie); mail z kluczem idempotencji (próg + liczba dni); mutanty 12/12 | w wydaniu #257–#263; wdrożenie: worker; błąd Resend dalej zatrzymuje kolejne firmy w pętli (osobne ustalenie); `getTenantAdminEmail`/`getTenantOwnerUserId` bez wołających |
 | 26.10.2026 | D-A4-1b-3 PR C | #248 | zapis oryginału z oznaczeniem FaktWay/FaktFlow (`faktflow-original`) przy nierozstrzygniętym 440: klient decyduje na karcie („ta sama” / „inna sprzedaż”, a przy wcześniejszej wersji tego dokumentu albo tej samej treści jeden przycisk „Zapisz fakturę z KSeF”), a jedna transakcja zapisuje K jako przyjętą fakturę sprzedaży (`origin='ksef_import'`, numer FV/N) i zdejmuje numer z wycofanego X (decyzje Bartosza 08.10 C1–C8, 09–10.10 N1–N6); brama pochodzenia (16 jawnych reguł) liczona przez runner i zapisana na znaczniku; plik nie z generatora → przegląd operatora (I5R, alarm po 72 h) z zapisem albo oddaniem decyzji klientowi; ponowne sprawdzenie (`recheck-needed`) przy archiwum/rozjeździe; inna firma z tym samym NIP i numer znany po werdykcie → blokady; PDF szkicu bez numeru odmawiany z odnośnikiem do K; I3K (brak sesji albo daty) + skrypt `oryginal-ksef-data-nadania.sh`; migracja **00156** (dawniej 00149 — przeniesiona, bo 00151 i 00155 nadpisały po niej funkcje PR C; ciała z 00151/00155 + zmiany PR C, ścieżka PR B bez zmian); czerwone przed naprawą: 1487 jednostkowych (commit 2), 69/70 testów bazy (commit 4, PGRST202); scalenie main (330 commitów, marka FaktWay); testy bazy uruchamiane lokalnie na izolowanym Supabase (kopia joba „RLS isolation”) | **00156 przed wdrożeniem**; typy 00156 w kolejnym PR; przed KSeF PROD przegląd tekstów przez prawnika (82 nowe, lista w sekcji 8); zapisane: D-A4-1b-3-MI, -UPO, -SYS, -DATE, -PDF, -PAY, -CAT, -LIST, -EVID, -XEDIT, -KORB2C, -KORZW, -FLO-NUM, GEN-PESEL-KRAJ, C5b-d+, IDX-ENV, -TESTENV (opis w runbooku i opisie PR); dalej w bloku A: PR D („Sprawdź ponownie” dla powodów bez danych oryginału) |
+| 26.10.2026 | D-A4-1b-3 PR D | #336 | „Sprawdź ponownie” dla `KSEF_DUPLICATE_RECONCILE` bez danych oryginału (brak zapisu sprawdzenia, pobranie 403/5xx, magazyn, archiwum, dane z innego środowiska KSeF): przycisk dla właściciela i administratora zleca `requeue_ksef_send(p_reconcile_only)` (runner nigdy nie wysyła), cooldown 10 minut z audytu `invoice.duplicate_recheck`, przy 403 wskazówka o `InvoiceRead`, członek firmy widzi dane i prośbę o właściciela; wspólny rdzeń `reconcileOnlyBlocker` z „Tylko uzgodnij” operatora; znaleziona luka: `enqueueKsefSubmitAfterDraft` nie dawał `reconcileOnly` do zdarzenia (runner wysłałby fakturę), a Offline24 wysłałby ją przy awarii KSeF: oba zamknięte; czerwone przed naprawą: 86 testów jednostkowych (commit „czerwone testy”), macierz A4: powody RECHECK mają wyjście klienta; **bez migracji**; stos na #248 | po scaleniu #248 i tego PR: wdrożenie worker → web, zapytanie o `invoice.duplicate_recheck` z runbooku; przed KSeF PROD przegląd 17 nowych tekstów przez prawnika (lista w sekcji 8); zapisane: 440 bez numeru oryginału nie ma panelu, więc ani przycisku (wyjście: „Tylko uzgodnij”/I5); dalej w bloku A: PR E (K na wierszu X, C5) i A5 |
 
 ---
 
