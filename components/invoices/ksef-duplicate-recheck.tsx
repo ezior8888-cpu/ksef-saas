@@ -48,7 +48,9 @@ export function KsefDuplicateRecheck({ invoiceId, view }: Props) {
     <div className="mt-3 space-y-2 text-sm text-amber-900 dark:text-amber-100" data-testid="sprawdz-ponownie">
       <p>{view.reason === 'env-mismatch' ? T.ENV_MISMATCH : T.INTRO(nr, view.originalKsefNumber, view.assignedDay)}</p>
       {view.grantInvoiceRead && <p>{T.HINT_403}</p>}
-      {refusal === null && <p>{T.WHAT_NEXT}</p>}
+      {/* Obietnica crona (I5) tylko tam, gdzie cron naprawdę sprawdza: blokada SQL decyzji nie patrzy na środowisko, więc
+          powód decyzyjny z innego środowiska to I5D i nikt go sam nie ponowi. ENV_MISMATCH mówi już, co zrobić. */}
+      {refusal === null && view.reason !== 'env-mismatch' && <p>{T.WHAT_NEXT}</p>}
       {refusal && <p>{refusal.message}</p>}
       {showButton && (
         <Button type="button" size="sm" disabled={pending || refusal !== null} onClick={run}>

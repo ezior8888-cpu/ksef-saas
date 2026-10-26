@@ -942,7 +942,7 @@ oryginału z KSeF. Przycisk nie czeka na cron I5 (48 godzin) ani na operatora.
 | brak zapisu sprawdzenia (`no-check`, znacznik sprzed 00144) | numer KSeF, „numer nadany {dzień}” (z `acquiredAt` albo z numeru KSeF), przycisk, „Nie wystawiaj tej faktury ponownie.” |
 | `download-refused` | to samo; przy kodzie 403 dodatkowo: dane logowania KSeF w FaktWay (certyfikat) nie mają uprawnienia do odczytu faktur (`InvoiceRead`); sprawdź uprawnienia w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach → KSeF, potem „Sprawdź ponownie” (klient nie ma tokenu do nadania uprawnienia) |
 | `download-pending`, `storage-pending`, `archive-pending` | to samo bez wskazówki o `InvoiceRead` |
-| `original_check.env` ≠ `KSEF_ENV` | „Dane oryginału pochodzą z innego środowiska KSeF…” i przycisk |
+| `original_check.env` ≠ `KSEF_ENV` | „Dane oryginału pochodzą z innego środowiska KSeF…” i przycisk, bez zdania o automatycznym sprawdzeniu: powód decyzyjny (`no-own-file`, `known-number`, `faktflow-original`) z innego środowiska to I5D (blokada SQL nie patrzy na środowisko), a cron I5 ponawia tylko I5; alarm I5D liczy takie wiersze |
 
 Nie dotyczy powodów z panelem decyzji (`no-own-file`, `known-number`, `faktflow-original` z oceną pliku)
 ani deterministycznych (`same-content-other-program`, `archive-conflict`).

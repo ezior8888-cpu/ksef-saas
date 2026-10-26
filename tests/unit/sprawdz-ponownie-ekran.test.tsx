@@ -214,6 +214,28 @@ describe('PR D: przycisk „Sprawdź ponownie” na karcie', () => {
     expect(t).toContain('Nie wystawiaj tej faktury ponownie.');
   });
 
+  it('inne środowisko z powodem decyzyjnym (no-own-file): bez obietnicy automatycznego sprawdzenia, której cron I5 nie spełni', () => {
+    // Blokada SQL (00156) nie patrzy na środowisko: no-own-file z innego środowiska to I5D, a cron I5 bierze tylko I5.
+    // Karta nie może obiecywać „automatycznie, zwykle w ciągu 2 dni” — klient czekałby bez końca.
+    const t = render(
+      initialOf({ ksef_duplicate_recheck: recheckView({ reason: 'env-mismatch' }) }, duplicateCheck({ env: 'production', reason: 'no-own-file' })),
+    );
+    expect(t).toContain(TEXTS().ENV_MISMATCH);
+    expect(t).not.toContain(TEXTS().WHAT_NEXT);
+    expect(t).not.toMatch(/automatycznie/i);
+    expect(t).not.toContain('w ciągu 2 dni');
+    expect(buttonsLabelled(LABEL)).toHaveLength(1);
+    expect(buttonsLabelled(LABEL)[0]!.disabled).toBe(false);
+    expect(t).toContain('Nie wystawiaj tej faktury ponownie.');
+  });
+
+  it('powody pobrania i brak zapisu sprawdzenia: cron I5 je uzgadnia, więc „automatycznie, zwykle w ciągu 2 dni” zostaje', () => {
+    for (const reason of ['download-refused', 'download-pending', 'storage-pending', 'archive-pending', 'no-check'] as const) {
+      const t = render(initialOf({ ksef_duplicate_recheck: recheckView({ reason }) }));
+      expect(t, reason).toContain(TEXTS().WHAT_NEXT);
+    }
+  });
+
   it('kliknięcie: akcja z identyfikatorem faktury, toast z sukcesem i odświeżenie strony', async () => {
     render(initialOf());
     await click(buttonsLabelled(LABEL)[0]!);
