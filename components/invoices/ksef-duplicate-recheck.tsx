@@ -1,6 +1,6 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
@@ -18,6 +18,9 @@ interface Props {
 
 const T = DUPLICATE_DECISION_TEXTS.RECHECK;
 
+/** Zapas po końcu cooldownu: serwer liczy go zegarem aplikacji i bazy, więc odświeżamy tuż po, nie tuż przed. */
+const COOLDOWN_REFRESH_SLACK_MS = 1_000;
+
 /**
  * „Sprawdź ponownie” na karcie faktury w `KSEF_DUPLICATE_RECONCILE`, gdy brakuje danych oryginału
  * (D-A4-1b-3 PR D). Komponent niczego nie liczy: widok (powód, rola, cooldown) przychodzi z serwera
@@ -26,6 +29,10 @@ const T = DUPLICATE_DECISION_TEXTS.RECHECK;
  *
  * Teksty: `DUPLICATE_DECISION_TEXTS.RECHECK` (lista prawnika). Przycisk widzi właściciel/administrator;
  * członek firmy dostaje dane tylko do odczytu i prośbę o właściciela.
+ *
+ * Cooldown: przycisk jest nieaktywny wg widoku z serwera, a widok sam się nie przelicza (Realtime odświeża kartę
+ * tylko po zmianie wiersza faktury). Dlatego po `view.cooldownMsLeft` (czas WZGLĘDNY z serwera, więc rozjazd zegara
+ * przeglądarki nic nie psuje) karta woła `router.refresh()` i dostaje widok z aktywnym przyciskiem.
  */
 export function KsefDuplicateRecheck({ invoiceId, view }: Props) {
   const router = useRouter();
@@ -34,6 +41,14 @@ export function KsefDuplicateRecheck({ invoiceId, view }: Props) {
   const refusal = view.refusal;
   // Przycisk jest tam, gdzie klient może go kiedyś użyć: aktywny albo (cooldown) chwilowo nieaktywny.
   const showButton = refusal === null || refusal.code === 'cooldown';
+  const cooldownMsLeft = view.cooldownMsLeft;
+
+  useEffect(() => {
+    if (cooldownMsLeft === null) return;
+    const timer = setTimeout(() => router.refresh(), cooldownMsLeft + COOLDOWN_REFRESH_SLACK_MS);
+    return () => clearTimeout(timer);
+    // `view` w zależnościach: każdy świeży widok z serwera zaczyna odliczanie od nowa.
+  }, [view, cooldownMsLeft, router]);
 
   function run() {
     startTransition(async () => {

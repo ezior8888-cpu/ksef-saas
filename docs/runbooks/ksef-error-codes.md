@@ -955,7 +955,8 @@ ani deterministycznych (`same-content-other-program`, `archive-conflict`).
   jeszcze raz i wydaje nowy werdykt (panel decyzji, zapis K, albo ponownie brak danych).
 - **Cooldown.** 10 minut od ostatniego wpisu audytu `invoice.duplicate_recheck` tej faktury (metadane:
   `reason`, `originalKsefNumber`, `sendAttemptId`). Klient dostaje zdanie z numerem dokumentu i minutami
-  do końca. Status `queued`/`sending`: „Sprawdzamy ponownie w KSeF… odśwież stronę za kilka minut”.
+  do końca; widok niesie czas względny (`cooldownMsLeft`), a karta sama odświeża się sekundę po jego końcu,
+  więc przycisk wraca bez ręcznego odświeżania strony. Status `queued`/`sending`: „Sprawdzamy ponownie w KSeF… odśwież stronę za kilka minut”.
 - **Hamulce.** Wyłącznik wysyłek (`killAllKsefSubmissions`), niemożność jego odczytu i brak certyfikatu KSeF
   zwracają zdania o sprawdzaniu (nie o wysyłce) z numerem dokumentu; faktura zostaje `failed`. W tym trybie
   nie działa Offline24 (wysyłałby fakturę).

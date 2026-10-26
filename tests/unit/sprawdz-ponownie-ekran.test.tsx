@@ -92,6 +92,7 @@ function recheckView(over: Partial<RecheckProp> = {}): RecheckProp {
     originalKsefNumber: K,
     assignedDay: '2026-10-01',
     grantInvoiceRead: false,
+    cooldownMsLeft: null,
     refusal: null,
     ...over,
   } as RecheckProp;
@@ -274,6 +275,75 @@ describe('PR D: przycisk „Sprawdź ponownie” na karcie', () => {
     expect(t).toContain(TEXTS().COOLDOWN(NR, 6));
     const buttons = buttonsLabelled(LABEL);
     expect(buttons.every((b) => b.disabled)).toBe(true);
+  });
+
+  describe('koniec cooldownu odświeża kartę sam (przycisk nie czeka na ręczne F5)', () => {
+    const MIN = 60_000;
+    const cooldownCard = (ms: number | null) =>
+      initialOf({
+        ksef_duplicate_recheck: recheckView({
+          cooldownMsLeft: ms,
+          refusal: ms === null ? null : { code: 'cooldown', message: TEXTS().COOLDOWN(NR, Math.ceil(ms / MIN)) },
+        }),
+      });
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('po upływie czasu z widoku (liczonego przez serwer) strona się odświeża i serwer wydaje przycisk bez cooldownu', () => {
+      render(cooldownCard(9 * MIN));
+      expect(buttonsLabelled(LABEL)[0]!.disabled).toBe(true);
+      act(() => {
+        vi.advanceTimersByTime(9 * MIN - 1);
+      });
+      expect(m.refresh).not.toHaveBeenCalled();
+      // Zapas na rozjazd zegarów aplikacji i bazy: odświeżenie dopiero po końcu cooldownu, nie tuż przed.
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      expect(m.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('czas liczony od widoku z serwera, nie od zegara przeglądarki: rozjazd zegarów nie zapętla odświeżeń', () => {
+      vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z')); // zegar klienta daleko od zegara serwera
+      render(cooldownCard(3 * MIN));
+      act(() => {
+        vi.advanceTimersByTime(3 * MIN - 1);
+      });
+      expect(m.refresh).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      expect(m.refresh).toHaveBeenCalledTimes(1);
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(m.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('bez cooldownu (przycisk aktywny, odmowa roli itd.) nie ma żadnego timera ani odświeżania', () => {
+      render(cooldownCard(null));
+      act(() => {
+        vi.advanceTimersByTime(60 * MIN);
+      });
+      expect(m.refresh).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('opuszczenie karty przed końcem cooldownu kasuje timer', () => {
+      render(cooldownCard(5 * MIN));
+      act(() => root?.unmount());
+      root = null;
+      expect(vi.getTimerCount()).toBe(0);
+      act(() => {
+        vi.advanceTimersByTime(10 * MIN);
+      });
+      expect(m.refresh).not.toHaveBeenCalled();
+    });
   });
 
   it('powód z panelem decyzji: panel decyzji, BEZ przycisku „Sprawdź ponownie”', () => {

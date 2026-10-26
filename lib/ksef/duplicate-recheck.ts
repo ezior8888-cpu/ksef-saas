@@ -121,6 +121,12 @@ export interface DuplicateRecheckView {
   assignedDay: string | null;
   /** Odmowa pobrania 403 w tym środowisku: wskazówka o uprawnieniu InvoiceRead. */
   grantInvoiceRead: boolean;
+  /**
+   * Milisekundy do końca cooldownu w chwili liczenia widoku (`refusal.code === 'cooldown'`), inaczej `null`.
+   * Czas względny, nie znacznik: zegar przeglądarki może się rozjeżdżać z serwerowym, a karta po tym czasie
+   * odświeża się sama (bez ręcznego F5 przycisk zostałby nieaktywny).
+   */
+  cooldownMsLeft: number | null;
   refusal: DuplicateRecheckRefusal | null;
 }
 
@@ -141,15 +147,15 @@ export interface DuplicateRecheckInput {
 /** `(bez numeru)` jak `v_num` w tekstach SQL decyzji. */
 const documentNumber = (invoiceNumber: string | null | undefined): string => invoiceNumber ?? '(bez numeru)';
 
-/** Minuty do końca cooldownu (zaokrąglone w górę); `null`, gdy cooldown minął albo wpisu nie ma. */
-function cooldownMinutesLeft(lastRecheckAt: string | null, now: Date): number | null {
+/** Milisekundy do końca cooldownu; `null`, gdy cooldown minął albo wpisu nie ma. */
+function cooldownMsLeft(lastRecheckAt: string | null, now: Date): number | null {
   if (lastRecheckAt === null) return null;
   const last = Date.parse(lastRecheckAt);
   if (Number.isNaN(last)) return null;
   // Data z przyszłości (rozjazd zegarów) liczy się jak świeże sprawdzenie: cooldownu nie da się nią ominąć.
   const elapsed = Math.max(0, now.getTime() - last);
   if (elapsed >= DUPLICATE_RECHECK_COOLDOWN_MS) return null;
-  return Math.ceil((DUPLICATE_RECHECK_COOLDOWN_MS - elapsed) / 60_000);
+  return DUPLICATE_RECHECK_COOLDOWN_MS - elapsed;
 }
 
 /**
@@ -188,7 +194,7 @@ export function duplicateRecheckView(input: DuplicateRecheckInput): DuplicateRec
   const T = DUPLICATE_DECISION_TEXTS.RECHECK;
   const nr = documentNumber(inv.internal_number);
 
-  const base: Omit<DuplicateRecheckView, 'refusal'> = {
+  const base: Omit<DuplicateRecheckView, 'refusal' | 'cooldownMsLeft'> = {
     kind: 'recheck',
     reason,
     invoiceNumber: inv.internal_number,
@@ -196,8 +202,9 @@ export function duplicateRecheckView(input: DuplicateRecheckInput): DuplicateRec
     assignedDay: originalAssignedDay(check, k),
     grantInvoiceRead: reason === 'download-refused' && check?.httpStatus === 403,
   };
-  const refuse = (code: DuplicateRecheckRefusalCode, message: string): DuplicateRecheckView => ({
+  const refuse = (code: DuplicateRecheckRefusalCode, message: string, cooldownMs: number | null = null): DuplicateRecheckView => ({
     ...base,
+    cooldownMsLeft: cooldownMs,
     refusal: { code, message },
   });
 
@@ -213,8 +220,8 @@ export function duplicateRecheckView(input: DuplicateRecheckInput): DuplicateRec
   if (blocker === 'env-unknown') return refuse('env-unknown', KSEF_SEND_MESSAGES.envUnknown);
   if (blocker !== null) return refuse('cannot-reconcile', T.CANNOT(nr));
 
-  const minutes = cooldownMinutesLeft(input.lastRecheckAt, input.now);
-  if (minutes !== null) return refuse('cooldown', T.COOLDOWN(nr, minutes));
+  const cooldownMs = cooldownMsLeft(input.lastRecheckAt, input.now);
+  if (cooldownMs !== null) return refuse('cooldown', T.COOLDOWN(nr, Math.ceil(cooldownMs / 60_000)), cooldownMs);
 
-  return { ...base, refusal: null };
+  return { ...base, cooldownMsLeft: null, refusal: null };
 }

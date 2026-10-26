@@ -46,6 +46,7 @@ interface RecheckView {
   originalKsefNumber: string;
   assignedDay: string | null;
   grantInvoiceRead: boolean;
+  cooldownMsLeft: number | null;
   refusal: Refusal | null;
 }
 
@@ -231,6 +232,19 @@ describe('PR D: cooldown 10 minut (D3)', () => {
   it('minuty do końca: 5:00 po sprawdzeniu → 5 min; tuż po sprawdzeniu → 10 min', async () => {
     expect((await view({ lastRecheckAt: ago(5 * 60_000) }))!.refusal?.message).toBe(DUPLICATE_DECISION_TEXTS.RECHECK.COOLDOWN(DUP_NR, 5));
     expect((await view({ lastRecheckAt: ago(0) }))!.refusal?.message).toBe(DUPLICATE_DECISION_TEXTS.RECHECK.COOLDOWN(DUP_NR, 10));
+  });
+
+  it('widok niesie czas do końca cooldownu w ms (karta odświeża się po nim sama); poza cooldownem null', async () => {
+    expect((await view({ lastRecheckAt: ago(9 * 60_000 + 59_000) }))!.cooldownMsLeft).toBe(1_000);
+    expect((await view({ lastRecheckAt: ago(5 * 60_000) }))!.cooldownMsLeft).toBe(5 * 60_000);
+    expect((await view({ lastRecheckAt: ago(0) }))!.cooldownMsLeft).toBe(10 * 60_000);
+    // Data z przyszłości liczy się jak świeże sprawdzenie: pełny cooldown, nie więcej.
+    expect((await view({ lastRecheckAt: new Date(NOW.getTime() + 60_000).toISOString() }))!.cooldownMsLeft).toBe(10 * 60_000);
+    for (const over of [{ lastRecheckAt: null }, { lastRecheckAt: ago(10 * 60_000) }, { lastRecheckAt: 'nie-data' }]) {
+      expect((await view(over))!.cooldownMsLeft).toBeNull();
+    }
+    // Odmowa roli ma pierwszeństwo przed cooldownem: karta nie odlicza czasu, którego członek i tak nie wykorzysta.
+    expect((await view({ canManage: false, lastRecheckAt: ago(60_000) }))!.cooldownMsLeft).toBeNull();
   });
 
   it('brak albo nieczytelny wpis poprzedniego sprawdzenia: nie blokuje', async () => {
