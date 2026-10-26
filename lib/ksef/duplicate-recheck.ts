@@ -24,7 +24,6 @@
  */
 
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
-import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
 import type { KsefEnvironment } from '@/types/ksef';
 
 import { originalAssignedDay, parseDuplicateCheck, type DuplicateCheckReason, type KsefDuplicateCheck } from './duplicate-check';
@@ -217,7 +216,7 @@ export function duplicateRecheckView(input: DuplicateRecheckInput): DuplicateRec
     facts: input.sendFacts,
     openSent: input.facts.submissions.some((s) => (OPEN_SUBMISSION_STATUSES as readonly string[]).includes(s.status)),
   });
-  if (blocker === 'env-unknown') return refuse('env-unknown', KSEF_SEND_MESSAGES.envUnknown);
+  if (blocker === 'env-unknown') return refuse('env-unknown', T.ENV_UNKNOWN(nr));
   if (blocker !== null) return refuse('cannot-reconcile', T.CANNOT(nr));
 
   const cooldownMs = cooldownMsLeft(input.lastRecheckAt, input.now);

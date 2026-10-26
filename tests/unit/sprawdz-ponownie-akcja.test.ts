@@ -247,9 +247,12 @@ describe('PR D: recheckKsefDuplicateAction: odmowy', () => {
     expect(m.enqueue).not.toHaveBeenCalled();
   });
 
-  it('nieznane środowisko aplikacji: tekst o środowisku, bez kolejki', async () => {
+  it('nieznane środowisko aplikacji: tekst o sprawdzaniu z numerem dokumentu (nie zdanie z wysyłki), bez kolejki', async () => {
     m.env = null;
-    expect(await recheck()).toEqual({ success: false, error: KSEF_SEND_MESSAGES.envUnknown });
+    const result = await recheck();
+    expect(result).toEqual({ success: false, error: TEXTS().ENV_UNKNOWN(NR) });
+    expect((result as { error: string }).error).toContain(NR);
+    expect((result as { error: string }).error).not.toBe(KSEF_SEND_MESSAGES.envUnknown);
     expect(m.enqueue).not.toHaveBeenCalled();
   });
 

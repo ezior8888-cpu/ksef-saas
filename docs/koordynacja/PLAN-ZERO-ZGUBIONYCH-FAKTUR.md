@@ -663,7 +663,7 @@ są odhaczone (z datą i numerem PR/raportu):
       `tests/unit/zapis-oryginalu-migracja.test.ts`).
 - [ ] Teksty „Sprawdź ponownie” D-A4-1b-3 PR D przejrzane przez prawnika
       (rozszerzenie punktów wyżej); TEST bez blokady. Ta sama migawka
-      (`tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt`): 17 tekstów
+      (`tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt`): 18 tekstów
       `DUPLICATE_DECISION_TEXTS.RECHECK`: wstęp z numerem KSeF i dniem nadania
       (`INTRO`), co robi przycisk (`WHAT_NEXT`), przycisk i „Nie wystawiaj tej
       faktury ponownie” (`BUTTON`, `NO_REISSUE`), wskazówka przy 403: dane
@@ -673,7 +673,7 @@ są odhaczone (z datą i numerem PR/raportu):
       środowiska KSeF (`ENV_MISMATCH`), prośba o właściciela lub administratora
       (`ROLE`), sprawdzanie w toku i cooldown (`IN_FLIGHT`, `COOLDOWN`,
       `QUEUED`), odmowy (`NOT_AVAILABLE`, `CANNOT`, `PAUSED`, `PAUSE_UNKNOWN`,
-      `NO_CERTIFICATE`, `REFUSED`) i błąd ogólny (`GENERIC`). Bez nowych
+      `ENV_UNKNOWN`, `NO_CERTIFICATE`, `REFUSED`) i błąd ogólny (`GENERIC`). Bez nowych
       komunikatów bazy (PR D nie ma migracji).
 - [ ] `scripts/ops/kontrola-faktur-ksef.sh` uruchamiany codziennie przez
       14 dni bez „nieznanych” stanów.

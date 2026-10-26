@@ -151,6 +151,7 @@ TEXTS.RECHECK.BUTTON = Sprawdź ponownie
 TEXTS.RECHECK.CANNOT({1}) = Dokumentu {1} nie możemy teraz sprawdzić ponownie z tego miejsca. Napisz do nas: pomoc@faktway.pl, podając numer dokumentu. Nie wystawiaj go ponownie.
 TEXTS.RECHECK.COOLDOWN({1}, {2}) = Dokument {1} sprawdziliśmy w KSeF przed chwilą. Kolejne sprawdzenie możesz uruchomić za {2} min. Nie wystawiaj go ponownie.
 TEXTS.RECHECK.ENV_MISMATCH = Dane oryginału pochodzą z innego środowiska KSeF niż to, w którym FaktWay pracuje teraz. Sprawdź ponownie, żeby pobrać fakturę z obecnego środowiska.
+TEXTS.RECHECK.ENV_UNKNOWN({1}) = Nie możemy teraz potwierdzić środowiska KSeF po stronie FaktWay, więc dokumentu {1} nie sprawdziliśmy ponownie. Odśwież stronę za kilka minut; jeśli komunikat się powtarza, napisz do nas: pomoc@faktway.pl, podając numer dokumentu. Nie wystawiaj go ponownie.
 TEXTS.RECHECK.GENERIC = Nie udało się uruchomić ponownego sprawdzenia. Spróbuj ponownie za chwilę; jeśli błąd się powtarza, napisz do nas: pomoc@faktway.pl.
 TEXTS.RECHECK.HINT_403 = Dane logowania KSeF w FaktWay nie mają uprawnienia do odczytu faktur (InvoiceRead). Sprawdź uprawnienia w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach → KSeF, a potem wybierz „Sprawdź ponownie”.
 TEXTS.RECHECK.INTRO({1}, {2}, {3}) = KSeF ma już fakturę Twojej firmy o numerze dokumentu {1} (numer KSeF {2}, numer nadany {3}). Nie mamy jeszcze jej treści, więc nie możesz teraz zdecydować, czym jest ten dokument.

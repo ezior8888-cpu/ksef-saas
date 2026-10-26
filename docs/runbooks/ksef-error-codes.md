@@ -957,8 +957,8 @@ ani deterministycznych (`same-content-other-program`, `archive-conflict`).
   `reason`, `originalKsefNumber`, `sendAttemptId`). Klient dostaje zdanie z numerem dokumentu i minutami
   do końca; widok niesie czas względny (`cooldownMsLeft`), a karta sama odświeża się sekundę po jego końcu,
   więc przycisk wraca bez ręcznego odświeżania strony. Status `queued`/`sending`: „Sprawdzamy ponownie w KSeF… odśwież stronę za kilka minut”.
-- **Hamulce.** Wyłącznik wysyłek (`killAllKsefSubmissions`), niemożność jego odczytu i brak certyfikatu KSeF
-  zwracają zdania o sprawdzaniu (nie o wysyłce) z numerem dokumentu; faktura zostaje `failed`. W tym trybie
+- **Hamulce.** Wyłącznik wysyłek (`killAllKsefSubmissions`), niemożność jego odczytu, brak certyfikatu KSeF
+  i nieznane środowisko aplikacji (`KSEF_ENV`; `RECHECK.ENV_UNKNOWN`) zwracają zdania o sprawdzaniu (nie o wysyłce) z numerem dokumentu; faktura zostaje `failed`. W tym trybie
   nie działa Offline24 (wysyłałby fakturę).
 - **Co widzi operator.** Wpis `invoice.send_requeued` z `reconcile_only = true` i aktorem = klient (RPC),
   `invoice.submit_requested` z `send = requeue` oraz `invoice.duplicate_recheck`. Karta `/admin/ksef/[id]`

@@ -876,6 +876,9 @@ export const DUPLICATE_DECISION_TEXTS = {
       `Wysyłka do KSeF jest chwilowo wstrzymana przez FaktWay, więc dokumentu ${nr} nie sprawdziliśmy ponownie. Spróbuj ponownie, gdy wysyłka zostanie przywrócona. Nie wystawiaj go ponownie.`,
     PAUSE_UNKNOWN: (nr: string) =>
       `Nie możemy sprawdzić, czy KSeF jest teraz dostępny, więc dokumentu ${nr} nie sprawdziliśmy ponownie. Spróbuj ponownie za chwilę. Nie wystawiaj go ponownie.`,
+    /** `KSEF_ENV` nieustawione albo niepoprawne: o sprawdzaniu (nie o wysyłce), z numerem dokumentu (D4). */
+    ENV_UNKNOWN: (nr: string) =>
+      `Nie możemy teraz potwierdzić środowiska KSeF po stronie FaktWay, więc dokumentu ${nr} nie sprawdziliśmy ponownie. Odśwież stronę za kilka minut; jeśli komunikat się powtarza, napisz do nas: ${SUPPORT_EMAIL}, podając numer dokumentu. Nie wystawiaj go ponownie.`,
     NO_CERTIFICATE: (nr: string) =>
       `Brak certyfikatu KSeF: dokumentu ${nr} nie sprawdziliśmy ponownie. Wgraj certyfikat w Ustawieniach KSeF i spróbuj jeszcze raz. Nie wystawiaj go ponownie.`,
     /** Odmowa kolejki, której tekst nie nazywa dokumentu: numer z przodu. */

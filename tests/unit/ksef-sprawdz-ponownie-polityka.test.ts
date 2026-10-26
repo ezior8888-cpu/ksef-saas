@@ -4,6 +4,7 @@ import { operatorReconcileRefusal } from '@/lib/admin/ksef-operator-policy';
 import type { KsefResendFacts } from '@/lib/invoices/ksef-requeue-event';
 import { KSEF_SEND_MESSAGES } from '@/lib/invoices/ksef-send-policy';
 import { DUPLICATE_DECISION_TEXTS } from '@/lib/ksef/duplicate-decision';
+import { SUPPORT_EMAIL } from '@/lib/site';
 import type { KsefEnvironment } from '@/types/ksef';
 
 import {
@@ -161,9 +162,12 @@ describe('PR D: polityka „Sprawdź ponownie” (D2): kiedy wolno', () => {
     expect(await view({ facts: factsOf(validCheck({ env: 'production' })), environment: 'production' })).toBeNull();
   });
 
-  it('nieznane środowisko aplikacji: powód pobrania daje odmowę env-unknown z tekstem dla klienta, bez zgadywania', async () => {
+  it('nieznane środowisko aplikacji: powód pobrania daje odmowę env-unknown z tekstem sprawdzania (z numerem dokumentu), bez zgadywania', async () => {
     const v = await view({ environment: null });
-    expect(v).toMatchObject({ kind: 'recheck', refusal: { code: 'env-unknown', message: KSEF_SEND_MESSAGES.envUnknown } });
+    expect(v).toMatchObject({ kind: 'recheck', refusal: { code: 'env-unknown', message: DUPLICATE_DECISION_TEXTS.RECHECK.ENV_UNKNOWN(DUP_NR) } });
+    // Nie zdanie z wysyłki („tej faktury teraz nie wyślemy”): ponowne sprawdzenie niczego nie wysyła i nazywa dokument (D4).
+    expect(v!.refusal!.message).not.toBe(KSEF_SEND_MESSAGES.envUnknown);
+    expect(v!.refusal!.message).toContain(DUP_NR);
   });
 
   it('wymaga failed + KSEF_DUPLICATE_RECONCILE, wychodzącej i otwartego wpisu ze znacznikiem oryginału', async () => {
@@ -195,6 +199,38 @@ describe('PR D: polityka „Sprawdź ponownie” (D2): kiedy wolno', () => {
     expect(noData?.refusal?.message).toContain(DUP_NR);
     const held = await view({ sendFacts: { ...STORED, kindHeld: true } });
     expect(held?.refusal?.code).toBe('cannot-reconcile');
+  });
+});
+
+describe('PR D: teksty RECHECK dla klienta (lista prawnika, D4)', () => {
+  const NR = 'FV/77/10/2026';
+  const T = DUPLICATE_DECISION_TEXTS.RECHECK as unknown as Record<string, string | ((...args: unknown[]) => string)>;
+
+  it('ENV_UNKNOWN(nr): nazywa dokument, mówi o sprawdzaniu (nie o wysyłce), zawiera adres pomocy i „Nie wystawiaj go ponownie”', () => {
+    const make = T.ENV_UNKNOWN;
+    expect(typeof make).toBe('function');
+    const text = (make as (nr: string) => string)(NR);
+    expect(text).toContain(NR);
+    expect(text).toContain('środowiska KSeF');
+    expect(text).toContain(SUPPORT_EMAIL);
+    expect(text).toContain('Nie wystawiaj go ponownie.');
+    expect(text).not.toMatch(/wyślemy|wysyłk|wysłać/i);
+    expect(text).not.toBe(KSEF_SEND_MESSAGES.envUnknown);
+  });
+
+  it('żaden tekst RECHECK nie ma długiego myślnika (nowe teksty bez dekoracji)', () => {
+    for (const [key, value] of Object.entries(T)) {
+      const text = typeof value === 'function' ? value(NR, 'x', 'y') : value;
+      expect(text, key).not.toContain('—');
+    }
+  });
+
+  it('każda odmowa z numerem w treści (funkcja z numerem dokumentu) nazywa dokument', () => {
+    for (const key of ['IN_FLIGHT', 'COOLDOWN', 'QUEUED', 'NOT_AVAILABLE', 'CANNOT', 'PAUSED', 'PAUSE_UNKNOWN', 'NO_CERTIFICATE', 'REFUSED', 'ENV_UNKNOWN']) {
+      const fn = T[key];
+      expect(typeof fn, key).toBe('function');
+      expect((fn as (...args: unknown[]) => string)(NR, 5, 'powód'), key).toContain(NR);
+    }
   });
 });
 
