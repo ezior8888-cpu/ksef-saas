@@ -33,7 +33,7 @@ import { rowMenuEntries } from '@/app/(dashboard)/invoices/_components/invoice-r
 import {
   defaultRecurringName,
   templateLabel,
-} from '@/app/(dashboard)/invoices/recurring/_components/recurring-invoice-sheet';
+} from '@/app/(dashboard)/(faktury)/invoices/recurring/_components/recurring-invoice-sheet';
 // Świadoma zmiana: Analizy 1:1 z Finory (21.10.2026) — karta „Stali klienci” to teraz kopia
 // Finory z `finora-1do1/`, a wiersze przygotowuje adapter `toSubscriptionItems`.
 import { toSubscriptionItems } from '@/components/analizy/adapters';
