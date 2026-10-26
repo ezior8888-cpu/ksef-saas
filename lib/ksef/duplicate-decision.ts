@@ -853,9 +853,12 @@ export const DUPLICATE_DECISION_TEXTS = {
     /** Co robi przycisk; tylko tam, gdzie przycisk jest. */
     WHAT_NEXT:
       'Wybierz „Sprawdź ponownie”: pobierzemy tę fakturę z KSeF jeszcze raz, a wynik zobaczysz na tej karcie. Robimy to także automatycznie, zwykle w ciągu 2 dni.',
-    /** Odmowa pobrania 403: token KSeF bez uprawnienia do odczytu faktur. */
+    /**
+     * Odmowa pobrania 403: dane logowania KSeF w FaktWay bez uprawnienia do odczytu faktur. Klient łączy FaktWay
+     * z KSeF certyfikatem (tokenu nie ma gdzie nadać), więc rada jak w nocie PR B (`describeDuplicateOriginal`).
+     */
     HINT_403:
-      'Nadaj tokenowi KSeF uprawnienie do odczytu faktur (InvoiceRead) w Aplikacji Podatnika KSeF, a potem wybierz „Sprawdź ponownie”.',
+      'Dane logowania KSeF w FaktWay nie mają uprawnienia do odczytu faktur (InvoiceRead). Sprawdź uprawnienia w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach → KSeF, a potem wybierz „Sprawdź ponownie”.',
     /** Inne środowisko niż obecne: dane oryginału sprawdziliśmy gdzie indziej. */
     ENV_MISMATCH:
       'Dane oryginału pochodzą z innego środowiska KSeF niż to, w którym FaktWay pracuje teraz. Sprawdź ponownie, żeby pobrać fakturę z obecnego środowiska.',

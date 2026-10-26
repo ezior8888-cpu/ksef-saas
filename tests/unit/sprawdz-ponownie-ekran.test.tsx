@@ -186,6 +186,27 @@ describe('PR D: przycisk „Sprawdź ponownie” na karcie', () => {
     }
   });
 
+  it('403: wskazówka dla klienta z certyfikatem (FaktWay nie ma tokenu): uprawnienia w Aplikacji Podatnika albo ponowne podłączenie KSeF w Ustawieniach', () => {
+    const t = render(
+      initialOf(
+        { ksef_duplicate_recheck: recheckView({ reason: 'download-refused', grantInvoiceRead: true }) },
+        duplicateCheck({ reason: 'download-refused', httpStatus: 403 }),
+      ),
+    );
+    // Klient łączy FaktWay z KSeF certyfikatem (components/settings/actions.ts zapisuje tylko 'xades'): tokenu nie ma gdzie nadać.
+    expect(TEXTS().HINT_403).not.toMatch(/token/i);
+    expect(t).toContain(TEXTS().HINT_403);
+    expect(t).not.toMatch(/token/i);
+    expect(t).toContain('Dane logowania KSeF w FaktWay nie mają uprawnienia do odczytu faktur');
+    expect(t).toContain('InvoiceRead');
+    expect(t).toContain('Aplikacji Podatnika KSeF');
+    expect(t).toContain('podłącz KSeF ponownie w Ustawieniach → KSeF');
+    // Wskazówka kończy się wyjściem: po naprawie uprawnienia klient klika przycisk.
+    expect(TEXTS().HINT_403).toContain('Sprawdź ponownie');
+    expect(TEXTS().HINT_403).not.toContain('—');
+    expect(buttonsLabelled(LABEL)).toHaveLength(1);
+  });
+
   it('inne środowisko: „Dane oryginału pochodzą z innego środowiska KSeF” i przycisk', () => {
     const t = render(initialOf({ ksef_duplicate_recheck: recheckView({ reason: 'env-mismatch' }) }, duplicateCheck({ env: 'production' })));
     expect(t).toContain('Dane oryginału pochodzą z innego środowiska KSeF');

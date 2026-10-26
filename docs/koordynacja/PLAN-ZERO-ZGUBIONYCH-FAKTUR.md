@@ -666,8 +666,10 @@ są odhaczone (z datą i numerem PR/raportu):
       (`tests/unit/__snapshots__/ksef-duplikat-decyzja-teksty.txt`): 17 tekstów
       `DUPLICATE_DECISION_TEXTS.RECHECK`: wstęp z numerem KSeF i dniem nadania
       (`INTRO`), co robi przycisk (`WHAT_NEXT`), przycisk i „Nie wystawiaj tej
-      faktury ponownie” (`BUTTON`, `NO_REISSUE`), wskazówka o uprawnieniu
-      `InvoiceRead` w Aplikacji Podatnika KSeF (`HINT_403`), dane z innego
+      faktury ponownie” (`BUTTON`, `NO_REISSUE`), wskazówka przy 403: dane
+      logowania KSeF w FaktWay bez uprawnienia `InvoiceRead`, sprawdź je
+      w Aplikacji Podatnika KSeF albo podłącz KSeF ponownie w Ustawieniach
+      (`HINT_403`, certyfikat, nie token), dane z innego
       środowiska KSeF (`ENV_MISMATCH`), prośba o właściciela lub administratora
       (`ROLE`), sprawdzanie w toku i cooldown (`IN_FLIGHT`, `COOLDOWN`,
       `QUEUED`), odmowy (`NOT_AVAILABLE`, `CANNOT`, `PAUSED`, `PAUSE_UNKNOWN`,
