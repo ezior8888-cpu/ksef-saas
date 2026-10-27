@@ -190,10 +190,23 @@ zamienia je w jeden skrypt.
 | MinIO aplikacji | na ops-1, nie na db-1; wolne ok. 28 GB |
 | Twierdzenia o kodzie | pusty publiczny JWKS, 3 sprawdzenia sesji w proxy na chronione żądanie, baner KSeF co 30 s, brak `bodySizeLimit`: potwierdzone na `main` 25035bf9 |
 
+**Etap 0 na db-1, zrobiony 26.10.2026** (Bartosz):
+
+| Co | Wynik |
+|---|---|
+| Dysk | 79% → 69% samo (slot replikacji Logflare `cainophile_*` ruszył: 0,5 GB WAL zamiast 4 GB) → 57% po sprzątaniu, 16 GB wolne |
+| Dziennik systemowy | 3,7 GB → 288 MB, stały limit 300 MB (`/etc/systemd/journald.conf.d/limit.conf`) |
+| Obrazy Dockera | usunięty 1 nieużywany (722 MB); pozostałe 16 w użyciu |
+| Co zostaje na dysku | baza `_supabase` 1,1 GB (logi Logflare, bez retencji), dane aplikacji 199 MB, `btmp` ok. 290 MB |
+| Logflare i Vector | działają; NIE wyłączone, bo w compose Supabase inne usługi czekają na zdrowy `analytics` i samo zatrzymanie wywróci stos przy restarcie. Wyłączenie (albo retencja logów `_supabase`) to osobna zmiana w compose (sesja 25) |
+
+Uwaga: slot replikacji Logflare potrafi trzymać kilka GB WAL, gdy przestaje
+nadążać; to argument za `max_slot_wal_keep_size` 2–4 GB (sesja 25).
+
 **Jeszcze do zrobienia:**
 
 - `docker stats --no-stream` na app-1 i db-1 rano 9–11 i o 02:00; ile z 1,1 GB swapu na db-1 to Postgres; `vmstat` (kradzież CPU na linii CX).
-- Które kontenery stosu Supabase działają na db-1 (Logflare/analytics, Vector, Studio, Storage, imgproxy, Supavisor) i rozmiar bazy `_supabase`.
+- Które jeszcze kontenery stosu Supabase działają na db-1 (Studio, Storage, imgproxy, Supavisor). Logflare i Vector: działają (26.10).
 - `KEEP` i `RCLONE_REMOTE` w `/etc/faktflow-backup.env`, liczba i rozmiar zrzutów w katalogu kopii.
 - Limity czasu ról (`statement_timeout`) i `work_mem`.
 - 25 najdroższych zapytań z `pg_stat_statements`.
@@ -210,6 +223,9 @@ zamienia je w jeden skrypt.
 | 25.10.2026 | Korekta: db-1 nie ma 4 vCPU / 8 GB (najpewniej CX23) | #329 | przeliczone progi, nowa kolejność, sesja 26, etap 1 podzielony na 1a/1b |
 | 25.10.2026 | Odczyty Bartosza z produkcji (komentarz w #329) | #329 | sprzęt potwierdzony, MinIO na ops-1 (poprawione też w `AGENTS.md`), build w CI w etapie 1a, sesja 23 mierzy render Pulpitu; `PGRST_DB_MAX_ROWS` = 1000 → przeszukanie kodu (8 agentów, każde trafienie sprawdzone przez osobnego weryfikatora), nowe sesje 27–29 |
 
-**Następny krok:** po akceptacji planu przez Bartosza sesja 23 (pomiar
-i skrypt pozostałych odczytów), potem 22, 20, 26, 27, 4. Po stronie
-Bartosza etap 0: dziennik systemowy i nieużywane obrazy Dockera na db-1.
+| 26.10.2026 | Etap 0 na db-1 (Bartosz) | — | dysk 57% (16 GB wolne), limit dziennika 300 MB; Logflare i Vector zostają do zmiany w compose |
+| 27.10.2026 | Akceptacja planu (Bartosz) | #329 | „Zaczynaj od sesji 23, potem 22, 20, 26, 27 i 4, każda jako osobny PR” |
+
+**Następny krok:** sesja 23 (pomiar i skrypt pozostałych odczytów), potem
+22, 20, 26, 27, 4 — każda osobny PR. Dopóki #329 nie jest scalony, sesje
+czytają ten plik z gałęzi `origin/claude/plan-skalowania-3000`.
