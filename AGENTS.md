@@ -35,7 +35,7 @@ Aplikacja SaaS do wystawiania i odbierania faktur VAT w integracji z KSeF 2.0 (K
 - Tailwind CSS + shadcn/ui (style: new-york, baseColor: neutral)
 - Supabase **self-hosted** na Hetznerze (`db-1`, NBG1 — Norymberga): Postgres + RLS, GoTrue (logowanie e-mail/hasło + Google OAuth, MFA), PostgREST
 - pg-boss — background jobs (worker = druga aplikacja w Coolify, `lib/jobs/`; lokalnie `pnpm worker:dev` z `DATABASE_URL`). Inngest odpięty 02.10.2026 (etap 10) — bez ścieżki powrotu
-- Magazyn plików przez API S3 (`lib/storage/r2.ts`, zmienne `R2_*`; na produkcji MinIO na `ops-1`, odczyt 25.10.2026) — XML FA(3), UPO, zdjęcia
+- Magazyn plików przez API S3 (`lib/storage/r2.ts`, zmienne `R2_*`; na produkcji MinIO na `ops-1`) — XML FA(3), UPO, zdjęcia
 - Hosting: Hetzner + Coolify — jedyny od 14.09.2026 (szczegóły w „Infrastruktura i dostępy”)
 - **pnpm** — menedżer pakietów (`pnpm-lock.yaml`); w root nie używaj `npm install` (brak `package-lock.json`; globalny `.npmrc` z opcjami pnpm potrafi psuć npm).
 
@@ -137,8 +137,12 @@ warstwa, nie dwie.
 | Rola | IP | Co tam działa |
 |---|---|---|
 | `app-1` | `$APP` | aplikacja Next.js + worker pg-boss |
-| `ops-1` | `$OPS` | panel Coolify (port 8000, dostęp filtrowany po IP), MinIO z plikami aplikacji (`R2_*`) |
-| `db-1` | `$DB` | Supabase self-hosted: Postgres, GoTrue, Kong, PostgREST |
+| `ops-1` | `$OPS` | panel Coolify (port 8000, dostęp filtrowany po IP), MinIO z plikami aplikacji (`R2_ENDPOINT`) |
+| `db-1` | `$DB` | Supabase self-hosted: Postgres, GoTrue, Kong, Logflare |
+
+Na `db-1` działa też drugi MinIO, z szablonu Supabase (zaplecze Supabase
+Storage, tylko pusty bucket `stub`). Aplikacja go nie używa: XML, UPO
+i zdjęcia leżą na MinIO na `ops-1`.
 
 Klucz SSH w `$K` (`~/.ssh/hetzner_faktflow_ed25519`), użytkownik `root`.
 
