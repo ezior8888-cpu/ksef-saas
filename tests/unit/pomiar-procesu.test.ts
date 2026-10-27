@@ -14,6 +14,16 @@ import { recordTiming, takeTimingSummary } from '@/lib/observability/timings';
 
 const ROOT = join(__dirname, '..', '..');
 
+/**
+ * Same linie `process.metrics`, bez `process.metrics.warn`. Sztuczny zegar
+ * Vitesta podmienia `performance.now`, z którego liczy się ELU: przesunięte
+ * 1000 ms bez bezczynności pętli to ELU = 1, więc domyślny próg słusznie
+ * dopisuje ostrzeżenie.
+ */
+function metricLines(lines: string[]) {
+  return lines.map((l) => JSON.parse(l)).filter((m) => m.msg === 'process.metrics');
+}
+
 describe('pomiar procesu (sesja 23)', () => {
   let stop: (() => void) | null = null;
 
@@ -31,9 +41,9 @@ describe('pomiar procesu (sesja 23)', () => {
 
     vi.advanceTimersByTime(1_000);
 
-    expect(lines).toHaveLength(1);
-    const m = JSON.parse(lines[0]);
-    expect(m.msg).toBe('process.metrics');
+    const metrics = metricLines(lines);
+    expect(metrics).toHaveLength(1);
+    const m = metrics[0];
     expect(m.process).toBe('web');
     expect(m.elu).toBeGreaterThanOrEqual(0);
     expect(m.elu).toBeLessThanOrEqual(1);
@@ -55,9 +65,8 @@ describe('pomiar procesu (sesja 23)', () => {
     vi.advanceTimersByTime(1_000);
     vi.advanceTimersByTime(1_000);
 
-    const first = JSON.parse(lines[0]);
+    const [first, second] = metricLines(lines);
     expect(first.timings.dashboard).toEqual({ n: 20, p50Ms: 100, p95Ms: 190, maxMs: 200 });
-    const second = JSON.parse(lines[1]);
     expect(second.timings).toEqual({});
   });
 
