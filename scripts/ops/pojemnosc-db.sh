@@ -21,8 +21,9 @@
 # Niczego nie zmienia na serwerach. Na hostach czyta: nproc, free, swapon,
 # uptime, df, vmstat, docker ps / stats / system df, journalctl
 # --disk-usage, /proc (swap wg procesu), cztery klucze
-# z /etc/faktflow-backup.env (bez adresu Healthchecks) i listę zrzutów,
-# a z logów app-1 linie process.metrics. Z kontenerów PostgREST i GoTrue
+# z /etc/faktflow-backup.env (bez adresu Healthchecks), listę zrzutów,
+# wpis crona i koniec dziennika kopii, a z logów app-1 linie
+# process.metrics. Z kontenerów PostgREST i GoTrue
 # wychodzą wyłącznie wymienione zmienne — filtr grep działa po stronie
 # serwera, więc klucze i hasła nie opuszczają db-1. Każde zapytanie do
 # Postgresa ma w PGOPTIONS limit 30 s i transakcję tylko do odczytu:
@@ -33,7 +34,7 @@
 #      Postgres), obciążenie, dysk, kradzież CPU (vmstat, kolumna st),
 #      kontenery i ich zużycie, miejsce Dockera i dziennika systemowego;
 #      kopie bazy: KEEP, RCLONE_REMOTE, liczba i rozmiar zrzutów,
-#      pozostałości po przerwanym przebiegu
+#      pozostałości po przerwanym przebiegu, cron i ostatni przebieg
 #   2. app-1: to samo bez kopii, a do tego ostatnie linie process.metrics
 #      web i workera oraz liczba ich ostrzeżeń z 24 h
 #   3. ops-1 (jeśli jest OPS): dysk, na którym stoi MinIO z plikami
@@ -41,8 +42,9 @@
 #      częstotliwość maili)
 #   5. Postgres: ustawienia pamięci, połączeń i WAL, ustawienia ról
 #      i baz, połączenia wg roli, aplikacji i stanu, trafność cache,
-#      pliki tymczasowe i transakcje/s (postgres, _supabase), rozmiary
-#      baz, sloty replikacji z zatrzymanym WAL
+#      pliki tymczasowe i licznik transakcji (postgres, _supabase; tx/s
+#      z różnicy dwóch przebiegów), rozmiary baz, sloty replikacji
+#      z zatrzymanym WAL
 #   6. tabele: 25 największych (żywe i martwe wiersze) i 10 największych
 #      w _supabase; przyrost audit_logs (wg action) i inngest_run_log
 #      (wg event_name), dziennie z 7 dni i z 24 h; czasy przebiegów
@@ -150,12 +152,19 @@ if [ -d "$DIR" ]; then
   du -sh "$DIR" 2>/dev/null
   ls -lht "$DIR" 2>/dev/null | head -7
   printf -- '--- pozostałości po przerwanym przebiegu (.partial-*, .outbox)\n'
-  du -sh "$DIR"/.partial-* "$DIR"/.outbox 2>/dev/null || echo "  (brak)"
+  FOUND=0
+  for f in "$DIR"/.partial-* "$DIR"/.outbox; do
+    [ -e "$f" ] && { du -sh "$f" 2>/dev/null; FOUND=1; }
+  done
+  [ "$FOUND" = 1 ] || echo "  (brak)"
 else
   echo "  (brak katalogu)"
 fi
-printf -- '--- cron kopii\n'
-crontab -l 2>/dev/null | grep -i backup || echo "  (brak wpisu w crontabie roota)"
+# Runbook (docs/runbooks/backup-restore.md) kładzie wpis w /etc/cron.d.
+printf -- '--- cron kopii i ostatnie wpisy jej dziennika\n'
+{ grep -Hsi backup /etc/cron.d/* 2>/dev/null; crontab -l 2>/dev/null | grep -i backup; } | grep . \
+  || echo "  (brak wpisu w /etc/cron.d ani w crontabie roota)"
+tail -3 /var/log/faktflow-db-backup.log 2>/dev/null || echo "  (brak /var/log/faktflow-db-backup.log)"
 REMOTE
 }
 
@@ -228,8 +237,11 @@ sql "połączenia klientów razem" \
   "SELECT count(*) AS polaczenia, current_setting('max_connections') AS max_connections, count(*) FILTER (WHERE state = 'idle in transaction') AS idle_in_transaction FROM pg_stat_activity WHERE backend_type = 'client backend'"
 sql "połączenia wg roli, aplikacji i stanu" \
   "SELECT coalesce(usename, '(brak)') AS rola, coalesce(nullif(application_name, ''), '(brak)') AS aplikacja, coalesce(state, '(brak)') AS stan, count(*) FROM pg_stat_activity WHERE backend_type = 'client backend' GROUP BY 1, 2, 3 ORDER BY 4 DESC"
-sql "trafność cache, pliki tymczasowe, transakcje/s od resetu statystyk" \
-  "SELECT datname AS baza, round(100.0 * blks_hit / nullif(blks_hit + blks_read, 0), 2) AS cache_proc, temp_files, pg_size_pretty(temp_bytes) AS temp, round((xact_commit + xact_rollback) / greatest(extract(epoch FROM now() - coalesce(stats_reset, pg_postmaster_start_time())), 1)) AS tx_na_s, coalesce(stats_reset, pg_postmaster_start_time()) AS od FROM pg_stat_database WHERE datname IN ('postgres', '_supabase') ORDER BY 1"
+# Liczniki przeżywają czysty restart Postgresa, więc przy pustym stats_reset
+# ich początek jest nieznany i tx/s zostaje puste. Prawdziwe tx/s: różnica
+# tx_razem między dwoma przebiegami (szczyt i 02:00) przez sekundy między nimi.
+sql "trafność cache, pliki tymczasowe, transakcje (tx_na_s tylko przy znanym stats_reset)" \
+  "SELECT datname AS baza, round(100.0 * blks_hit / nullif(blks_hit + blks_read, 0), 2) AS cache_proc, temp_files, pg_size_pretty(temp_bytes) AS temp, xact_commit + xact_rollback AS tx_razem, now() AS teraz, stats_reset, pg_postmaster_start_time() AS start_serwera, CASE WHEN stats_reset IS NOT NULL THEN round((xact_commit + xact_rollback) / greatest(extract(epoch FROM now() - stats_reset), 1)) END AS tx_na_s FROM pg_stat_database WHERE datname IN ('postgres', '_supabase') ORDER BY 1"
 sql "rozmiary baz" \
   "SELECT datname AS baza, pg_size_pretty(pg_database_size(datname)) AS rozmiar FROM pg_database WHERE datallowconn AND has_database_privilege(datname, 'CONNECT') ORDER BY pg_database_size(datname) DESC"
 sql "sloty replikacji i zatrzymany WAL" \

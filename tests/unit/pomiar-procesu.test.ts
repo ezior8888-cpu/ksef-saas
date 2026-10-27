@@ -15,14 +15,12 @@ import { recordTiming, takeTimingSummary } from '@/lib/observability/timings';
 const ROOT = join(__dirname, '..', '..');
 
 /**
- * Same linie `process.metrics`, bez `process.metrics.warn`. Sztuczny zegar
- * Vitesta podmienia `performance.now`, z którego liczy się ELU: przesunięte
- * 1000 ms bez bezczynności pętli to ELU = 1, więc domyślny próg słusznie
- * dopisuje ostrzeżenie.
+ * Próg ELU wyłączony w testach ze sztucznym zegarem. Vitest podmienia
+ * `process.hrtime`, z którego Node liczy czas aktywny pętli: przesunięte
+ * 1000 ms bez chwili bezczynności to ELU = 1, więc domyślny próg 0,7 słusznie
+ * dopisałby `process.metrics.warn`. Progi pętli i pamięci zostają domyślne.
  */
-function metricLines(lines: string[]) {
-  return lines.map((l) => JSON.parse(l)).filter((m) => m.msg === 'process.metrics');
-}
+const ELU_OFF = { elu: 2 };
 
 describe('pomiar procesu (sesja 23)', () => {
   let stop: (() => void) | null = null;
@@ -37,13 +35,13 @@ describe('pomiar procesu (sesja 23)', () => {
   it('co interwał zapisuje linię process.metrics z pętlą zdarzeń i pamięcią', () => {
     vi.useFakeTimers();
     const lines: string[] = [];
-    stop = startProcessMetrics({ process: 'web', intervalMs: 1_000, sink: (l) => lines.push(l) });
+    stop = startProcessMetrics({ process: 'web', intervalMs: 1_000, sink: (l) => lines.push(l), thresholds: ELU_OFF });
 
     vi.advanceTimersByTime(1_000);
 
-    const metrics = metricLines(lines);
-    expect(metrics).toHaveLength(1);
-    const m = metrics[0];
+    expect(lines).toHaveLength(1);
+    const m = JSON.parse(lines[0]);
+    expect(m.msg).toBe('process.metrics');
     expect(m.process).toBe('web');
     expect(m.elu).toBeGreaterThanOrEqual(0);
     expect(m.elu).toBeLessThanOrEqual(1);
@@ -59,14 +57,15 @@ describe('pomiar procesu (sesja 23)', () => {
   it('dołącza czasy z recordTiming (p50, p95, max, liczba) i zeruje je po zapisie', () => {
     vi.useFakeTimers();
     const lines: string[] = [];
-    stop = startProcessMetrics({ process: 'web', intervalMs: 1_000, sink: (l) => lines.push(l) });
+    stop = startProcessMetrics({ process: 'web', intervalMs: 1_000, sink: (l) => lines.push(l), thresholds: ELU_OFF });
 
     for (let i = 1; i <= 20; i++) recordTiming('dashboard', i * 10);
     vi.advanceTimersByTime(1_000);
     vi.advanceTimersByTime(1_000);
 
-    const [first, second] = metricLines(lines);
+    const first = JSON.parse(lines[0]);
     expect(first.timings.dashboard).toEqual({ n: 20, p50Ms: 100, p95Ms: 190, maxMs: 200 });
+    const second = JSON.parse(lines[1]);
     expect(second.timings).toEqual({});
   });
 
