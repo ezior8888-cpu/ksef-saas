@@ -45,6 +45,9 @@ async function main(): Promise<void> {
   }
 
   console.log(`SONDA_OK handlery=${handlers.length} maile=${emails.length}`);
+  // Jawne wyjście: gdyby któryś import zostawił otwarty uchwyt (timer, socket),
+  // sonda nie może wisieć do limitu czasu testu.
+  process.exit(0);
 }
 
 main().catch((error: unknown) => {

@@ -41,19 +41,33 @@ describe('worker uruchamiany jak w Dockerfile', () => {
   });
 
   it('ładuje wszystkie handlery i renderuje maile wysyłane przez worker', () => {
-    let output = '';
-    try {
-      output = execFileSync(process.execPath, [...nodeFlags, 'tests/fixtures/worker-sonda.ts'], {
-        cwd: root,
-        encoding: 'utf8',
-        env: { ...process.env, NODE_OPTIONS: '' },
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 230_000,
-      });
-    } catch (error) {
-      const failed = error as { stdout?: string; stderr?: string };
-      output = `${failed.stdout ?? ''}${failed.stderr ?? ''}`;
-    }
-    expect(output).toMatch(/SONDA_OK handlery=\d+ maile=6/);
-  }, 240_000);
+    const run = runNode([...nodeFlags, 'tests/fixtures/worker-sonda.ts']);
+    expect(run.output).toMatch(/SONDA_OK handlery=\d+ maile=6/);
+    expect(run).toMatchObject({ status: 0, signal: null });
+  }, 180_000);
+
+  it('prawdziwy lib/jobs/worker.ts ładuje cały graf modułów i dochodzi do main()', () => {
+    // Nieobsługiwany backend zatrzymuje worker w main(), zanim połączy się z bazą.
+    // Ten komunikat da się zobaczyć tylko wtedy, gdy wszystkie importy się udały.
+    const run = runNode(cmd.slice(1), { JOBS_BACKEND: 'nieobslugiwany' });
+    expect(run.output).toContain('JOBS_BACKEND ma nieobsługiwaną wartość');
+    expect(run).toMatchObject({ status: 1, signal: null });
+  }, 180_000);
 });
+
+/** Proces Node jak w obrazie workera: NODE_ENV=production, bez NODE_OPTIONS z vitest. */
+function runNode(args: string[], env: Record<string, string> = {}) {
+  try {
+    const output = execFileSync(process.execPath, args, {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, NODE_OPTIONS: '', NODE_ENV: 'production', ...env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 170_000,
+    });
+    return { output, status: 0, signal: null };
+  } catch (error) {
+    const failed = error as { stdout?: string; stderr?: string; status?: number | null; signal?: string | null };
+    return { output: `${failed.stdout ?? ''}${failed.stderr ?? ''}`, status: failed.status ?? null, signal: failed.signal ?? null };
+  }
+}
