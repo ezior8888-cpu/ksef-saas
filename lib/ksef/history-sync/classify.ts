@@ -15,6 +15,12 @@
  * jest importowany (`retired_draft`): numer przenosi wyłącznie PR C (00156),
  * decyzja 07.10 (A).
  *
+ * „Jest już w FaktWay” (`already_present`, `imported`) w sprzedaży znaczy
+ * „jest w księgach” — ten sam filtr co przychód, KPiR, JPK i Pulpit
+ * (`inSalesBooks`, ZAP-01). Szkic z importu pliku ma ten sam numer i dane,
+ * ale księgi go nie liczą: blokada `number_conflict` (klient usuwa szkic,
+ * sprawdzane co godzinę), nie pominięcie oryginału.
+ *
  * Synchronizacja niczego tu nie zmienia w fakturach — tylko czyta.
  */
 
@@ -63,6 +69,7 @@ interface LocalKsefRow {
   id: string;
   origin: string | null;
   ksef_number: string | null;
+  ksef_status: string | null;
   ksef_environment: string | null;
   xml_storage_path: string | null;
   annotations: unknown;
@@ -70,10 +77,41 @@ interface LocalKsefRow {
 }
 
 const LOCAL_KSEF_COLUMNS =
-  'id, origin, ksef_number, ksef_environment, xml_storage_path, annotations:fa3_data->annotations, import_job:fa3_data->import->>importJobId';
+  'id, origin, ksef_number, ksef_status, ksef_environment, xml_storage_path, annotations:fa3_data->annotations, import_job:fa3_data->import->>importJobId';
 
 function digits(value: string | null | undefined): string {
   return (value ?? '').replace(/\D/g, '');
+}
+
+type BooksRow = { origin: string | null; ksef_status: string | null; ksef_environment: string | null };
+
+/**
+ * ZAP-01: czy wiersz sprzedaży jest w księgach — ten sam filtr co przychód,
+ * KPiR, JPK i Pulpit (`ksef_status = 'accepted'` w środowisku strumienia,
+ * np. `lib/analytics-finance/sales.ts`). Tylko taki posiadacz może dać
+ * `already_present`: szkic z importu CSV ma ten sam numer i dane, ale
+ * pominięcie oryginału z KSeF zgubiłoby sprzedaż bez komunikatu.
+ *
+ * Wyjątek: dawny import KSeF bez środowiska. Pulpit i przychód zatrzymują się
+ * na nim komunikatem (`assertAcceptedEnvironmentKnown`), operator widzi go
+ * w `ksef-historia.sh stan`, a drugi zapis oryginału silnik i tak odrzuci.
+ */
+function inSalesBooks(row: BooksRow, environment: KsefHistoryEnvironment): boolean {
+  if (row.ksef_status !== 'accepted') return false;
+  return row.ksef_environment === environment
+    || (row.ksef_environment === null && row.origin === 'ksef_import');
+}
+
+/**
+ * Posiadacz spoza ksiąg (ZAP-01) — oba powody sprawdzane ponownie co godzinę.
+ * Szkic bez numeru KSeF trzyma tylko numer faktury: klient go usuwa
+ * (`number_conflict`, tekst i link na ekranie Import danych).
+ * Reszta (inne środowisko, odrzucony, ten sam numer KSeF) — operator
+ * (`local_conflict`).
+ */
+function outsideBooksReason(row: BooksRow & { ksef_number: string | null }): 'number_conflict' | 'local_conflict' {
+  const draft = row.ksef_status === 'draft' || row.ksef_status === null;
+  return draft && !row.ksef_number?.trim() ? 'number_conflict' : 'local_conflict';
 }
 
 /** Skrót KSeF (Base64 SHA-256) → hex jak `ksef_submissions.request_payload_hash`; `null` dla innego kształtu. */
@@ -208,6 +246,11 @@ export async function classifyDiscovered(
       const own = (ctx.direction === 'outgoing' && local.origin === 'app')
         || (ctx.direction === 'incoming' && local.origin === 'ksef_inbox');
       if (own) continue;
+      if (ctx.direction === 'outgoing' && !inSalesBooks(local, ctx.environment)) {
+        // ZAP-01: wiersz z tym numerem KSeF, którego księgi nie liczą — operator, sprawdzane co godzinę.
+        rows.push({ ...base, status: 'blocked', reason_code: 'local_conflict', invoice_id: local.id, resolved_at: resolvedAt });
+        continue;
+      }
       if (local.origin === 'ksef_import') {
         if (local.ksef_environment === null) {
           // Dawny import bez środowiska — bez naprawy; operator widzi je w `ksef-historia.sh stan`.
@@ -252,6 +295,7 @@ interface LocalNumberRow {
   internal_number: string | null;
   ksef_number: string | null;
   ksef_status: string | null;
+  ksef_environment: string | null;
   buyer_nip: string | null;
   issue_date: string | null;
   gross_total: number | string | null;
@@ -286,6 +330,10 @@ export async function classifyForProcessing(
   if (local) {
     if (ctx.direction === 'outgoing' && local.origin === 'app') {
       return { action: 'resolve', status: 'skipped', reason: 'own_invoice', invoiceId: local.id };
+    }
+    if (ctx.direction === 'outgoing' && !inSalesBooks(local, ctx.environment)) {
+      // ZAP-01: wiersz z tym numerem KSeF, którego księgi nie liczą — nie „już w FaktWay”.
+      return { action: 'block', reason: 'local_conflict', invoiceId: local.id };
     }
     if (local.origin === 'ksef_import') {
       const repairItem = item.reason_code === 'repair_content';
@@ -360,7 +408,7 @@ export async function classifyForProcessing(
   if (variants.length > 0) {
     const { data: numData, error: numError } = await ctx.admin
       .from('invoices')
-      .select('id, origin, internal_number, ksef_number, ksef_status, buyer_nip, issue_date, gross_total')
+      .select('id, origin, internal_number, ksef_number, ksef_status, ksef_environment, buyer_nip, issue_date, gross_total')
       .eq('tenant_id', ctx.tenantId)
       .eq('direction', 'outgoing')
       .in('internal_number', variants);
@@ -382,20 +430,22 @@ async function classifyNumberHolder(
   row: LocalNumberRow,
 ): Promise<ProcessingOutcome> {
   if (row.origin !== 'app') {
-    if (row.ksef_number === null || row.ksef_number.trim() === '') {
-      const gross = Number(row.gross_total);
-      const sameData = digits(row.buyer_nip) === digits(item.counterparty_nip)
-        && row.issue_date === item.issue_date
-        && item.gross_amount !== null
-        && Number.isFinite(gross)
-        && Math.abs(gross - Number(item.gross_amount)) < 0.005;
-      // Przeniesiona plikiem (CSV/JPK) albo OCR — ta sama sprzedaż; wiersza nie ruszamy.
-      return sameData
-        ? { action: 'resolve', status: 'skipped', reason: 'already_present', invoiceId: row.id }
-        : { action: 'block', reason: 'file_import_mismatch', invoiceId: row.id };
-    }
-    if (row.ksef_number.trim() !== item.ksef_number) return { action: 'block', reason: 'number_taken_local', invoiceId: row.id };
-    return { action: 'resolve', status: 'skipped', reason: 'already_present', invoiceId: row.id };
+    const ksefNumber = row.ksef_number?.trim() ?? '';
+    if (ksefNumber !== '' && ksefNumber !== item.ksef_number) return { action: 'block', reason: 'number_taken_local', invoiceId: row.id };
+    // ZAP-01: szkic z importu pliku (CSV/JPK) ma ten sam numer i dane, ale
+    // księgi go nie liczą — pominięcie oryginału zgubiłoby sprzedaż.
+    if (!inSalesBooks(row, ctx.environment)) return { action: 'block', reason: outsideBooksReason(row), invoiceId: row.id };
+    if (ksefNumber !== '') return { action: 'resolve', status: 'skipped', reason: 'already_present', invoiceId: row.id };
+    const gross = Number(row.gross_total);
+    const sameData = digits(row.buyer_nip) === digits(item.counterparty_nip)
+      && row.issue_date === item.issue_date
+      && item.gross_amount !== null
+      && Number.isFinite(gross)
+      && Math.abs(gross - Number(item.gross_amount)) < 0.005;
+    // Przeniesiona plikiem (CSV/JPK) albo OCR i przyjęta — ta sama sprzedaż; wiersza nie ruszamy.
+    return sameData
+      ? { action: 'resolve', status: 'skipped', reason: 'already_present', invoiceId: row.id }
+      : { action: 'block', reason: 'file_import_mismatch', invoiceId: row.id };
   }
 
   const status = row.ksef_status;

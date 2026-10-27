@@ -122,15 +122,15 @@ Klient tych kolumn nie czyta (GRANT kolumnowy).
 | `imported` / — , `jpk_note` | pobrana (notatka JPK w szczegółach) | — |
 | `imported` / `repaired` | nie liczy się do pobranych | — |
 | `skipped` / `own_invoice` | — | faktura wysłana z FaktWay |
-| `skipped` / `already_present` | — | jest już w FaktWay (plik, OCR, dawny import) — wiersza nie ruszamy |
+| `skipped` / `already_present` | — | jest już w FaktWay **i w księgach**: wiersz przyjęty (`accepted`) w tym środowisku — dawny import, plik albo OCR przyjęty; wiersza nie ruszamy. Wyjątek: dawny import KSeF bez środowiska (`stan`, pkt 6). Szkic z importu pliku to `number_conflict`, nie pominięcie (ZAP-01, §4a). Stan końcowy — cron go nie sprawdza ponownie |
 | `skipped` / `retired_draft` | „N faktur ma numer zajęty przez dokument wycofany przy duplikacie — nie przenosimy ich” | numer przenosi wyłącznie PR C (00149); sprawdzane raz na dobę; `odblokuj … retired_draft --tak` tylko po decyzji Bartosza |
 | `deferred` / `duplicate_decision` | „czeka na Twoją decyzję przy duplikacie” + link do dokumentu | ścieżka klienta 440 (e-mail, I5D); bez limitu czasu |
 | `deferred` / `own_send_pending` | „prawdopodobnie faktura wysłana właśnie z FaktWay — sprawdzimy za godzinę” | po 48 h → `own_send_unresolved` |
 | `blocked` / `currency_not_supported` | „faktura w walucie … — oryginał zostaje w KSeF” | brak obsługi walut; `odblokuj … --wymus` dopiero po jej dodaniu |
-| `blocked` / `number_conflict` | „W FaktWay jest szkic o numerze … — zmień numer albo usuń szkic” + link | samo po zmianie szkicu (sprawdzane co godzinę) |
-| `blocked` / `file_import_mismatch` | „faktura przeniesiona z pliku, ale z innymi danymi — nie zmieniaj jej” | porównać z oryginałem w KSeF; decyzja Bartosza (§15 pkt 2) |
+| `blocked` / `number_conflict` | „W FaktWay jest szkic o numerze …, np. z importu pliku. Szkic nie liczy się w przychodzie ani w KPiR — usuń go…” + link | samo po usunięciu szkicu — także szkicu z importu CSV/JPK (ZAP-01); sprawdzane co godzinę (pierwsze sprawdzenie ok. 1 h po usunięciu: `updated_at` podbija samo zerowanie `invoice_id`). Szkicu nie da się edytować, więc „zmiana numeru” nie jest drogą klienta |
+| `blocked` / `file_import_mismatch` | „faktura przeniesiona z pliku, ale z innymi danymi — nie zmieniaj jej” | tylko wiersz przyjęty w tym środowisku (szkic z pliku to `number_conflict`); porównać z oryginałem w KSeF; decyzja Bartosza (§15 pkt 2) |
 | `blocked` / `number_taken_local` | „dokument o tym numerze z innym numerem KSeF — nie zmieniaj go” | wyjaśnić, który dokument jest prawdziwy |
-| `blocked` / `local_conflict` | „nie udało się jej zapisać — sprawdzamy” | dwa wiersze albo inne środowisko przy tym numerze KSeF |
+| `blocked` / `local_conflict` | „nie udało się jej zapisać — sprawdzamy” | dwa wiersze albo inne środowisko przy tym numerze KSeF; także wiersz spoza FaktWay z tym numerem KSeF albo numerem faktury, którego księgi nie liczą (nieprzyjęty, inne środowisko, przyjęty bez środowiska — ZAP-01) |
 | `blocked` / `own_send_unresolved` | „wynik wysyłki jeszcze uzgadniamy — nie wystawiaj ponownie” | jak I5: uzgodnić wysyłkę w `/admin/ksef` |
 | `blocked` / `parse_failed`, `metadata_mismatch`, `archive_conflict` | „nie udało się jej zapisać — napisz na pomoc@ jeśli pilne” | `pozycje <firma> blocked <powód>` (detail), naprawa, `odblokuj` |
 | `blocked` / `save_failed`, `repair_failed`, `download_failed` | jak wyżej | 3 nieudane próby; szczegół = pierwsze ostrzeżenie silnika / HTTP. `save_failed` z `invoice_id` ≠ NULL = niepełny zapis tego strumienia (np. nagłówek bez pozycji) — sprawdzić fakturę w `/admin`, naprawić, `odblokuj` |
@@ -138,6 +138,37 @@ Klient tych kolumn nie czyta (GRANT kolumnowy).
 Powody zależne od stanu lokalnego (`number_conflict`, `number_taken_local`,
 `file_import_mismatch`, `local_conflict`, `own_send_unresolved`) są
 sprawdzane ponownie co godzinę (najstarsze pierwsze, `updated_at` podbijany).
+
+## 4a. ZAP-01: szkic z importu pliku a oryginał z KSeF
+
+Import CSV/JPK zapisuje sprzedaż jako szkic (`draft`, bez numeru KSeF i bez
+środowiska), a przychód, KPiR, JPK i Pulpit liczą tylko faktury przyjęte
+w KSeF w bieżącym środowisku. Do 27.10.2026 historia uznawała taki szkic za
+„tę samą sprzedaż” (`skipped/already_present`) i oryginału z KSeF nie
+pobierała — sprzedaż znikała z ksiąg bez komunikatu. Od poprawki:
+
+- `already_present` (i `imported`) w sprzedaży tylko z wierszem w księgach
+  (`inSalesBooks` w `lib/ksef/history-sync/classify.ts`, strażnik
+  w `tests/unit/ksef-historia-pobieranie.test.ts`);
+- szkic bez numeru KSeF → `number_conflict`: klient usuwa szkic, najbliższe
+  sprawdzenie (ok. 1 h po usunięciu) pobiera oryginał z KSeF. Także szkic
+  z INNYMI danymi niż w KSeF (wcześniej `file_import_mismatch` z alarmem) —
+  nie jest w księgach, prawnie wiąże oryginał z KSeF;
+- inny wiersz spoza ksiąg → `local_conflict` (operator, alarm
+  `ksef_history_blocked`): `pozycje <firma> blocked local_conflict`, potem
+  wiersz z `invoice_id` w `/admin` — status i środowisko. Szkic z numerem
+  KSeF albo wiersz odrzucony: uzgodnić z klientem, czy dokument usunąć;
+  przyjęty bez środowiska albo w innym: to sprawa środowiska (jak pkt 6
+  `stan`), decyzja Bartosza. Po zmianie wiersza pozycja odblokuje się sama.
+
+**Pozycje sprzed poprawki** zostały `skipped/already_present` — to stan
+końcowy, poprawka ich nie otworzy. Ile ich jest, pokazuje
+`ksef-historia.sh stan` (pkt 8; posiadacz `usuniety` = klient usunął szkic
+już po pominięciu, oryginał na pewno nie trafił do bazy). Jednorazowe
+otwarcie to decyzja Bartosza — skrypt dziś tego nie robi (`odblokuj` nie
+obejmuje `already_present`). Otwarta pozycja (`pending`, `invoice_id` NULL)
+przejdzie zwykłą klasyfikację przed pobraniem: szkic da `number_conflict`,
+faktura w księgach wróci do `already_present` bez wywołania KSeF.
 
 ## 5. Alarmy
 

@@ -8,7 +8,8 @@
 #   ./scripts/ops/ksef-historia.sh stan
 #       strumienie wg fazy, problemu i błędu; pozycje wg statusu i powodu;
 #       firmy zweryfikowane bez strumieni; top 10 wg kolejki pobrań; firmy
-#       wstrzymane przez klienta; dawne importy bez środowiska; `df -h` na db-1
+#       wstrzymane przez klienta; dawne importy bez środowiska; `df -h` na db-1;
+#       sprzedaż pominięta jako obecna, a poza księgami (ZAP-01)
 #   ./scripts/ops/ksef-historia.sh stare-importy
 #       przed wdrożeniem: dawne zadania Magicznego importu w toku (musi być 0)
 #   ./scripts/ops/ksef-historia.sh pozycje <id-firmy> [status] [powód]
@@ -68,7 +69,7 @@ REASONS='repair_content ksef_not_ready jpk_note repaired own_invoice already_pre
 UNBLOCKABLE='retired_draft duplicate_decision own_send_pending currency_not_supported parse_failed number_conflict number_taken_local file_import_mismatch local_conflict own_send_unresolved save_failed repair_failed download_failed archive_conflict metadata_mismatch'
 
 usage() {
-  sed -n '6,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '6,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit 1
 }
 
@@ -149,6 +150,9 @@ case "$CMD" in
     "${SSH[@]}" "root@$DB" 'df -h / /var/lib/docker 2>/dev/null | sort -u' || echo "  (nie udało się odczytać df)"
     sql "rozmiar tabel historii" \
       "SELECT relname, pg_size_pretty(pg_total_relation_size(relid)) FROM pg_catalog.pg_statio_user_tables WHERE relname IN ('ksef_history_items','ksef_history_sync','invoices','invoice_line_items') ORDER BY 1"
+    section "8. ZAP-01: sprzedaż pominięta jako obecna, a poza księgami (sprzed poprawki — otwarcie to decyzja Bartosza)"
+    sql "already_present bez posiadacza w księgach (usuniety = szkic usunięty po pominięciu)" \
+      "SELECT h.environment, coalesce(i.origin,'usuniety') AS posiadacz, coalesce(i.ksef_status,'-') AS status, count(*) FROM ksef_history_items h LEFT JOIN invoices i ON i.id = h.invoice_id WHERE h.direction = 'outgoing' AND h.status = 'skipped' AND h.reason_code = 'already_present' AND (i.id IS NULL OR i.ksef_status IS DISTINCT FROM 'accepted' OR (i.ksef_environment IS DISTINCT FROM h.environment AND NOT (i.ksef_environment IS NULL AND i.origin = 'ksef_import'))) GROUP BY 1,2,3 ORDER BY 4 DESC"
     ;;
 
   stare-importy)
