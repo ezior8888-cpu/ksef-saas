@@ -572,6 +572,12 @@ testowa, 2FA. Stara baza w Supabase Cloud: NIE ruszaj — czeka jako zapas.
 
 ## 5. ETAP 4 — Redis (cache i limity) (~30 min)
 
+> **Stan faktyczny (23.10.2026):** Redis (redis:7.2) i SRH stoją na `app-1`,
+> nie na `ops-1` jak w planie niżej. Zmienne `UPSTASH_REDIS_REST_*` ma
+> aplikacja (Coolify id=1) **i** worker (id=2). Konto i baza w chmurze
+> Upstash nie są już używane (usunięcie bazy — punkt w ETAPIE 9, wciąż
+> otwarty).
+
 1. Coolify → **Add Resource → Database → Redis** (lub Valkey, jeśli jest na
    liście — to zamiennik 1:1) → serwer `ops-1`. Zapisz hasło.
 2. Apka mówi do Redisa przez HTTP (styl Upstash), więc stawiamy malutki
