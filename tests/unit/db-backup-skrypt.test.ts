@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
@@ -236,6 +237,22 @@ const complete = () =>
 const dumped = (run: Run) => run.calls.some((c) => / pg_dump /.test(c));
 const files = (name: string) => [`${name}.dump`, `${name}.roles.sql`, `${name}.sha256`];
 
+/** Jak `sha256sum -c`, ale bez powłoki: plik sum ma wpisy dokładnie dla .dump i .roles.sql, z poprawnymi sumami. */
+function expectValidSums(name: string) {
+  const rows = readFileSync(join(h.backups, `${name}.sha256`), 'utf8').split('\n').filter(Boolean);
+  // GNU pisze „hash  plik”, Git Bash „hash *plik”.
+  const listed = rows.map((row) => {
+    const m = /^([0-9a-f]{64}) [ *](.+)$/.exec(row);
+    expect(m, `wiersz pliku sum: ${row}`).not.toBeNull();
+    return [m![2], m![1]];
+  });
+  const expected = [`${name}.dump`, `${name}.roles.sql`].map((f) => [
+    f,
+    createHash('sha256').update(readFileSync(join(h.backups, f))).digest('hex'),
+  ]);
+  expect(listed).toEqual(expected);
+}
+
 describe.skipIf(!hasBash)('db-backup.sh — nocny zrzut bazy na db-1 (sesja 22)', { timeout: 60_000 }, () => {
   beforeEach(() => {
     h = createHarness();
@@ -253,10 +270,7 @@ describe.skipIf(!hasBash)('db-backup.sh — nocny zrzut bazy na db-1 (sesja 22)'
       expect(rest).toEqual([]);
       expect(name).toMatch(/^faktflow-\d{8}T\d{6}Z$/);
       expect(entries()).toEqual(files(name!));
-      const sums = spawnSync('bash', ['-c', 'cd "$1" && sha256sum -c "$2"', '_', posix(h.backups), `${name}.sha256`], {
-        encoding: 'utf8',
-      });
-      expect(sums.status, sums.stdout + sums.stderr).toBe(0);
+      expectValidSums(name!);
       expect(run.pings).toEqual([`${HC}/start`, HC]);
       expect(run.calls.some((c) => c.startsWith('rclone'))).toBe(false);
       expect(run.out).toMatch(/OK\s*$/);
@@ -398,10 +412,7 @@ describe.skipIf(!hasBash)('db-backup.sh — nocny zrzut bazy na db-1 (sesja 22)'
       expect(atSha.length).toBeGreaterThan(0);
       for (const f of atSha) expect(f).toMatch(/^\.partial-faktflow-/);
       const [name] = complete();
-      const sums = spawnSync('bash', ['-c', 'cd "$1" && sha256sum -c "$2"', '_', posix(h.backups), `${name}.sha256`], {
-        encoding: 'utf8',
-      });
-      expect(sums.status, sums.stdout + sums.stderr).toBe(0);
+      expectValidSums(name!);
     });
 
     it('przebieg zablokowany przez trwający: fail i nie rusza plików trwającego przebiegu', () => {
