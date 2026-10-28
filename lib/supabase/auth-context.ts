@@ -47,10 +47,30 @@ export interface AuthContext {
 }
 
 /**
+ * UX-01 (WZR-02): formularz wyrenderowano dla innej firmy niż aktywna teraz —
+ * zwykle przełącznik firm w drugiej karcie zmienił ciasteczko. Jeden tekst
+ * dla wszystkich akcji wystawiania.
+ */
+export const TENANT_CHANGED_MESSAGE =
+  'Firma została zmieniona w innej karcie — odśwież stronę i sprawdź dane przed wystawieniem.';
+
+/**
+ * Firma, dla której strona wyrenderowała formularz (UX-01). Przychodzi
+ * z przeglądarki, więc służy WYŁĄCZNIE do porównania z firmą z ciasteczka —
+ * nigdy nie wybiera firmy. Brak pola albo inna wartość = odmowa.
+ */
+export interface FormTenantCheck {
+  expectedTenantId: unknown;
+}
+
+/**
  * Wymaga zalogowanego usera + ważnej aktywnej organizacji
  * (cookie + aktywne membership). Rzuca `ActionAuthError` w razie problemu.
+ *
+ * Z `formTenant` (akcje tworzące dokument z formularza) dodatkowo wymaga,
+ * żeby formularz był wyrenderowany dla tej samej firmy, co aktywna teraz.
  */
-export async function requireUserAndActiveOrg(): Promise<AuthContext> {
+export async function requireUserAndActiveOrg(formTenant?: FormTenantCheck): Promise<AuthContext> {
   const supabase = await createClient();
   const state = await getVerifiedMfaState(supabase).catch(() => null);
   if (!state) {
@@ -84,6 +104,13 @@ export async function requireUserAndActiveOrg(): Promise<AuthContext> {
 
   if (!membership) {
     throw new ActionAuthError('Brak dostępu do aktywnej organizacji');
+  }
+
+  // Przed każdym odczytem danych firmy: dokument z formularza firmy A nie może
+  // powstać jako dokument firmy B. Karta sprzed wdrożenia (bez pola) też
+  // dostaje odmowę — po wdrożeniu i tak traci akcje (nowe ID Server Actions).
+  if (formTenant && formTenant.expectedTenantId !== activeOrg) {
+    throw new ActionAuthError(TENANT_CHANGED_MESSAGE);
   }
 
   return {
