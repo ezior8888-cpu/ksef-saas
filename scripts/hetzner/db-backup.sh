@@ -56,7 +56,7 @@ fail() {
 trap 'fail "przerwane w linii $LINENO"' ERR
 
 # Dwa przebiegi naraz (cron + ręczne uruchomienie) pisałyby te same pliki.
-exec 9> /var/lock/faktflow-db-backup.lock
+exec 9> "${LOCK_FILE:-/var/lock/faktflow-db-backup.lock}"
 flock -n 9 || fail "poprzedni przebieg wciąż trwa"
 
 umask 077
