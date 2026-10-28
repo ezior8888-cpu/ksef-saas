@@ -102,18 +102,6 @@ function inSalesBooks(row: BooksRow, environment: KsefHistoryEnvironment): boole
     || (row.ksef_environment === null && row.origin === 'ksef_import');
 }
 
-/**
- * Posiadacz spoza ksiąg (ZAP-01) — oba powody sprawdzane ponownie co godzinę.
- * Szkic bez numeru KSeF trzyma tylko numer faktury: klient go usuwa
- * (`number_conflict`, tekst i link na ekranie Import danych).
- * Reszta (inne środowisko, odrzucony, ten sam numer KSeF) — operator
- * (`local_conflict`).
- */
-function outsideBooksReason(row: BooksRow & { ksef_number: string | null }): 'number_conflict' | 'local_conflict' {
-  const draft = row.ksef_status === 'draft' || row.ksef_status === null;
-  return draft && !row.ksef_number?.trim() ? 'number_conflict' : 'local_conflict';
-}
-
 /** Skrót KSeF (Base64 SHA-256) → hex jak `ksef_submissions.request_payload_hash`; `null` dla innego kształtu. */
 export function invoiceHashToHex(hash: string | null | undefined): string | null {
   if (!hash || !/^[A-Za-z0-9+/]+={0,2}$/.test(hash)) return null;
@@ -433,8 +421,14 @@ async function classifyNumberHolder(
     const ksefNumber = row.ksef_number?.trim() ?? '';
     if (ksefNumber !== '' && ksefNumber !== item.ksef_number) return { action: 'block', reason: 'number_taken_local', invoiceId: row.id };
     // ZAP-01: szkic z importu pliku (CSV/JPK) ma ten sam numer i dane, ale
-    // księgi go nie liczą — pominięcie oryginału zgubiłoby sprzedaż.
-    if (!inSalesBooks(row, ctx.environment)) return { action: 'block', reason: outsideBooksReason(row), invoiceId: row.id };
+    // księgi go nie liczą — pominięcie oryginału zgubiłoby sprzedaż. Z numerem
+    // KSeF albo bez statusu — operator. Bez numeru KSeF klient mógł go wysłać
+    // z FaktWay (440 bez numeru oryginału = szkic nieusuwalny, 00148) — dalej
+    // jak faktura FaktWay, z operatorem zamiast „innego numeru KSeF”.
+    if (!inSalesBooks(row, ctx.environment)) {
+      if (ksefNumber !== '' || row.ksef_status === null) return { action: 'block', reason: 'local_conflict', invoiceId: row.id };
+      return classifyBySendAttempts(ctx, row, 'local_conflict');
+    }
     if (ksefNumber !== '') return { action: 'resolve', status: 'skipped', reason: 'already_present', invoiceId: row.id };
     const gross = Number(row.gross_total);
     const sameData = digits(row.buyer_nip) === digits(item.counterparty_nip)
@@ -447,7 +441,20 @@ async function classifyNumberHolder(
       ? { action: 'resolve', status: 'skipped', reason: 'already_present', invoiceId: row.id }
       : { action: 'block', reason: 'file_import_mismatch', invoiceId: row.id };
   }
+  return classifyBySendAttempts(ctx, row, 'number_taken_local');
+}
 
+/**
+ * Posiadacz numeru, który mógł iść do KSeF z FaktWay. `number_conflict`
+ * („usuń szkic”) tylko dla szkicu, który da się usunąć: `deleteDraftInvoiceAction`
+ * usuwa wyłącznie `draft`, a szkicu z próbą wysyłki (np. wycofanego 440) nie
+ * (recenzja #339). Reszta — operator (`fallback`, alarm `ksef_history_blocked`).
+ */
+async function classifyBySendAttempts(
+  ctx: ClassifyContext,
+  row: LocalNumberRow,
+  fallback: 'number_taken_local' | 'local_conflict',
+): Promise<ProcessingOutcome> {
   const status = row.ksef_status;
   if (status === 'queued' || status === 'sending' || status === 'offline_queued') {
     return { action: 'defer', reason: 'own_send_pending', invoiceId: row.id };
@@ -460,14 +467,14 @@ async function classifyNumberHolder(
   if (error || typeof count !== 'number') {
     throw new Error(`Historia KSeF: odczyt prób wysyłki faktury: ${error?.message ?? 'brak liczby'}`);
   }
-  if ((status === 'draft' || status === null) && count === 0) {
-    // Zwykły szkic bez prób wysyłki — klient zmienia numer albo usuwa szkic.
+  if (status === 'draft' && count === 0) {
+    // Zwykły szkic bez prób wysyłki — klient go usuwa.
     return { action: 'block', reason: 'number_conflict', invoiceId: row.id };
   }
   if ((status === 'failed' || status === 'rejected') && count > 0) {
     return { action: 'defer', reason: 'own_send_pending', invoiceId: row.id };
   }
-  return { action: 'block', reason: 'number_taken_local', invoiceId: row.id };
+  return { action: 'block', reason: fallback, invoiceId: row.id };
 }
 
 /**

@@ -285,6 +285,27 @@ describe('classifyForProcessing', () => {
         expect(await classifyForProcessing(ctxFor(), ledger())).toEqual({ action: 'block', reason: 'local_conflict', invoiceId: 'lok-1' });
       }
     });
+    // Recenzja #339: `number_conflict` każe klientowi usunąć szkic, a usunąć da się
+    // tylko `draft` bez wycofania 440 (draft-actions.ts, wyzwalacz 00148).
+    it('ZAP-01: szkic z pliku wysłany z FaktWay (440 bez numeru oryginału) → operator, nie „usuń szkic”', async () => {
+      holder({ origin: 'file_import', ksef_status: 'draft', ksef_environment: null });
+      db.tables.ksef_submissions = [{
+        id: 's-440', tenant_id: TENANT, invoice_id: 'lok-1', status: 'number_taken',
+        original_ksef_number: null, response_ksef_number: null, request_payload_hash: null,
+      }];
+      expect(await classifyForProcessing(ctxFor(), ledger())).toEqual({ action: 'block', reason: 'local_conflict', invoiceId: 'lok-1' });
+    });
+    it('ZAP-01: szkic z pliku w wysyłce → czekamy jak na fakturę FaktWay; po nieudanej wysyłce z próbą — też', async () => {
+      holder({ origin: 'file_import', ksef_status: 'queued', ksef_environment: null });
+      expect(await classifyForProcessing(ctxFor(), ledger())).toMatchObject({ action: 'defer', reason: 'own_send_pending', invoiceId: 'lok-1' });
+      holder({ origin: 'file_import', ksef_status: 'failed', ksef_environment: null });
+      db.tables.ksef_submissions = [{ id: 's-9', tenant_id: TENANT, invoice_id: 'lok-1', status: 'failed' }];
+      expect(await classifyForProcessing(ctxFor(), ledger())).toMatchObject({ action: 'defer', reason: 'own_send_pending', invoiceId: 'lok-1' });
+    });
+    it('ZAP-01: wiersz spoza FaktWay bez statusu (NULL) → local_conflict — usunąć da się tylko `draft`', async () => {
+      holder({ origin: 'file_import', ksef_status: null, ksef_environment: null });
+      expect(await classifyForProcessing(ctxFor(), ledger())).toEqual({ action: 'block', reason: 'local_conflict', invoiceId: 'lok-1' });
+    });
     it('inny numer KSeF przy tym numerze → number_taken_local', async () => {
       holder({ origin: 'file_import', ksef_number: 'INNY-KSEF' });
       expect(await classifyForProcessing(ctxFor(), ledger())).toMatchObject({ action: 'block', reason: 'number_taken_local' });
@@ -430,35 +451,57 @@ describe('strażnik ZAP-01: sprzedaż „już w FaktWay” jest w księgach', ()
     db.tables.xml_documents = [{ id: 'x-1', tenant_id: TENANT, invoice_id: 'lok-1' }];
   });
 
+  // Próby wysyłki posiadacza: brak albo wycofanie 440 bez numeru oryginału
+  // (duplicate-decision.ts) — taki szkic zostaje na zawsze (wyzwalacz 00148).
+  const ATTEMPTS: Row[][] = [[], [{
+    id: 's-440', tenant_id: TENANT, invoice_id: 'lok-1', status: 'number_taken',
+    original_ksef_number: null, response_ksef_number: null, request_payload_hash: null,
+  }]];
+
   it('classifyForProcessing: już obecna tylko przy posiadaczu w księgach; posiadacz spoza ksiąg nie kończy pozycji', async () => {
     const violations: string[] = [];
     let present = 0;
+    let clientDrafts = 0;
     for (const base of shapes()) {
       for (const ksef_number of KSEF_NUMBERS) {
         for (const gross_total of [123, 124]) {
-          for (const reason_code of [null, 'repair_content']) {
-            const holder: Row = { ...base, ksef_number, gross_total };
-            db.tables.invoices = [holder];
-            const outcome = await classifyForProcessing(ctxFor(), itemRow({ tenant_id: TENANT, reason_code }) as never);
-            const counted = outcome.action === 'resolve'
-              && (outcome.reason === 'already_present' || outcome.status === 'imported');
-            if (counted) present += 1;
-            if (counted && !inBooks(holder)) violations.push(`${label(holder)} → ${outcome.status}/${String(outcome.reason)}`);
-            const terminal = outcome.action === 'resolve'
-              || (outcome.action === 'block' && !KSEF_HISTORY_RECHECK_BLOCKED_REASONS.includes(outcome.reason));
-            if (holder.origin !== 'app' && !inBooks(holder) && terminal) {
-              violations.push(`${label(holder)} → koniec bez wyjścia: ${outcome.action}/${String('reason' in outcome ? outcome.reason : '')}`);
-            }
-            // Szkic bez numeru KSeF klient może usunąć sam — powód klienta z tekstem i linkiem, nie operatora.
-            const clientDraft = holder.origin !== 'app' && !inBooks(holder)
-              && (holder.ksef_status === 'draft' || holder.ksef_status === null) && !String(holder.ksef_number ?? '').trim();
-            if (clientDraft && !(outcome.action === 'block' && outcome.reason === 'number_conflict')) {
-              violations.push(`${label(holder)} → szkic bez drogi klienta: ${outcome.action}/${String('reason' in outcome ? outcome.reason : '')}`);
+          for (const attempts of ATTEMPTS) {
+            for (const reason_code of [null, 'repair_content']) {
+              const holder: Row = { ...base, ksef_number, gross_total };
+              db.tables.invoices = [holder];
+              db.tables.ksef_submissions = attempts;
+              const outcome = await classifyForProcessing(ctxFor(), itemRow({ tenant_id: TENANT, reason_code }) as never);
+              const at = `${label(holder)}/próby:${attempts.length} → ${outcome.action}/${String('reason' in outcome ? outcome.reason : '')}`;
+              const counted = outcome.action === 'resolve'
+                && (outcome.reason === 'already_present' || outcome.status === 'imported');
+              if (counted) present += 1;
+              // 1. „Już w FaktWay” tylko przy posiadaczu w księgach.
+              if (counted && !inBooks(holder)) violations.push(at);
+              const terminal = outcome.action === 'resolve'
+                || (outcome.action === 'block' && !KSEF_HISTORY_RECHECK_BLOCKED_REASONS.includes(outcome.reason));
+              // 2. Posiadacz spoza ksiąg nie kończy pozycji — blokada sprawdzana ponownie albo czekanie.
+              if (holder.origin !== 'app' && !inBooks(holder) && terminal) violations.push(`koniec bez wyjścia: ${at}`);
+              // 3. Szkic, który klient może usunąć (`draft`, bez prób wysyłki, bez numeru KSeF),
+              //    dostaje powód klienta z tekstem i linkiem, nie operatora.
+              const deletableDraft = holder.ksef_status === 'draft' && attempts.length === 0;
+              const clientDraft = holder.origin !== 'app' && !inBooks(holder) && deletableDraft
+                && !String(holder.ksef_number ?? '').trim();
+              if (clientDraft) clientDrafts += 1;
+              if (clientDraft && !(outcome.action === 'block' && outcome.reason === 'number_conflict')) {
+                violations.push(`szkic bez drogi klienta: ${at}`);
+              }
+              // 4. „Usuń szkic” (`number_conflict`) tylko, gdy da się go usunąć: `deleteDraftInvoiceAction`
+              //    usuwa wyłącznie `draft`, a wycofanego szkicu 440 nie usunie nikt (recenzja #339).
+              //    Reszta powodów sprawdzanych ponownie budzi operatora (ksef-historia-alarm.test.ts).
+              if (outcome.action === 'block' && outcome.reason === 'number_conflict' && !deletableDraft) {
+                violations.push(`„usuń szkic” bez możliwości usunięcia: ${at}`);
+              }
             }
           }
         }
       }
     }
+    expect(clientDrafts).toBeGreaterThan(0);
     expect(violations).toEqual([]);
     expect(present).toBeGreaterThan(0); // strażnik nie jest pusty
   });
