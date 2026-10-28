@@ -86,11 +86,52 @@ export class KsefApiError extends Error {
     return this.status === 401 || this.status === 403;
   }
 
-  /** Wyciąga kod błędu KSeF (jeśli jest) */
+  /** Pierwszy kod błędu KSeF z odpowiedzi (jeśli jest) — F-093. */
   get ksefCode(): number | null {
-    if (typeof this.body === 'string') return null;
-    return this.body.exceptionDetailList?.[0]?.exceptionCode ?? null;
+    return ksefErrorCodes(this.body)[0] ?? null;
   }
+}
+
+/**
+ * Kody błędów z odpowiedzi KSeF. API zwraca je w dwóch kształtach:
+ * `application/problem+json` (`errors[].code`) albo starszym
+ * `exception.exceptionDetailList[].exceptionCode` (oba w `open-api.json` MF);
+ * atrapy w repo mają jeszcze `exceptionDetailList` na wierzchu.
+ */
+export function ksefErrorCodes(body: unknown): number[] {
+  // Ciało jako tekst: `ksefFetch` parsuje już `application/problem+json`, ale
+  // błąd mógł przyjść inną drogą (atrapa, odpowiedź z błędnym nagłówkiem).
+  // JSON w tekście czytamy tak samo jak sparsowany (D-A4-1a).
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return [];
+    }
+  }
+  if (!body || typeof body !== 'object') return [];
+  const b = body as {
+    errors?: Array<{ code?: unknown }>;
+    exception?: { exceptionDetailList?: Array<{ exceptionCode?: unknown }> };
+    exceptionDetailList?: Array<{ exceptionCode?: unknown }>;
+  };
+  const codes = [
+    ...(b.errors ?? []).map((e) => e.code),
+    ...(b.exception?.exceptionDetailList ?? []).map((e) => e.exceptionCode),
+    ...(b.exceptionDetailList ?? []).map((e) => e.exceptionCode),
+  ];
+  return codes.map(Number).filter((c) => Number.isInteger(c));
+}
+
+/**
+ * Czy odpowiedź jest JSON-em: `application/json` albo typ z przyrostkiem
+ * `+json` — KSeF zwraca błędy także jako `application/problem+json`
+ * (RFC 9457), a sprawdzanie samego `application/json` zostawiało je tekstem
+ * i kod błędu (np. 21184) był nie do odczytania.
+ */
+function isJsonContentType(contentType: string | null): boolean {
+  const mediaType = contentType?.split(';')[0]?.trim().toLowerCase() ?? '';
+  return mediaType === 'application/json' || /^application\/[^/]+\+json$/.test(mediaType);
 }
 
 /**
@@ -317,7 +358,7 @@ export async function ksefFetch<TResponse = unknown>(
 
     const responseSize = bytes ? bytes.length : Buffer.byteLength(text, 'utf8');
     let parsedBody: unknown = text;
-    if (text && contentType?.includes('application/json')) {
+    if (text && isJsonContentType(contentType)) {
       try {
         parsedBody = JSON.parse(text);
       } catch {
