@@ -226,6 +226,7 @@ nadążać; to argument za `max_slot_wal_keep_size` 2–4 GB (sesja 25).
 | 26.10.2026 | Etap 0 na db-1 (Bartosz) | — | dysk 57% (16 GB wolne), limit dziennika 300 MB; Logflare i Vector zostają do zmiany w compose |
 | 27.10.2026 | Akceptacja planu (Bartosz) | #329 | „Zaczynaj od sesji 23, potem 22, 20, 26, 27 i 4, każda jako osobny PR” |
 | 27.10.2026 | Sesja 23: pomiar procesu (web, worker, Pulpit), próbkowanie Sentry, `scripts/ops/pojemnosc-db.sh` | #338 | PR otwarty, czeka na CI i Bartosza; każda kolejna sesja w osobnym czacie, po kolei |
+| 28.10.2026 | Sesja 22: `db-backup.sh` nie zapełnia dysku Postgresa (sprzątanie przy błędzie, kontrola miejsca, bez `.outbox`, retencja przed wysyłką, retencja zdalna 60 dni) | #342 | PR otwarty, czeka na CI i Bartosza; skrypt na db-1 podmienia Bartosz |
 
 **Następny krok:** sesja 23 (pomiar i skrypt pozostałych odczytów), potem
 22, 20, 26, 27, 4 — każda osobny PR. Dopóki #329 nie jest scalony, sesje
