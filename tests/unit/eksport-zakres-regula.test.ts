@@ -40,6 +40,7 @@ import {
   type ExportFormatValue,
   type ExportIncludes,
   type ExportScope,
+  UnknownExportFormatError,
 } from '@/lib/exports/export-scope';
 import { Constants } from '@/types/database';
 
@@ -141,6 +142,20 @@ describe('formularz i ponowienie z historii używają tej samej reguły', () => 
   it('ponowienie KPiR z Co-Pilota bez korekt i bez wystawionych → cała księga', () => {
     expect(includesForJob({ format: 'kpir_excel', include_issued: false, include_received: false, include_corrections: false }))
       .toEqual({ includeIssued: true, includeReceived: true, includeCorrections: true });
+  });
+});
+
+describe('format spoza reguły (enum w bazie wyprzedza kod)', () => {
+  const NOWY = 'nowy_format' as ExportFormatValue;
+
+  it('reguła rzuca nazwany błąd — runner rozpoznaje go i nie ponawia', () => {
+    expect(() => exportScopeFor(NOWY)).toThrow(UnknownExportFormatError);
+    expect(() => exportIncludesFor(NOWY)).toThrow(UnknownExportFormatError);
+  });
+
+  it('ponowienie z historii nie wywraca strony: flagi joba bez zmian, odmówi startExportAction', () => {
+    expect(includesForJob({ format: NOWY, include_issued: false, include_received: true, include_corrections: true }))
+      .toEqual({ includeIssued: false, includeReceived: true, includeCorrections: true });
   });
 });
 

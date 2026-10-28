@@ -34,7 +34,7 @@ import {
   generateWaproCsv,
 } from '@/lib/exports/csv-generators';
 import { fetchInvoicesForExport } from '@/lib/exports/data-fetcher';
-import { exportScopeFor } from '@/lib/exports/export-scope';
+import { exportScopeFor, UnknownExportFormatError, type ExportScope } from '@/lib/exports/export-scope';
 import { KsefExpenseCurrencyNotSupportedError } from '@/lib/expenses/ksef-currency-review';
 import { MissingIssuerAddressError, readIssuerRegisteredAddress } from '@/lib/exports/issuer-address';
 import {
@@ -295,11 +295,18 @@ export async function runExportsGenerate(eventData: Parameters<typeof exportsGen
 
     // FIR-01: zakres z reguły formatu, nie z flag joba — Co-Pilot zapisuje
     // ustawienia paczki w każdym jobie, a KPiR ma zawsze całą sprzedaż.
-    const scope = exportScopeFor(job.format, {
-      includeIssued: job.include_issued,
-      includeReceived: job.include_received,
-      includeCorrections: job.include_corrections,
-    });
+    let scope: ExportScope;
+    try {
+      scope = exportScopeFor(job.format, {
+        includeIssued: job.include_issued,
+        includeReceived: job.include_received,
+        includeCorrections: job.include_corrections,
+      });
+    } catch (error) {
+      // Format spoza reguły (baza przed kodem) — ponowienie nic nie zmieni.
+      if (error instanceof UnknownExportFormatError) throw new NonRetriableError(error.message);
+      throw error;
+    }
 
     await step.run('mark-generating', async () => {
       const { error } = await supabase

@@ -26,7 +26,10 @@ describe('Co-Pilot: zakres paczki na ekranie (FIR-01)', () => {
   it('pod „Co dołączać do paczki” — KPiR zawsze cała, pola dla CSV', () => {
     const html = render([]);
     expect(html).toContain('KPiR zawsze ma całą sprzedaż (z zaliczkami, rozliczeniami i korektami) i koszty');
-    expect(html).toContain('Pola niżej ustawiają plik CSV i korekty w JPK_FA.');
+    expect(html).toContain('Pola niżej dotyczą pliku CSV i JPK_FA.');
+    // Do filtra `.neq('invoice_kind','correction')`: bez korekt wypadają też ZAL i ROZ.
+    expect(html).toContain('Bez „Faktur korygujących” oba pliki mają tylko zwykłe faktury, bez zaliczek i rozliczeń.');
+    expect(html).not.toContain('ustawiają plik CSV i korekty');
   });
 
   it('KPiR bez liczby faktur; CSV z liczbą', () => {
@@ -37,5 +40,11 @@ describe('Co-Pilot: zakres paczki na ekranie (FIR-01)', () => {
     expect(html).not.toContain('0 faktur');
     expect(html).toContain('3 faktury • wysłano');
     expect(html.match(/wysłano/g)).toHaveLength(2);
+  });
+
+  it('format spoza reguły: wiersz z licznikiem, strona ustawień się nie wywraca', () => {
+    const html = render([paczka({ id: 'nowy', format: 'nowy_format' as ExportJobPreviewRow['format'], invoices_count: 2 })]);
+    expect(html).toContain('NOWY FORMAT');
+    expect(html).toContain('2 faktury • wysłano');
   });
 });

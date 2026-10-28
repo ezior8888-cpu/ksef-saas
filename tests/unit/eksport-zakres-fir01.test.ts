@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { NonRetriableError } from '@/lib/jobs/errors';
 import type { JobContext } from '@/lib/jobs/registry';
 
 import { memoryClient, type MemoryTables, type Row } from './helpers/baza-w-pamieci';
@@ -160,5 +161,16 @@ describe('FIR-01: KPiR z Co-Pilota ma pełny przychód, niezależnie od ustawie�
 
     const { numery } = await kpirZPliku();
     expect(numery).not.toContain('OBCA/1');
+  });
+});
+
+describe('FIR-01: format spoza reguły (enum w bazie wyprzedza kod)', () => {
+  it('job kończy się od razu, bez ponowień i bez pliku', async () => {
+    mocks.tables.export_jobs = [{ ...job({ include_issued: true, include_received: false, include_corrections: true }), format: 'nowy_format' }];
+
+    await expect(runExportsGenerate({ exportJobId: 'job-1' }, context)).rejects.toBeInstanceOf(NonRetriableError);
+    expect(mocks.uploads).toEqual([]);
+    // Zakres liczony przed `mark-generating` — wiersz nie udaje generowania.
+    expect(mocks.tables.export_jobs[0]).toMatchObject({ status: 'pending' });
   });
 });

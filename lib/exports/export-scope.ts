@@ -41,6 +41,17 @@ const DEFAULT_REQUEST: ExportIncludes = {
 };
 
 /**
+ * Format spoza reguły — enum w bazie wyprzedza kod. Ponowienie nic nie
+ * zmieni: runner kończy job bez prób, a ekrany pokazują bezpieczny wariant.
+ */
+export class UnknownExportFormatError extends Error {
+  constructor(format: string) {
+    super(`Brak zakresu eksportu dla formatu ${format}`);
+    this.name = 'UnknownExportFormatError';
+  }
+}
+
+/**
  * - KPiR i JPK_V7M: zawsze cała sprzedaż (z zaliczkami, ROZ i korektami)
  *   i koszty — jak KPiR na ekranie (`lib/reports/kpir-data.ts`). Koszty idą
  *   z wydatków, więc z `invoices` czytamy tylko wystawione: generator nie
@@ -91,7 +102,7 @@ export function exportScopeFor(
     }
     default: {
       const unexpected: never = format;
-      throw new Error(`Brak zakresu eksportu dla formatu ${String(unexpected)}`);
+      throw new UnknownExportFormatError(String(unexpected));
     }
   }
 }

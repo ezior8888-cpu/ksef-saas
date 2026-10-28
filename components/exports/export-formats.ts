@@ -6,7 +6,7 @@ import {
   type RemixiconComponentType,
 } from '@remixicon/react';
 
-import { exportIncludesFor, type ExportIncludes } from '@/lib/exports/export-scope';
+import { exportIncludesFor, UnknownExportFormatError, type ExportIncludes } from '@/lib/exports/export-scope';
 import { isExportFormatSuspended } from '@/lib/exports/suspended-formats';
 import { Constants, type Tables } from '@/types/database';
 
@@ -123,11 +123,22 @@ export function includesFor(format: EnabledExportFormat, state: ExportScopeState
 export function includesForJob(
   job: Pick<ManualExportJobWithFiles, 'format' | 'include_issued' | 'include_received' | 'include_corrections'>,
 ): ExportIncludes {
-  return exportIncludesFor(job.format, {
-    includeIssued: job.include_issued,
-    includeReceived: job.include_received,
-    includeCorrections: job.include_corrections,
-  });
+  try {
+    return exportIncludesFor(job.format, {
+      includeIssued: job.include_issued,
+      includeReceived: job.include_received,
+      includeCorrections: job.include_corrections,
+    });
+  } catch (error) {
+    if (!(error instanceof UnknownExportFormatError)) throw error;
+    // Format spoza reguły: flagi joba bez zmian — `startExportAction` odmówi
+    // komunikatem „Nieobsługiwany format eksportu” zamiast wywracać stronę.
+    return {
+      includeIssued: job.include_issued ?? true,
+      includeReceived: job.include_received ?? false,
+      includeCorrections: job.include_corrections ?? true,
+    };
+  }
 }
 
 /** Rozmiar pliku po polsku: „512 B”, „12,4 KB”, „1,2 MB”. */
