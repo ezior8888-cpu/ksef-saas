@@ -48,11 +48,34 @@ export interface AuthContext {
 
 /**
  * UX-01 (WZR-02): formularz wyrenderowano dla innej firmy niż aktywna teraz —
- * zwykle przełącznik firm w drugiej karcie zmienił ciasteczko. Jeden tekst
- * dla wszystkich akcji wystawiania.
+ * np. przełącznik firm w drugiej karcie zmienił ciasteczko. Jeden tekst dla
+ * wszystkich akcji wystawiania: która firma jest aktywna (gdy nazwa się
+ * odczyta) i obie drogi wyjścia.
  */
-export const TENANT_CHANGED_MESSAGE =
-  'Firma została zmieniona w innej karcie — odśwież stronę i sprawdź dane przed wystawieniem.';
+export function tenantChangedMessage(activeName: string | null): string {
+  const now = activeName ? ` (teraz: ${activeName})` : '';
+  return `Aktywna firma zmieniła się od otwarcia formularza${now}. `
+    + 'Przełącz firmę z powrotem albo odśwież stronę i wypełnij formularz dla aktywnej firmy.';
+}
+
+/**
+ * Nazwa AKTYWNEJ firmy do komunikatu odmowy — członkostwo jest już
+ * sprawdzone. Nigdy nie czytamy nazwy firmy z pola formularza: to id
+ * z przeglądarki, a klient serwisowy pokazałby nazwę dowolnej firmy.
+ * Błąd odczytu = komunikat bez nazwy, odmowa zostaje.
+ */
+async function activeOrgName(
+  admin: ReturnType<typeof createAdminClient>,
+  activeOrg: string,
+): Promise<string | null> {
+  try {
+    const { data } = await admin.from('tenants').select('name').eq('id', activeOrg).maybeSingle();
+    const name: unknown = data?.name;
+    return typeof name === 'string' && name.trim() ? name.trim() : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Firma, dla której strona wyrenderowała formularz (UX-01). Przychodzi
@@ -107,10 +130,10 @@ export async function requireUserAndActiveOrg(formTenant?: FormTenantCheck): Pro
   }
 
   // Przed każdym odczytem danych firmy: dokument z formularza firmy A nie może
-  // powstać jako dokument firmy B. Karta sprzed wdrożenia (bez pola) też
-  // dostaje odmowę — po wdrożeniu i tak traci akcje (nowe ID Server Actions).
+  // powstać jako dokument firmy B. Karta bez pola (otwarta przed wdrożeniem)
+  // też dostaje odmowę, niezależnie od tego, czy ID akcji się zmieni.
   if (formTenant && formTenant.expectedTenantId !== activeOrg) {
-    throw new ActionAuthError(TENANT_CHANGED_MESSAGE);
+    throw new ActionAuthError(tenantChangedMessage(await activeOrgName(admin, activeOrg)));
   }
 
   return {

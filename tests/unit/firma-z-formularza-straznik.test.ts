@@ -14,6 +14,8 @@ import { describe, expect, it } from 'vitest';
  * Każda eksportowana akcja w `components/invoices/*actions*.ts` musi być
  * sklasyfikowana: na liście wystawiania albo na liście wyjątków z powodem.
  * Nowa akcja spoza obu list wywala test — trzeba świadomie zdecydować.
+ * To samo dla plików w `app/`, `components/`, `lib/`, które zapisują
+ * dokument albo zlecają wysyłkę (`ISSUING_FILES` / `EXEMPT_FILES` niżej).
  */
 
 const DIR = join(process.cwd(), 'components', 'invoices');
@@ -44,6 +46,47 @@ const EXEMPT: Record<string, string> = {
   sendDraftInvoiceAction: ID_BOUND,
   deleteDraftInvoiceAction: ID_BOUND,
 };
+
+/** Pliki akcji wystawiania — ich akcje sprawdzają testy niżej, akcja po akcji. */
+const ISSUING_FILES = Object.keys(ISSUING).map((file) => `components/invoices/${file}`);
+
+/**
+ * Pliki z zapisem obok `invoices` albo zleceniem wysyłki, które nie wystawiają
+ * dokumentu z formularza faktury. Powód mówi, czemu — i skąd plik bierze firmę.
+ */
+const EXEMPT_FILES: Record<string, string> = {
+  'components/invoices/actions-detail.ts': 'akcje na istniejącym dokumencie wskazanym id (ponowienie, reset, duplikat, e-mail, XML) — patrz EXEMPT',
+  'components/invoices/draft-actions.ts': 'wysyłka i usunięcie istniejącego szkicu wskazanego id — patrz EXEMPT',
+  'lib/invoices/ksef-submit-enqueue.ts': 'definicja zlecenia wysyłki; firmę podaje wołający (akcja albo job)',
+  'lib/ksef/offline-queue.ts': 'kolejka offline wysyłki (ksef_offline_queue); firmę podaje wołający',
+  'lib/ksef/submission-log.ts': 'dziennik prób wysyłki (ksef_submissions); firmę podaje wołający',
+  'lib/import/import-engine.ts': 'import dokumentów w jobach (plik, historia KSeF); firma z danych joba',
+  'lib/jobs/runners/inbox-polling.ts': 'job: zapis faktur odebranych z KSeF; firma z danych joba',
+  'lib/jobs/runners/auto-categorize-inbox.ts': 'job: koszt z faktury odebranej (expenses); firma z danych joba',
+  'lib/flo/functions/payment-confirm.ts': 'potwierdzenie wpłaty (payments); firma z zapisanej propozycji',
+  'app/actions/recurring-invoices.ts': 'harmonogram faktur cyklicznych (recurring_invoices); z invoices tylko odczyt szablonu',
+  'app/actions/reminders.ts': 'przypomnienie o płatności (flo_proposals); z invoices tylko odczyt',
+  'app/actions/expenses.ts': 'koszt ze zdjęcia (ocr_jobs, expenses); z invoices tylko odczyt waluty',
+};
+
+/**
+ * Pliki `.ts`/`.tsx` w `app/`, `components/`, `lib/` z zapisem dokumentu:
+ * `.from('invoices')` i `.insert(` w jednym pliku albo `enqueueKsefSubmitAfterDraft(`.
+ * Reguła celowo szeroka (nie wymaga jednego łańcucha): zapis przez zmienną
+ * pośrednią też się liczy, a nadmiar kosztuje tylko wiersz na liście wyjątków.
+ */
+function documentWriters(): string[] {
+  return ['app', 'components', 'lib'].flatMap((root) =>
+    (readdirSync(join(process.cwd(), root), { recursive: true }) as string[])
+      .map((rel) => `${root}/${rel.split('\\').join('/')}`)
+      .filter((file) => /\.tsx?$/.test(file))
+      .filter((file) => {
+        const source = readFileSync(join(process.cwd(), file), 'utf8');
+        const insertsNextToInvoices = /\.from\(\s*['"]invoices['"]\s*\)/.test(source) && /\.insert\(/.test(source);
+        return insertsNextToInvoices || /\benqueueKsefSubmitAfterDraft\(/.test(source);
+      }),
+  ).sort();
+}
 
 interface ExportedAction {
   file: string;
@@ -128,6 +171,24 @@ describe('UX-01 strażnik: akcje wystawiania sprawdzają firmę formularza', () 
     expect(table).not.toBe('');
     const missing = issuing.map((a) => a.name).filter((n) => !new RegExp(`\\b${n}\\(`).test(table));
     expect(missing).toEqual([]);
+  });
+
+  describe('pliki z zapisem dokumentu w app/, components/, lib/', () => {
+    const writers = documentWriters();
+
+    it('skan widzi pliki akcji wystawiania', () => {
+      expect(ISSUING_FILES.filter((f) => !writers.includes(f))).toEqual([]);
+    });
+
+    it('każdy plik z zapisem dokumentu jest sklasyfikowany (wystawianie albo wyjątek z powodem)', () => {
+      const unclassified = writers.filter((f) => !ISSUING_FILES.includes(f) && !(f in EXEMPT_FILES));
+      expect(unclassified).toEqual([]);
+    });
+
+    it('lista wyjątków plików nie ma martwych wpisów ani pustych powodów', () => {
+      expect(Object.keys(EXEMPT_FILES).filter((f) => !writers.includes(f))).toEqual([]);
+      expect(Object.entries(EXEMPT_FILES).filter(([, why]) => why.trim().length < 20).map(([f]) => f)).toEqual([]);
+    });
   });
 
   it('formularze odsyłają firmę strony: każde wywołanie akcji wystawiania ma tenantId jako drugi argument', () => {

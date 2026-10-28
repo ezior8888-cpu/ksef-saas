@@ -47,7 +47,11 @@ import type { InvoiceFormValues } from '@/lib/schemas/invoice-form';
 import { ACTIVE_ORG_COOKIE } from '@/lib/supabase/active-org';
 import type { CorrectionInvoiceSchemaIn } from '@/lib/validators/invoice-validators';
 
-const FIRMA_ZMIENIONA = 'Firma została zmieniona w innej karcie — odśwież stronę i sprawdź dane przed wystawieniem.';
+/** Komunikat odmowy: która firma jest aktywna i obie drogi wyjścia (protokół, pkt 4). */
+const firmaZmieniona = (aktywna: string | null) =>
+  `Aktywna firma zmieniła się od otwarcia formularza${aktywna ? ` (teraz: ${aktywna})` : ''}. `
+  + 'Przełącz firmę z powrotem albo odśwież stronę i wypełnij formularz dla aktywnej firmy.';
+const FIRMA_ZMIENIONA = firmaZmieniona('Firma B');
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -92,6 +96,8 @@ const correctionInput = (tenantId: string): CorrectionInvoiceSchemaIn => ({
 
 type Query = { table: string; operation: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
 let queries: Query[];
+let adminQueries: Array<{ table: string; filters: Record<string, unknown> }>;
+let tenantNameFails: boolean;
 let cookieTenant: string | null;
 
 /** Baza z dwiema firmami jednego użytkownika — wiersz `tenants` wg filtra `id`. */
@@ -122,18 +128,29 @@ function from(table: string) {
   return chain;
 }
 
-/** Członkostwo (klient serwisowy): użytkownik jest aktywnym członkiem OBU firm. */
+/**
+ * Klient serwisowy: członkostwo (użytkownik jest aktywnym członkiem OBU firm)
+ * i nazwa firmy do komunikatu odmowy.
+ */
 function adminFrom(table: string) {
   const filters: Record<string, unknown> = {};
+  adminQueries.push({ table, filters });
   const chain = {
     select: () => chain,
     eq: (key: string, value: unknown) => { filters[key] = value; return chain; },
-    maybeSingle: async () => ({
-      data: table === 'memberships' && filters.user_id === USER && String(filters.organization_id) in TENANTS
-        ? { role: 'owner', status: 'active' }
-        : null,
-      error: null,
-    }),
+    maybeSingle: async () => {
+      if (table === 'tenants') {
+        if (tenantNameFails) throw new Error('baza niedostępna');
+        const row = TENANTS[String(filters.id)];
+        return { data: row ? { name: row.name } : null, error: null };
+      }
+      return {
+        data: table === 'memberships' && filters.user_id === USER && String(filters.organization_id) in TENANTS
+          ? { role: 'owner', status: 'active' }
+          : null,
+        error: null,
+      };
+    },
   };
   return chain;
 }
@@ -145,6 +162,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-27T10:00:00Z'));
   queries = [];
+  adminQueries = [];
+  tenantNameFails = false;
   cookieTenant = TENANT_B;
   mocks.getSession.mockResolvedValue({ data: { session: { access_token: TOKEN } }, error: null });
   mocks.getUser.mockResolvedValue({ data: { user: {
@@ -240,7 +259,28 @@ describe('UX-01: akcja wystawia dokument tylko za firmę, dla której wyrenderow
     // Ciasteczko A, pole B — odmowa, a nie dokument firmy B.
     cookieTenant = TENANT_A;
     const result = await saveDraftAction(vatForm, TENANT_B);
-    expect(result).toEqual({ success: false, error: FIRMA_ZMIENIONA });
+    expect(result).toEqual({ success: false, error: firmaZmieniona('Firma A') });
     expectNothingReadOrWritten();
+  });
+
+  it('komunikat podaje nazwę AKTYWNEJ firmy — nazwy firmy z pola formularza nie czyta nikt', async () => {
+    const obca = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const result = await saveAndSendInvoiceAction(vatForm, obca);
+    expect(result).toEqual({ success: false, error: FIRMA_ZMIENIONA });
+    const tenantReads = adminQueries.filter((q) => q.table === 'tenants');
+    expect(tenantReads).toEqual([{ table: 'tenants', filters: { id: TENANT_B } }]);
+    expectNothingReadOrWritten();
+  });
+
+  it('nazwa aktywnej firmy się nie odczytała → ta sama odmowa, komunikat bez nazwy', async () => {
+    tenantNameFails = true;
+    const result = await saveAndSendAdvanceAction(advanceInput(TENANT_A), TENANT_A);
+    expect(result).toEqual({ success: false, error: firmaZmieniona(null) });
+    expectNothingReadOrWritten();
+  });
+
+  it('zgodna firma: bez odczytu nazwy firmy (kontrola nie dokłada zapytań)', async () => {
+    await saveDraftAction(vatForm, TENANT_B);
+    expect(adminQueries.filter((q) => q.table === 'tenants')).toEqual([]);
   });
 });
