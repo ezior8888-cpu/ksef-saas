@@ -228,6 +228,7 @@ nadążać; to argument za `max_slot_wal_keep_size` 2–4 GB (sesja 25).
 | 27.10.2026 | Sesja 23: pomiar procesu (web, worker, Pulpit), próbkowanie Sentry, `scripts/ops/pojemnosc-db.sh` | #338 | PR otwarty, czeka na CI i Bartosza; każda kolejna sesja w osobnym czacie, po kolei |
 | 28.10.2026 | Sesja 22: `db-backup.sh` nie zapełnia dysku Postgresa (sprzątanie przy błędzie, kontrola miejsca, bez `.outbox`, retencja przed wysyłką, retencja zdalna 60 dni) | #342 | PR otwarty, czeka na CI i Bartosza; skrypt na db-1 podmienia Bartosz |
 | 28.10.2026 | Sesja 20: sprzątanie `audit_logs`, `inngest_run_log` i `ksef_health_log` paczkami, codziennie (migracja 00157, btree po `created_at` zamiast samego BRIN) | #343 | PR otwarty, CI 11/11 zielone, czeka na Bartosza; 00157 wgrywa Bartosz przed wdrożeniem; zmiana crona na dzienny = do tygodnia możliwy fałszywy alarm „cron stoi” |
+| 28.10.2026 | Sesja 26: audyt odpytywania KSeF tylko przy błędzie albo zmianie (`audit.when` w `ksefFetch`, 1 wiersz podsumowania na przebieg skrzynki z nowymi fakturami i na odpytaną fakturę) | #344 | PR otwarty, CI 11/11 zielone; zawęża regułę Fazy 23 — decyzja Bartosza; szacunek ok. 6,5 mln → 0,5–0,7 mln wierszy/mies. przy 2000 firm; możliwy konflikt z #189 w `submit.ts` |
 
 **Następny krok:** sesja 23 (pomiar i skrypt pozostałych odczytów), potem
 22, 20, 26, 27, 4 — każda osobny PR. Dopóki #329 nie jest scalony, sesje
