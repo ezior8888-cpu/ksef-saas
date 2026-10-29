@@ -50,11 +50,14 @@ import type { CorrectionInvoiceSchemaIn } from '@/lib/validators/invoice-validat
 /** Komunikat odmowy: która firma jest aktywna i obie drogi wyjścia (protokół, pkt 4). */
 const firmaZmieniona = (aktywna: string | null) =>
   `Aktywna firma zmieniła się od otwarcia formularza${aktywna ? ` (teraz: ${aktywna})` : ''}. `
-  + 'Przełącz firmę z powrotem albo odśwież stronę i wypełnij formularz dla aktywnej firmy.';
+  + 'Przełącz firmę z powrotem w karcie, w której ją zmieniono, i zapisz ponownie '
+  + '— albo odśwież tę stronę i wypełnij formularz dla aktywnej firmy.';
 const FIRMA_ZMIENIONA = firmaZmieniona('Firma B');
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+/** Firma, w której użytkownik NIE jest członkiem (np. podrobione ciasteczko). */
+const TENANT_OBCA = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const USER = 'user-biuro-rachunkowe';
 const TOKEN = 'synthetic-access-token';
 const ADDRESS = { countryCode: 'PL', addressLine1: 'ul. Testowa 1', addressLine2: '00-001 Warszawa' };
@@ -229,6 +232,16 @@ describe('UX-01: akcja wystawia dokument tylko za firmę, dla której wyrenderow
     ])('%s → odmowa bez odczytu i zapisu', async (_label, expectedTenantId) => {
       const result = await invoke(TENANT_B)(expectedTenantId);
       expect(result).toEqual({ success: false, error: FIRMA_ZMIENIONA });
+      expectNothingReadOrWritten();
+    });
+
+    it('ciasteczko firmy bez członkostwa → odmowa dostępu przed porównaniem, bez odczytu nazwy tej firmy', async () => {
+      // Kolejność w requireUserAndActiveOrg: członkostwo, dopiero potem nazwa do
+      // komunikatu. Odwrotnie klient serwisowy pokazałby nazwę obcej firmy.
+      cookieTenant = TENANT_OBCA;
+      const result = await invoke(TENANT_A)(TENANT_A);
+      expect(result).toEqual({ success: false, error: 'Brak dostępu do aktywnej organizacji' });
+      expect(adminQueries.filter((q) => q.table === 'tenants')).toEqual([]);
       expectNothingReadOrWritten();
     });
 

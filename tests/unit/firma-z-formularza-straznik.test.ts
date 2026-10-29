@@ -15,7 +15,8 @@ import { describe, expect, it } from 'vitest';
  * sklasyfikowana: na liście wystawiania albo na liście wyjątków z powodem.
  * Nowa akcja spoza obu list wywala test — trzeba świadomie zdecydować.
  * To samo dla plików w `app/`, `components/`, `lib/`, które zapisują
- * dokument albo zlecają wysyłkę (`ISSUING_FILES` / `EXEMPT_FILES` niżej).
+ * dokument albo zlecają wysyłkę (`ISSUING_FILES` / `EXEMPT_FILES` niżej;
+ * wzorce, po których skan je rozpoznaje — `writesDocument`).
  */
 
 const DIR = join(process.cwd(), 'components', 'invoices');
@@ -51,8 +52,9 @@ const EXEMPT: Record<string, string> = {
 const ISSUING_FILES = Object.keys(ISSUING).map((file) => `components/invoices/${file}`);
 
 /**
- * Pliki z zapisem obok `invoices` albo zleceniem wysyłki, które nie wystawiają
- * dokumentu z formularza faktury. Powód mówi, czemu — i skąd plik bierze firmę.
+ * Pliki z zapisem dokumentu albo zleceniem wysyłki (wg `writesDocument`), które
+ * nie wystawiają dokumentu z formularza faktury. Powód mówi, czemu — i skąd
+ * plik bierze firmę.
  */
 const EXEMPT_FILES: Record<string, string> = {
   'components/invoices/actions-detail.ts': 'akcje na istniejącym dokumencie wskazanym id (ponowienie, reset, duplikat, e-mail, XML) — patrz EXEMPT',
@@ -67,24 +69,81 @@ const EXEMPT_FILES: Record<string, string> = {
   'app/actions/recurring-invoices.ts': 'harmonogram faktur cyklicznych (recurring_invoices); z invoices tylko odczyt szablonu',
   'app/actions/reminders.ts': 'przypomnienie o płatności (flo_proposals); z invoices tylko odczyt',
   'app/actions/expenses.ts': 'koszt ze zdjęcia (ocr_jobs, expenses); z invoices tylko odczyt waluty',
+  'lib/billing/self-invoice.ts': 'faktura za abonament (RPC create_billing_vat_invoice); firma klienta z płatności Stripe, sprzedawca z konfiguracji operatora',
+  'lib/jobs/runners/self-invoice-payment.ts': 'job: wysyłka faktury za abonament; firma z danych płatności',
+  'lib/ksef/duplicate-decision-rpc.ts': 'decyzja o duplikacie istniejącego dokumentu wskazanego id (RPC decide_ksef_duplicate*); firmę podaje wołający — decideKsefDuplicateAction albo operator',
+  'lib/invoices/ksef-requeue-event.ts': 'definicja zdarzenia ponowienia wysyłki; firma z wiersza faktury',
+  'lib/jobs/runners/ksef-lifecycle-reconcile.ts': 'job: domykanie cyklu wysyłki; firma z wiersza faktury',
+  'app/admin/ksef/actions.ts': 'operator w /admin: ponowienie wysyłki i decyzja o duplikacie istniejącego dokumentu; firma z wiersza faktury',
+  'lib/jobs/runners/bulk-import.ts': 'job: import z pliku (silnik importu); firma z danych joba',
+  'lib/jobs/runners/ksef-history-sync.ts': 'job: pobranie historii z KSeF (silnik importu); firma z danych joba',
 };
 
+const MIGRATIONS = join(process.cwd(), 'supabase', 'migrations');
+
 /**
- * Pliki `.ts`/`.tsx` w `app/`, `components/`, `lib/` z zapisem dokumentu:
- * `.from('invoices')` i `.insert(` w jednym pliku albo `enqueueKsefSubmitAfterDraft(`.
- * Reguła celowo szeroka (nie wymaga jednego łańcucha): zapis przez zmienną
- * pośrednią też się liczy, a nadmiar kosztuje tylko wiersz na liście wyjątków.
+ * Funkcje SQL, które wstawiają wiersz do `invoices` — wprost albo przez inną
+ * taką funkcję — wg ostatniej definicji w migracjach. Wywołanie `.rpc('<nazwa>'`
+ * to zapis dokumentu tak samo jak `.from('invoices').insert(`, więc nowa
+ * funkcja tworząca faktury trafia do skanu bez ręcznej listy.
  */
+function invoiceInsertingRpcs(): Set<string> {
+  const bodies = new Map<string, string>();
+  for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort()) {
+    const sql = readFileSync(join(MIGRATIONS, file), 'utf8');
+    for (const m of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?(\w+)\s*\(/gi)) {
+      const rest = sql.slice(m.index!);
+      const open = /\bAS\s+(\$\w*\$)/i.exec(rest);
+      if (!open) continue;
+      const start = open.index + open[0].length;
+      const end = rest.indexOf(open[1]!, start);
+      if (end > start) bodies.set(m[1]!.toLowerCase(), rest.slice(start, end));
+    }
+  }
+  const inserting = new Set(
+    [...bodies].filter(([, body]) => /\bINSERT\s+INTO\s+(?:public\.)?invoices\b/i.test(body)).map(([name]) => name),
+  );
+  // Domknięcie: funkcja wołająca funkcję, która wstawia fakturę, też ją wstawia.
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [name, body] of bodies) {
+      if (!inserting.has(name) && [...inserting].some((callee) => new RegExp(`\\b${callee}\\s*\\(`, 'i').test(body))) {
+        inserting.add(name);
+        grew = true;
+      }
+    }
+  }
+  return inserting;
+}
+
+const INVOICE_RPCS = invoiceInsertingRpcs();
+
+/**
+ * Zapis dokumentu albo zlecenie wysyłki w kodzie aplikacji:
+ * - `.from('invoices')` i `.insert(`/`.upsert(` w jednym pliku — celowo szeroko
+ *   (nie wymaga jednego łańcucha): zapis przez zmienną pośrednią też się liczy,
+ *   a nadmiar kosztuje tylko wiersz na liście wyjątków;
+ * - `.rpc('<funkcja wstawiająca faktury>'` (`INVOICE_RPCS`);
+ * - zlecenie wysyłki: `enqueueKsefSubmitAfterDraft(`, `buildKsefRequeueEvent(`,
+ *   `invoiceSubmitRequested.create(`;
+ * - wywołanie silnika importu: `processImportedInvoices(`, `processImportedInvoicesDetailed(`.
+ */
+function writesDocument(source: string): boolean {
+  const touchesInvoices = /\.from\(\s*['"]invoices['"]\s*\)/.test(source) && /\.(?:insert|upsert)\(/.test(source);
+  const callsInvoiceRpc = [...source.matchAll(/\.rpc\(\s*['"](\w+)['"]/g)]
+    .some((m) => INVOICE_RPCS.has(m[1]!.toLowerCase()));
+  const queuesSend = /\b(?:enqueueKsefSubmitAfterDraft|buildKsefRequeueEvent)\(|\binvoiceSubmitRequested\.create\(/.test(source);
+  const runsImport = /\bprocessImportedInvoices(?:Detailed)?\(/.test(source);
+  return touchesInvoices || callsInvoiceRpc || queuesSend || runsImport;
+}
+
+/** Pliki `.ts`/`.tsx` w `app/`, `components/`, `lib/`, które `writesDocument`. */
 function documentWriters(): string[] {
   return ['app', 'components', 'lib'].flatMap((root) =>
     (readdirSync(join(process.cwd(), root), { recursive: true }) as string[])
       .map((rel) => `${root}/${rel.split('\\').join('/')}`)
       .filter((file) => /\.tsx?$/.test(file))
-      .filter((file) => {
-        const source = readFileSync(join(process.cwd(), file), 'utf8');
-        const insertsNextToInvoices = /\.from\(\s*['"]invoices['"]\s*\)/.test(source) && /\.insert\(/.test(source);
-        return insertsNextToInvoices || /\benqueueKsefSubmitAfterDraft\(/.test(source);
-      }),
+      .filter((file) => writesDocument(readFileSync(join(process.cwd(), file), 'utf8'))),
   ).sort();
 }
 
@@ -178,6 +237,14 @@ describe('UX-01 strażnik: akcje wystawiania sprawdzają firmę formularza', () 
 
     it('skan widzi pliki akcji wystawiania', () => {
       expect(ISSUING_FILES.filter((f) => !writers.includes(f))).toEqual([]);
+    });
+
+    it('skan migracji rozpoznaje funkcje SQL tworzące faktury (wprost i przez rdzeń)', () => {
+      // Znane dziś: faktura za abonament (00152) i decyzja o duplikacie (00156).
+      // Pusty wynik albo brak któregoś = zepsuty odczyt migracji, nie „brak zapisów”.
+      for (const name of ['create_billing_vat_invoice', 'ksef_duplicate_decide_core', 'decide_ksef_duplicate', 'decide_ksef_duplicate_original']) {
+        expect(INVOICE_RPCS, name).toContain(name);
+      }
     });
 
     it('każdy plik z zapisem dokumentu jest sklasyfikowany (wystawianie albo wyjątek z powodem)', () => {

@@ -50,12 +50,14 @@ export interface AuthContext {
  * UX-01 (WZR-02): formularz wyrenderowano dla innej firmy niż aktywna teraz —
  * np. przełącznik firm w drugiej karcie zmienił ciasteczko. Jeden tekst dla
  * wszystkich akcji wystawiania: która firma jest aktywna (gdy nazwa się
- * odczyta) i obie drogi wyjścia.
+ * odczyta) i obie drogi wyjścia. Przełącznik w karcie z odmową pokazuje
+ * jeszcze starą firmę, więc „z powrotem” działa tylko tam, gdzie ją zmieniono.
  */
 export function tenantChangedMessage(activeName: string | null): string {
   const now = activeName ? ` (teraz: ${activeName})` : '';
   return `Aktywna firma zmieniła się od otwarcia formularza${now}. `
-    + 'Przełącz firmę z powrotem albo odśwież stronę i wypełnij formularz dla aktywnej firmy.';
+    + 'Przełącz firmę z powrotem w karcie, w której ją zmieniono, i zapisz ponownie '
+    + '— albo odśwież tę stronę i wypełnij formularz dla aktywnej firmy.';
 }
 
 /**
