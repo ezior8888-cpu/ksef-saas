@@ -24,7 +24,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { startFileImportAction, type FileImportSource } from '@/app/actions/import-danych';
-import { ACTION_FILE_LIMIT_BYTES, ACTION_FILE_LIMIT_LABEL, formatUploadSize } from '@/lib/upload-limit';
+import {
+  ACTION_FILE_LIMIT_BYTES,
+  ACTION_FILE_LIMIT_LABEL,
+  formatUploadSize,
+  uploadRejectedMessage,
+} from '@/lib/upload-limit';
 
 interface Props {
   source: FileImportSource;
@@ -75,10 +80,12 @@ export function FileImportDialog({ source, tenantId, onClose }: Props) {
         } else {
           toast.error(result.error);
         }
-      } catch {
-        // Odrzucona obietnica akcji (413 od Next, sieć, restart serwera) niesie
-        // angielski tekst Next albo zredagowany błąd — klient dostaje polski.
-        toast.error('Nie udało się wysłać pliku. Sprawdź połączenie i spróbuj ponownie.');
+      } catch (e) {
+        // Odrzucona obietnica akcji (413 od Next, sieć, restart serwera, strona
+        // sprzed wdrożenia) niesie angielski tekst Next albo zredagowany błąd —
+        // klient dostaje polski.
+        console.error('[import] wgranie pliku odrzucone', e);
+        toast.error(uploadRejectedMessage(e));
       }
     });
   };
@@ -112,7 +119,7 @@ export function FileImportDialog({ source, tenantId, onClose }: Props) {
               <>
                 <p className="truncate px-2 text-sm font-medium">{file.name}</p>
                 <p className="mt-1 font-mono text-xs text-muted-foreground">
-                  {(file.size / 1024).toFixed(1)} KB
+                  {formatUploadSize(file.size)}
                 </p>
               </>
             ) : (

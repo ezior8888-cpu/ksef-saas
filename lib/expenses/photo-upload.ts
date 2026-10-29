@@ -1,4 +1,9 @@
-import { ACTION_FILE_LIMIT_BYTES, ACTION_FILE_LIMIT_LABEL, formatUploadSize } from '@/lib/upload-limit';
+import {
+  ACTION_FILE_LIMIT_BYTES,
+  ACTION_FILE_LIMIT_LABEL,
+  formatUploadSize,
+  uploadRejectedMessage,
+} from '@/lib/upload-limit';
 
 /**
  * Wysyłka zdjęcia albo PDF-u kosztu z przeglądarki (plan skalowania,
@@ -8,15 +13,22 @@ import { ACTION_FILE_LIMIT_BYTES, ACTION_FILE_LIMIT_LABEL, formatUploadSize } fr
  * 1 MB (`lib/upload-limit.ts`) — typowe zdjęcie paragonu nie dochodziło do
  * serwera. Do odczytu wystarcza dłuższy bok 2000 px: OCR (Anthropic) i tak
  * skaluje obraz do ok. 1568 px. Mniejszy plik to też mniej miejsca
- * w magazynie plików i kopiach oraz mniej tokenów OCR.
+ * w magazynie plików i kopiach.
  *
  * ZASADY ZMNIEJSZANIA:
  * - PDF bez zmian.
- * - Obraz: dekodowanie z orientacją z EXIF (`createImageBitmap`, zapas
- *   `<img>`), dłuższy bok ≤ 2000 px, JPEG 0,8, a gdy dalej ponad limit — 0,6.
- *   Pod przezroczystością PNG białe tło. Animowany GIF daje pierwszą klatkę.
- * - Dekodowanie zawiodło (np. HEIC poza Safari) albo wynik nie jest
- *   mniejszy → zostaje oryginał. Typ i tak sprawdza serwer, z zawartości.
+ * - JPEG, PNG, WEBP i GIF, które mieszczą się w limicie, idą bez ponownego
+ *   kodowania (nie tracą jakości, długi zrzut ekranu zostaje czytelny).
+ * - Reszta obrazów: dekodowanie z orientacją z EXIF (`createImageBitmap`,
+ *   zapas `<img>`), dłuższy bok ≤ 2000 px, JPEG 0,8, a gdy dalej ponad
+ *   limit — 0,6. Wyjątek: obraz węższy niż 1:2 (zrzut przewijany) zachowuje
+ *   krótszy bok ≥ 1000 px przy dłuższym ≤ 4096 px. Pod przezroczystością
+ *   PNG białe tło. Animowany GIF daje pierwszą klatkę.
+ * - Oryginał zostaje, gdy dekodowanie zawiedzie (np. HEIC poza Safari),
+ *   gdy przeglądarka podmienia piksele płótna (ochrona przed
+ *   fingerprintingiem w Tor Browser, LibreWolf) albo gdy JPEG nie jest
+ *   mniejszy od oryginału w formacie, który serwer przyjmie. HEIC czy AVIF
+ *   odkodowany przez przeglądarkę idzie zawsze jako JPEG.
  * - JPEG z płótna nie ma metadanych EXIF (położenia GPS, daty zdjęcia).
  *
  * Tylko API przeglądarki — moduł dla komponentów klienckich.
@@ -25,14 +37,29 @@ import { ACTION_FILE_LIMIT_BYTES, ACTION_FILE_LIMIT_LABEL, formatUploadSize } fr
 /** Dłuższy bok zmniejszonego zdjęcia. */
 export const PHOTO_MAX_EDGE_PX = 2000;
 
+/** Krótszy bok, poniżej którego nie zwężamy długich zrzutów… */
+const TALL_MIN_SHORT_EDGE_PX = 1000;
+/** …o ile dłuższy bok nie przekroczy tej wartości. */
+const TALL_MAX_EDGE_PX = 4096;
+
 /** Jakość JPEG; druga tylko wtedy, gdy pierwsza nie mieści się w limicie. */
 const JPEG_QUALITIES = [0.8, 0.6] as const;
 
+/** Formaty, które serwer przyjmuje (`detectExpensePhotoType`), poza PDF. */
+const SERVER_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+/** Wzór, który płótno musi oddać bez podmiany: czerwony, zielony, niebieski, czarny. */
+const PROBE: ReadonlyArray<readonly [string, readonly [number, number, number]]> = [
+  ['#ff0000', [255, 0, 0]],
+  ['#00ff00', [0, 255, 0]],
+  ['#0000ff', [0, 0, 255]],
+  ['#000000', [0, 0, 0]],
+];
+/** Drobny szum, który dokładają Brave, Safari i Firefox w trybie ochrony, przechodzi. */
+const PROBE_TOLERANCE = 24;
+
 /** Wynik akcji wgrania — kształt zwracany przez `uploadExpensePhotoAction`. */
 export type ExpenseUploadResult = { success: true; ocrJobId: string } | { success: false; error: string };
-
-/** Odrzucona obietnica akcji: 413 od Next, zerwane połączenie, restart serwera. */
-export const EXPENSE_UPLOAD_FAILED = 'Nie udało się wysłać pliku. Sprawdź połączenie i spróbuj ponownie.';
 
 type Decoded = { source: CanvasImageSource; width: number; height: number; release: () => void };
 
@@ -43,6 +70,37 @@ function isPdf(file: File): boolean {
 function jpgName(name: string): string {
   const base = name.replace(/\.[^./\\]*$/, '');
   return `${base || 'paragon'}.jpg`;
+}
+
+/** Wymiary po zmniejszeniu (bez powiększania). */
+export function shrunkSize(width: number, height: number): { width: number; height: number } {
+  const long = Math.max(width, height);
+  const short = Math.min(width, height);
+  let scale = PHOTO_MAX_EDGE_PX / long;
+  if (short * scale < TALL_MIN_SHORT_EDGE_PX) {
+    scale = Math.max(scale, Math.min(TALL_MIN_SHORT_EDGE_PX / short, TALL_MAX_EDGE_PX / long));
+  }
+  scale = Math.min(1, scale);
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
+/**
+ * Czy przeglądarka oddaje prawdziwe piksele płótna. Firefox z pełną
+ * ochroną przed fingerprintingiem zwraca zamiast nich szum albo biel — bez
+ * tej próby do magazynu trafiłby szum zamiast paragonu.
+ */
+function canvasReadable(): boolean {
+  const canvas = document.createElement('canvas');
+  canvas.width = PROBE.length;
+  canvas.height = 1;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return false;
+  PROBE.forEach(([color], x) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, 0, 1, 1);
+  });
+  const data = ctx.getImageData(0, 0, PROBE.length, 1).data;
+  return PROBE.every(([, rgb], x) => rgb.every((value, c) => Math.abs((data[x * 4 + c] ?? -999) - value) <= PROBE_TOLERANCE));
 }
 
 async function decode(file: File): Promise<Decoded | null> {
@@ -75,15 +133,14 @@ async function decode(file: File): Promise<Decoded | null> {
   }
 }
 
-/** Obraz na płótnie z białym tłem, dłuższy bok ≤ `PHOTO_MAX_EDGE_PX`. */
+/** Obraz na płótnie z białym tłem, w wymiarach z `shrunkSize`. */
 function drawScaled(image: Decoded): HTMLCanvasElement | null {
-  const { width, height } = image;
-  if (!width || !height) return null;
+  if (!image.width || !image.height) return null;
 
-  const scale = Math.min(1, PHOTO_MAX_EDGE_PX / Math.max(width, height));
+  const size = shrunkSize(image.width, image.height);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(width * scale));
-  canvas.height = Math.max(1, Math.round(height * scale));
+  canvas.width = size.width;
+  canvas.height = size.height;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
@@ -99,13 +156,16 @@ function toJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null
 }
 
 /**
- * Zmniejszone zdjęcie jako JPEG albo — dla PDF-u, nieudanego dekodowania
- * i wyniku, który nie jest mniejszy — ten sam plik.
+ * Zmniejszone zdjęcie jako JPEG albo — według zasad z nagłówka — ten sam
+ * plik.
  */
 export async function shrinkReceiptPhoto(file: File): Promise<File> {
   if (isPdf(file)) return file;
+  const accepted = SERVER_IMAGE_TYPES.has(file.type);
+  if (accepted && file.size <= ACTION_FILE_LIMIT_BYTES) return file;
 
   try {
+    if (!canvasReadable()) return file;
     const image = await decode(file);
     if (!image) return file;
 
@@ -124,7 +184,7 @@ export async function shrinkReceiptPhoto(file: File): Promise<File> {
         blob = await toJpeg(canvas, quality);
         if (!blob || blob.size <= ACTION_FILE_LIMIT_BYTES) break;
       }
-      if (!blob || blob.size >= file.size) return file;
+      if (!blob || (accepted && blob.size >= file.size)) return file;
       return new File([blob], jpgName(file.name), { type: 'image/jpeg', lastModified: file.lastModified });
     } finally {
       // Safari na iOS zwalnia pamięć płótna dopiero po wyzerowaniu wymiarów.
@@ -141,9 +201,12 @@ export function expenseFileTooLargeMessage(file: File): string | null {
   if (file.size <= ACTION_FILE_LIMIT_BYTES) return null;
   const size = formatUploadSize(file.size);
   if (isPdf(file)) {
-    return `PDF ma ${size}, a można wgrać najwyżej ${ACTION_FILE_LIMIT_LABEL}. Zmniejsz go albo wgraj zdjęcie dokumentu — zdjęcia zmniejszamy sami.`;
+    return `PDF ma ${size}, a można wgrać najwyżej ${ACTION_FILE_LIMIT_LABEL}. Zapisz go w niższej rozdzielczości albo, jeśli ma jedną stronę, wgraj jego zdjęcie — zdjęcia zmniejszamy sami.`;
   }
-  return `Nie udało się zmniejszyć zdjęcia (${size}), a można wgrać najwyżej ${ACTION_FILE_LIMIT_LABEL}. Zapisz je jako JPG i spróbuj ponownie.`;
+  if (!SERVER_IMAGE_TYPES.has(file.type)) {
+    return `Nie udało się zmniejszyć zdjęcia (${size}), a można wgrać najwyżej ${ACTION_FILE_LIMIT_LABEL}. Zapisz je jako JPG i spróbuj ponownie.`;
+  }
+  return `Zdjęcie ma ${size}, a można wgrać najwyżej ${ACTION_FILE_LIMIT_LABEL}, a w tej przeglądarce nie udało się go zmniejszyć. Spróbuj w innej przeglądarce albo zrób zdjęcie w niższej rozdzielczości.`;
 }
 
 /**
@@ -161,5 +224,8 @@ export async function sendExpenseFile(
 
   const form = new FormData();
   form.append('photo', prepared);
-  return upload(form).catch((): ExpenseUploadResult => ({ success: false, error: EXPENSE_UPLOAD_FAILED }));
+  return upload(form).catch((error: unknown): ExpenseUploadResult => {
+    console.error('[koszty] wgranie pliku odrzucone', error);
+    return { success: false, error: uploadRejectedMessage(error) };
+  });
 }

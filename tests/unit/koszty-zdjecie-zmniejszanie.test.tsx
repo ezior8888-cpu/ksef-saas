@@ -1,20 +1,24 @@
 // @vitest-environment jsdom
 import { act, Component, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { UnrecognizedActionError } from 'next/dist/client/components/unrecognized-action-error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Sesja 4 planu skalowania (EXT-09, HOR-V1, LIM-08, CPU-06, DBC-02, BCK-09).
- * Server Action przyjmuje najwyżej 1 MB (domyślny limit Next, `next.config.ts`
+ * Server Action przyjmuje najwyżej 1 MiB (domyślny limit Next, `next.config.ts`
  * go nie zmienia), a zdjęcie z aparatu telefonu ma 2–5 MB. Dlatego przycisk
  * „Dodaj wydatek” zmniejsza zdjęcie w przeglądarce (dłuższy bok ≤ 2000 px,
- * JPEG 0,8) przed wysłaniem. PDF idzie bez zmian. Plik, który dalej nie
- * mieści się w limicie, dostaje komunikat i nie trafia do akcji. Odrzucona
- * obietnica akcji (413, sieć) kończy się toastem, nie granicą błędu strony.
+ * JPEG 0,8) przed wysłaniem. PDF idzie bez zmian, a JPEG/PNG/WEBP/GIF
+ * w limicie bez ponownego kodowania. Plik, który dalej nie mieści się
+ * w limicie, dostaje komunikat i nie trafia do akcji. Odrzucona obietnica
+ * akcji (413, sieć, strona sprzed wdrożenia) kończy się toastem, nie granicą
+ * błędu strony.
  *
  * jsdom nie ma płótna ani dekodera obrazów, więc `createImageBitmap`,
- * `getContext` i `toBlob` to atrapy. Atrapa `toBlob` liczy rozmiar JPEG
- * z liczby pikseli (0,15 B/px przy jakości 0,8, rośnie z jakością). Prawdziwy
+ * `getContext` i `toBlob` to atrapy. Atrapa kontekstu pamięta `fillStyle`
+ * i oddaje piksele z `fillRect` 1×1 (sonda płótna). Atrapa `toBlob` liczy
+ * rozmiar JPEG z liczby pikseli (0,15 B/px przy jakości 0,8). Prawdziwy
  * pomiar na zdjęciu jest w opisie PR, tu sprawdzamy drogę pliku.
  */
 
@@ -25,7 +29,10 @@ const mocks = vi.hoisted(() => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => mocks.router }));
+vi.mock('next/navigation', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next/navigation')>()),
+  useRouter: () => mocks.router,
+}));
 vi.mock('sonner', () => ({ toast: mocks.toast }));
 vi.mock('@/app/actions/expenses', () => ({
   getOcrJobStatusAction: mocks.getStatus,
@@ -37,33 +44,63 @@ import { CaptureButton } from '@/components/expenses/capture-button';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
-/** Domyślny limit ciała Server Action w Next 16 (`action-handler.js`). */
-const ACTION_LIMIT = 1024 * 1024;
+/** Limit pliku w przeglądarce (1 MB dziesiętnie, `lib/upload-limit.ts`). */
+const FILE_LIMIT = 1_000_000;
 const MB = 1024 * 1024;
 
 /** Atrapa kodera JPEG: rozmiar z pikseli płótna i jakości. */
 let bytesPerPixel = (quality: number) => 0.15 * (quality / 0.8);
+/** Podmiana odczytu pikseli (Firefox z ochroną przed fingerprintingiem). */
+let readback: ((width: number, height: number) => Uint8ClampedArray) | null = null;
 
 type Drawn = { canvas: HTMLCanvasElement; calls: string[] };
 let drawn: Drawn[] = [];
 let toBlobCalls: Array<{ type: string | undefined; quality: number | undefined; width: number; height: number }> = [];
 let bitmap: { width: number; height: number; close: ReturnType<typeof vi.fn> };
 
+function hexToRgb(color: string): [number, number, number] {
+  const hex = /^#([0-9a-f]{6})$/i.exec(color)?.[1] ?? 'ffffff';
+  return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+}
+
 function fakeContext(canvas: HTMLCanvasElement) {
   const entry: Drawn = { canvas, calls: [] };
   drawn.push(entry);
+  let fillStyle = '#000000';
+  const pixels = new Map<string, [number, number, number]>();
   return {
+    get fillStyle() {
+      return fillStyle;
+    },
     set fillStyle(value: string) {
-      entry.calls.push(`fillStyle=${value}`);
+      fillStyle = value;
     },
     set imageSmoothingQuality(value: string) {
       entry.calls.push(`smoothing=${value}`);
     },
-    imageSmoothingEnabled: true,
-    fillRect: (x: number, y: number, w: number, h: number) => entry.calls.push(`fillRect ${x},${y},${w},${h}`),
+    fillRect: (x: number, y: number, w: number, h: number) => {
+      entry.calls.push(`fillRect ${fillStyle} ${x},${y},${w},${h}`);
+      if (w === 1 && h === 1) pixels.set(`${x},${y}`, hexToRgb(fillStyle));
+    },
+    getImageData: (x: number, y: number, w: number, h: number) => {
+      if (readback) return { data: readback(w, h) };
+      const data = new Uint8ClampedArray(w * h * 4);
+      for (let row = 0; row < h; row += 1) {
+        for (let col = 0; col < w; col += 1) {
+          const [r, g, b] = pixels.get(`${x + col},${y + row}`) ?? [0, 0, 0];
+          data.set([r, g, b, 255], (row * w + col) * 4);
+        }
+      }
+      return { data };
+    },
     drawImage: (_img: unknown, x: number, y: number, w: number, h: number) =>
       entry.calls.push(`drawImage ${x},${y},${w},${h}`),
   };
+}
+
+/** Płótno, na którym narysowano zdjęcie (pierwsze to sonda 4×1). */
+function photoCanvas(): Drawn | undefined {
+  return drawn.find((d) => d.calls.some((call) => call.startsWith('drawImage')));
 }
 
 class Boundary extends Component<{ children: ReactNode }, { error: unknown }> {
@@ -83,14 +120,16 @@ const onUnhandled = (reason: unknown) => {
   unhandled.push(reason);
 };
 
-// jsdom nie ma `URL.createObjectURL` ani `img.decode()` — zapas `<img>`
-// dostaje je od testu, który go sprawdza, i oddaje po teście.
+// jsdom nie ma `URL.createObjectURL`, `img.decode()` ani `toBlob` — test je
+// podstawia i oddaje po sobie.
 const urlStatics = URL as unknown as Record<'createObjectURL' | 'revokeObjectURL', unknown>;
 const imgProto = HTMLImageElement.prototype as unknown as Record<'decode', unknown>;
+const canvasProto = HTMLCanvasElement.prototype as unknown as Record<'toBlob', unknown>;
 const saved = {
   createObjectURL: urlStatics.createObjectURL,
   revokeObjectURL: urlStatics.revokeObjectURL,
   decode: imgProto.decode,
+  toBlob: canvasProto.toBlob,
 };
 
 /** Zapas `<img>`: dekoduje (`ok`) albo odrzuca, z podanymi wymiarami. */
@@ -112,12 +151,14 @@ beforeEach(() => {
   vi.resetAllMocks();
   unhandled.length = 0;
   process.on('unhandledRejection', onUnhandled);
+  vi.spyOn(console, 'error').mockImplementation(() => {});
   // Wgranie się udaje, odczyt czeka — test kończy się przed odpytywaniem.
   mocks.upload.mockResolvedValue({ success: true, ocrJobId: JOB_ID });
   mocks.getStatus.mockReturnValue(new Promise(() => {}));
 
   drawn = [];
   toBlobCalls = [];
+  readback = null;
   bytesPerPixel = (quality: number) => 0.15 * (quality / 0.8);
   bitmap = { width: 4000, height: 3000, close: vi.fn() };
   vi.stubGlobal(
@@ -127,12 +168,7 @@ beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (this: HTMLCanvasElement) {
     return fakeContext(this) as unknown as CanvasRenderingContext2D;
   } as unknown as HTMLCanvasElement['getContext']);
-  HTMLCanvasElement.prototype.toBlob = function (
-    this: HTMLCanvasElement,
-    callback: BlobCallback,
-    type?: string,
-    quality?: number,
-  ) {
+  canvasProto.toBlob = function (this: HTMLCanvasElement, callback: BlobCallback, type?: string, quality?: number) {
     toBlobCalls.push({ type, quality, width: this.width, height: this.height });
     const size = Math.round(this.width * this.height * bytesPerPixel(quality ?? 0.92));
     setTimeout(() => callback(new Blob([new Uint8Array(size)], { type: type ?? 'image/png' })), 0);
@@ -149,6 +185,7 @@ afterEach(() => {
   urlStatics.createObjectURL = saved.createObjectURL;
   urlStatics.revokeObjectURL = saved.revokeObjectURL;
   imgProto.decode = saved.decode;
+  canvasProto.toBlob = saved.toBlob;
   process.off('unhandledRejection', onUnhandled);
 });
 
@@ -166,7 +203,7 @@ async function render() {
   return host;
 }
 
-/** Wybiera plik w polu galerii (zdjęcie lub PDF) i czeka na koniec wgrywania. */
+/** Wybiera plik w polu aparatu albo galerii i czeka na koniec wgrywania. */
 async function choose(file: File, field: 'camera' | 'gallery' = 'gallery') {
   const el = host ?? (await render());
   const inputs = el.querySelectorAll<HTMLInputElement>('input[type="file"]');
@@ -200,21 +237,25 @@ function boundaryShown() {
   return host!.querySelector('[data-granica]') !== null;
 }
 
+function onlyToast(): string {
+  expect(mocks.toast.error).toHaveBeenCalledOnce();
+  return String(mocks.toast.error.mock.calls[0]![0]);
+}
+
 describe('CaptureButton — zdjęcie zmniejszane przed wysłaniem (sesja 4)', () => {
-  it('JPEG 4000×3000, 4 MB → do akcji trafia JPEG 2000×1500 poniżej 1 MB', async () => {
+  it('JPEG 4000×3000, 4 MB → do akcji trafia JPEG 2000×1500 poniżej limitu', async () => {
     const original = photo(4 * MB);
     await choose(original, 'camera');
 
     expect(globalThis.createImageBitmap).toHaveBeenCalledWith(original, { imageOrientation: 'from-image' });
     expect(toBlobCalls).toEqual([{ type: 'image/jpeg', quality: 0.8, width: 2000, height: 1500 }]);
-    expect(drawn).toHaveLength(1);
-    expect(drawn[0]!.calls).toContain('drawImage 0,0,2000,1500');
+    expect(photoCanvas()!.calls).toContain('drawImage 0,0,2000,1500');
     expect(bitmap.close).toHaveBeenCalled();
 
     const sent = sentFile();
     expect(sent.type).toBe('image/jpeg');
     expect(sent.name).toBe('IMG_2041.jpg');
-    expect(sent.size).toBeLessThan(ACTION_LIMIT);
+    expect(sent.size).toBeLessThan(FILE_LIMIT);
     expect(sent.size).toBeLessThan(original.size / 4);
     expect(mocks.toast.error).not.toHaveBeenCalled();
   });
@@ -224,22 +265,46 @@ describe('CaptureButton — zdjęcie zmniejszane przed wysłaniem (sesja 4)', ()
     await choose(photo(3 * MB));
 
     expect(toBlobCalls[0]).toMatchObject({ width: 1500, height: 2000 });
-    expect(sentFile().size).toBeLessThan(ACTION_LIMIT);
+    expect(sentFile().size).toBeLessThan(FILE_LIMIT);
   });
 
   it('PNG z przezroczystością → białe tło pod obrazem, wynik JPEG', async () => {
     bitmap = { width: 2400, height: 1200, close: vi.fn() };
     await choose(photo(2 * MB, 'zrzut ekranu.png', 'image/png'));
 
-    const calls = drawn[0]!.calls;
-    const fill = calls.indexOf('fillRect 0,0,2000,1000');
-    const draw = calls.indexOf('drawImage 0,0,2000,1000');
-    expect(calls).toContain('fillStyle=#ffffff');
+    const calls = photoCanvas()!.calls;
+    const fill = calls.indexOf('fillRect #ffffff 0,0,2000,1000');
     expect(fill).toBeGreaterThanOrEqual(0);
-    expect(draw).toBeGreaterThan(fill);
+    expect(calls.indexOf('drawImage 0,0,2000,1000')).toBeGreaterThan(fill);
     const sent = sentFile();
     expect(sent.type).toBe('image/jpeg');
     expect(sent.name).toBe('zrzut ekranu.jpg');
+  });
+
+  it('obraz mniejszy niż 2000 px nie jest powiększany', async () => {
+    bitmap = { width: 1200, height: 900, close: vi.fn() };
+    await choose(photo(1.5 * MB, 'skan.png', 'image/png'));
+
+    expect(toBlobCalls[0]).toMatchObject({ width: 1200, height: 900 });
+    expect(sentFile().type).toBe('image/jpeg');
+  });
+
+  it('zrzut przewijany 1080×10000 → krótszy bok nie spada do 216 px (442×4096)', async () => {
+    bitmap = { width: 1080, height: 10000, close: vi.fn() };
+    bytesPerPixel = () => 0.12;
+    await choose(photo(3 * MB, 'e-paragon.png', 'image/png'));
+
+    expect(toBlobCalls[0]).toMatchObject({ width: 442, height: 4096 });
+    expect(sentFile().size).toBeLessThan(FILE_LIMIT);
+  });
+
+  it('JPEG mieszczący się w limicie idzie bez ponownego kodowania', async () => {
+    const small = photo(400 * 1000, 'paragon.jpg');
+    await choose(small);
+
+    expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
+    expect(toBlobCalls).toEqual([]);
+    expect(sentFile()).toBe(small);
   });
 
   it('PDF idzie bez zmian — bez dekodowania i bez płótna', async () => {
@@ -249,6 +314,18 @@ describe('CaptureButton — zdjęcie zmniejszane przed wysłaniem (sesja 4)', ()
     expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
     expect(toBlobCalls).toEqual([]);
     expect(sentFile()).toBe(pdf);
+  });
+
+  it('HEIC odkodowany przez przeglądarkę idzie jako JPEG, nawet gdy JPEG jest większy', async () => {
+    // Serwer HEIC odrzuca, więc „mniejszy oryginał” tu nie wygrywa.
+    bitmap = { width: 1800, height: 1200, close: vi.fn() };
+    const heic = photo(250 * 1000, 'IMG_0003.HEIC', 'image/heic');
+    await choose(heic);
+
+    const sent = sentFile();
+    expect(sent.type).toBe('image/jpeg');
+    expect(sent.name).toBe('IMG_0003.jpg');
+    expect(sent.size).toBeGreaterThan(heic.size);
   });
 
   it('błąd dekodowania (np. HEIC w Chrome) → wysyłamy oryginał, jeśli mieści się w limicie', async () => {
@@ -270,49 +347,77 @@ describe('CaptureButton — zdjęcie zmniejszane przed wysłaniem (sesja 4)', ()
     await choose(photo(4 * MB));
 
     expect(toBlobCalls[0]).toMatchObject({ type: 'image/jpeg', width: 2000, height: 1500 });
-    expect(sentFile().size).toBeLessThan(ACTION_LIMIT);
+    expect(sentFile().size).toBeLessThan(FILE_LIMIT);
     expect(revoke).toHaveBeenCalledWith('blob:zdjecie');
   });
 
-  it('wynik nie jest mniejszy od oryginału → zostaje oryginał', async () => {
-    bitmap = { width: 800, height: 600, close: vi.fn() };
-    const small = photo(40 * 1024, 'mały.jpg');
-    await choose(small);
+  it('przeglądarka podmienia piksele płótna (Firefox z ochroną przed fingerprintingiem) → bez płótna, komunikat', async () => {
+    // Firefox oddaje wtedy losowy wzór albo biel zamiast narysowanych pikseli.
+    readback = (w, h) => new Uint8ClampedArray(w * h * 4).fill(255);
+    await choose(photo(3 * MB));
 
-    expect(toBlobCalls).toHaveLength(1);
-    expect(sentFile()).toBe(small);
+    expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
+    expect(toBlobCalls).toEqual([]);
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(onlyToast()).toContain('nie udało się go zmniejszyć');
   });
 
-  it('JPEG 0,8 dalej ponad limit → druga próba z jakością 0,6', async () => {
-    // Zdjęcie pełne szczegółów: 0,8 daje ok. 1,1 MB, 0,6 ok. 0,8 MB.
-    bytesPerPixel = (quality: number) => (quality >= 0.8 ? 0.38 : 0.27);
+  it('drobny szum odczytu (Brave, Safari) nie wyłącza zmniejszania', async () => {
+    readback = (w, h) => {
+      const data = new Uint8ClampedArray(w * h * 4);
+      [[255, 0, 0], [0, 255, 0], [0, 0, 255], [0, 0, 0]].forEach(([r, g, b], x) => data.set([r! - 3, g! + 2, b! + 1, 255], x * 4));
+      return data;
+    };
+    await choose(photo(4 * MB));
+
+    expect(toBlobCalls).toHaveLength(1);
+    expect(sentFile().size).toBeLessThan(FILE_LIMIT);
+  });
+
+  it('JPEG 0,8 tuż ponad limitem (1,02 MB) → druga próba z jakością 0,6', async () => {
+    bytesPerPixel = (quality: number) => (quality >= 0.8 ? 0.34 : 0.2);
     await choose(photo(5 * MB));
 
     expect(toBlobCalls.map((call) => call.quality)).toEqual([0.8, 0.6]);
     const sent = sentFile();
-    expect(sent.size).toBeLessThan(ACTION_LIMIT);
+    expect(sent.size).toBeLessThan(FILE_LIMIT);
     expect(sent.type).toBe('image/jpeg');
+  });
+
+  it('JPEG większy od oryginału PNG ponad limitem → zostaje oryginał i komunikat', async () => {
+    bitmap = { width: 2000, height: 1500, close: vi.fn() };
+    bytesPerPixel = () => 0.5;
+    await choose(photo(1_100_000, 'wykres.png', 'image/png'));
+
+    expect(toBlobCalls.map((call) => call.quality)).toEqual([0.8, 0.6]);
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(onlyToast()).toContain('Zdjęcie ma 1,1 MB');
   });
 
   it('PDF 2 MB → komunikat o limicie, akcja niewołana, przycisk wolny', async () => {
     await choose(photo(2 * MB, 'skan.pdf', 'application/pdf'));
 
     expect(mocks.upload).not.toHaveBeenCalled();
-    expect(mocks.toast.error).toHaveBeenCalledOnce();
-    const message = String(mocks.toast.error.mock.calls[0]![0]);
-    expect(message).toContain('2,0 MB');
-    expect(message).toContain('1 MB');
+    const message = onlyToast();
+    expect(message).toContain('PDF ma 2,1 MB');
+    expect(message).toContain('najwyżej 1 MB');
     expect(host!.querySelector('button')!.textContent).toContain('Dodaj wydatek');
   });
 
-  it('zdjęcie, którego nie da się zmniejszyć, ponad limit → komunikat, akcja niewołana', async () => {
+  it('PDF tuż ponad limitem → rozmiar w komunikacie nie wygląda na mieszczący się', async () => {
+    await choose(photo(FILE_LIMIT + 1, 'skan.pdf', 'application/pdf'));
+
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(onlyToast()).toContain('PDF ma 1,1 MB');
+  });
+
+  it('zdjęcie, którego nie da się odkodować, ponad limit → „zapisz jako JPG”, akcja niewołana', async () => {
     vi.mocked(globalThis.createImageBitmap).mockRejectedValue(new DOMException('decode', 'InvalidStateError'));
     imgFallback({ ok: false });
     await choose(photo(3 * MB, 'IMG_0002.HEIC', 'image/heic'));
 
     expect(mocks.upload).not.toHaveBeenCalled();
-    expect(mocks.toast.error).toHaveBeenCalledOnce();
-    expect(String(mocks.toast.error.mock.calls[0]![0])).toContain('JPG');
+    expect(onlyToast()).toContain('JPG');
   });
 
   it('akcja odrzuca obietnicę (413 od Next) → toast, nie granica błędu strony', async () => {
@@ -320,11 +425,28 @@ describe('CaptureButton — zdjęcie zmniejszane przed wysłaniem (sesja 4)', ()
     await choose(photo(4 * MB));
 
     expect(boundaryShown()).toBe(false);
-    expect(mocks.toast.error).toHaveBeenCalledOnce();
-    const message = String(mocks.toast.error.mock.calls[0]![0]);
+    const message = onlyToast();
     expect(message).not.toContain('Body exceeded');
     expect(message).toMatch(/Nie udało się wysłać/);
     expect(host!.querySelector('button')!.textContent).toContain('Dodaj wydatek');
     expect(unhandled).toEqual([]);
+  });
+
+  it('strona sprzed wdrożenia (nieznana akcja) → prośba o odświeżenie strony', async () => {
+    mocks.upload.mockRejectedValue(new UnrecognizedActionError('Server Action "abc" was not found on the server.'));
+    await choose(photo(300 * 1000, 'paragon.jpg'));
+
+    expect(boundaryShown()).toBe(false);
+    expect(onlyToast()).toMatch(/Odśwież stronę/);
+  });
+
+  it('arkusz nie obiecuje już 10 MB', async () => {
+    const el = await render();
+    await act(async () => {
+      el.querySelector('button')!.click();
+    });
+    expect(document.body.textContent).toContain('Zrób zdjęcie');
+    expect(document.body.textContent).toContain('PDF do 1 MB');
+    expect(document.body.textContent).not.toContain('10 MB');
   });
 });

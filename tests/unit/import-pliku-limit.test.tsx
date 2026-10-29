@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { UnrecognizedActionError } from 'next/dist/client/components/unrecognized-action-error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Sesja 4 planu skalowania (HOR-V1, LIM-08): import CSV idzie przez Server
- * Action, która przyjmuje najwyżej 1 MB (domyślny limit Next). Okno obiecywało
+ * Action, która przyjmuje najwyżej 1 MiB (domyślny limit Next). Okno obiecywało
  * „max 10 MB”, więc plik 1–10 MB przechodził kontrolę w przeglądarce i padał
  * na serwerze angielskim komunikatem Next. Teraz okno zatrzymuje go przed
  * wysłaniem, po polsku i z radą, co zrobić. Właściwa naprawa (własny limit
@@ -28,6 +29,7 @@ let host: HTMLDivElement | null = null;
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -35,15 +37,20 @@ afterEach(() => {
   host?.remove();
   root = null;
   host = null;
+  vi.restoreAllMocks();
 });
 
-async function chooseAndStart(file: File) {
+async function open() {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
   await act(async () => {
     root!.render(<FileImportDialog source="fakturownia_csv" tenantId="org-1" onClose={() => {}} />);
   });
+}
+
+async function chooseAndStart(file: File) {
+  await open();
   const input = document.body.querySelector<HTMLInputElement>('input[type="file"]')!;
   Object.defineProperty(input, 'files', { value: [file], configurable: true });
   await act(async () => {
@@ -60,20 +67,29 @@ async function chooseAndStart(file: File) {
 
 const csv = (size: number) => new File([new Uint8Array(size)], 'faktury-2025.csv', { type: 'text/csv' });
 
+function onlyToast(): string {
+  expect(toast.error).toHaveBeenCalledOnce();
+  return String(toast.error.mock.calls[0]![0]);
+}
+
 describe('FileImportDialog — limit wgrywania pliku', () => {
   it('CSV 1,5 MB → komunikat o limicie 1 MB, akcja niewołana', async () => {
     await chooseAndStart(csv(1.5 * MB));
 
     expect(actions.startFileImportAction).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledOnce();
-    const message = String(toast.error.mock.calls[0]![0]);
-    expect(message).toContain('1,5 MB');
-    expect(message).toContain('1 MB');
+    const message = onlyToast();
+    expect(message).toContain('Plik ma 1,6 MB');
+    expect(message).toContain('najwyżej 1 MB');
+    // Wybrany plik pokazany w tych samych jednostkach co komunikat.
+    expect(document.body.textContent).toContain('1,6 MB');
   });
 
-  it('okno nie obiecuje już 10 MB', async () => {
-    await chooseAndStart(csv(10));
-    expect(document.body.textContent).not.toContain('10 MB');
+  it('podpis pola obiecuje 1 MB, nie 10 MB', async () => {
+    await open();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('Kliknij aby wybrać plik');
+    expect(text).toContain('max 1 MB');
+    expect(text).not.toContain('10 MB');
   });
 
   it('CSV 300 KB → akcja wołana', async () => {
@@ -88,9 +104,15 @@ describe('FileImportDialog — limit wgrywania pliku', () => {
     actions.startFileImportAction.mockRejectedValue(new Error('Body exceeded 1 MB limit.'));
     await chooseAndStart(csv(300 * 1024));
 
-    expect(toast.error).toHaveBeenCalledOnce();
-    const message = String(toast.error.mock.calls[0]![0]);
+    const message = onlyToast();
     expect(message).not.toContain('Body exceeded');
     expect(message).toMatch(/Nie udało się wysłać/);
+  });
+
+  it('strona sprzed wdrożenia (nieznana akcja) → prośba o odświeżenie strony', async () => {
+    actions.startFileImportAction.mockRejectedValue(new UnrecognizedActionError('Server Action "abc" was not found on the server.'));
+    await chooseAndStart(csv(300 * 1024));
+
+    expect(onlyToast()).toMatch(/Odśwież stronę/);
   });
 });
