@@ -54,9 +54,12 @@ it('nie oddaje pola error ze snapshotu', async () => {
   });
 });
 
-it('pozwala przeglądarce trzymać odpowiedź 15 s', async () => {
+it('pozwala trzymać odpowiedź 15 s tylko przeglądarce, nie wspólnym cache’om', async () => {
+  // `private`, bo alias `/api/ksef/health/` (bez przekierowania ukośnika)
+  // trafia do tej samej trasy przez pełną bramkę proxy i może nieść
+  // odświeżone ciasteczko sesji. Wspólny cache nie może tego przechować.
   const response = await get();
-  expect(response.headers.get('cache-control')).toBe('public, max-age=15');
+  expect(response.headers.get('cache-control')).toBe('private, max-age=15');
   expect(response.headers.get('set-cookie')).toBeNull();
 });
 

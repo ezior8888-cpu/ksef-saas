@@ -69,14 +69,18 @@ const STATIC_PUBLIC_EXACT = [
  * sesji to wywołanie sieciowe). Tylko trasy, które nie zależą od tego, kto
  * pyta, i nie zwracają danych firmy. Odpowiedź nie niesie `Set-Cookie`, więc
  * trasa może ją oznaczyć jako cache'owalną.
- * Dopasowanie DOKŁADNE: sąsiednie trasy (`/api/ksef/...`) zostają za bramką.
+ * `exact` — tylko `path`; `prefix` — `path` albo `path/…`. Trasy API dawaj
+ * jako `exact`: sąsiednie trasy (`/api/ksef/...`) zostają za bramką.
  */
-const NO_SESSION_EXACT = [
-  '/api/ksef/health', // baner KSeF w każdej karcie panelu (plan skalowania, sesja 1)
-] as const;
+const NO_SESSION_PATHS: readonly { path: string; match: 'exact' | 'prefix' }[] = [
+  // baner KSeF w każdej karcie panelu (plan skalowania, sesja 1)
+  { path: '/api/ksef/health', match: 'exact' },
+];
 
 export function isNoSessionPath(pathname: string): boolean {
-  return NO_SESSION_EXACT.some((p) => pathname === p);
+  return NO_SESSION_PATHS.some(({ path, match }) =>
+    pathname === path || (match === 'prefix' && pathname.startsWith(`${path}/`)),
+  );
 }
 
 export function isMarketingPath(pathname: string): boolean {
@@ -136,7 +140,7 @@ function isPhoneUserAgent(ua: string | null): boolean {
  */
 export async function updateSession(request: NextRequest) {
   // Przed `createServerClient`: bez klienta nie ma `getClaims()` ani
-  // odświeżenia ciasteczek (zob. `NO_SESSION_EXACT`).
+  // odświeżenia ciasteczek (zob. `NO_SESSION_PATHS`).
   if (isNoSessionPath(request.nextUrl.pathname)) return NextResponse.next();
 
   let supabaseResponse = NextResponse.next({ request });

@@ -145,6 +145,34 @@ it('szybkie przełączanie kart daje najwyżej jedno odpytanie na 60 s', async (
   });
 });
 
+it('krótkie wyjście z karty nie odsuwa następnego odpytania', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.99); // termin: 120 s + 29,7 s
+  mount();
+  await wait(10_000);
+  setVisibility('hidden');
+  await wait(45_000);
+  setVisibility('visible'); // 55 s od wczytania: za wcześnie na odpytanie
+  expect(fetchedAt).toEqual([]);
+
+  // Termin liczy się od ostatniego odczytu (wczytania strony), nie od powrotu.
+  await wait(95_000);
+  expect(fetchedAt).toHaveLength(1);
+});
+
+it('zawieszone żądanie nie zatrzymuje odpytywania widocznej karty', async () => {
+  const fetchMock = vi.mocked(fetch);
+  fetchMock.mockImplementationOnce((_input, init) => {
+    fetchedAt.push(Date.now());
+    // Odpowiedź nie przychodzi nigdy; kończy ją tylko przerwanie.
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    });
+  });
+  mount();
+  await wait(10 * MIN);
+  expect(fetchedAt.length).toBeGreaterThanOrEqual(4);
+});
+
 it('odmontowany baner nie zostawia zegarów ani nasłuchu', async () => {
   mount();
   act(() => root!.unmount());

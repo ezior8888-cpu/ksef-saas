@@ -49,16 +49,21 @@ export function KsefHealthBannerClient({ initial }: Props) {
 
   useEffect(() => {
     let timer: number | undefined;
+    let inFlight: AbortController | null = null;
     let stopped = false;
     // Snapshot z renderu serwera jest świeży — liczy się jak odpytanie.
     let lastPollAt = Date.now();
 
     const poll = async () => {
       lastPollAt = Date.now();
+      // Zawieszona poprzednia odpowiedź nie nadpisze nowszej.
+      inFlight?.abort();
+      const controller = new AbortController();
+      inFlight = controller;
       try {
         // Bez `no-store`: trasa pozwala trzymać odpowiedź 15 s, więc karty
         // jednej przeglądarki odpytujące blisko siebie dzielą odpowiedź.
-        const res = await fetch('/api/ksef/health');
+        const res = await fetch('/api/ksef/health', { signal: controller.signal });
         if (!res.ok) return;
         const data = (await res.json()) as KsefHealthPublic & { stale?: boolean };
         if (data.stale) return;
@@ -68,14 +73,18 @@ export function KsefHealthBannerClient({ initial }: Props) {
       }
     };
 
-    // Jeden zegar naraz; ukryta karta (albo odmontowany baner) nie dostaje nowego.
+    // Jeden zegar naraz, termin liczony od ostatniego odpytania: krótkie
+    // wyjście z karty go nie odsuwa. Ukryta karta (albo odmontowany baner)
+    // nie dostaje zegara. Zegar nie czeka na odpowiedź, więc zawieszone
+    // żądanie nie zatrzymuje odpytywania.
     const schedule = () => {
       window.clearTimeout(timer);
       if (stopped || document.visibilityState !== 'visible') return;
-      timer = window.setTimeout(async () => {
-        if (document.visibilityState === 'visible') await poll();
+      const dueAt = lastPollAt + POLL_INTERVAL_MS + Math.random() * POLL_JITTER_MS;
+      timer = window.setTimeout(() => {
+        if (document.visibilityState === 'visible') void poll();
         schedule();
-      }, POLL_INTERVAL_MS + Math.random() * POLL_JITTER_MS);
+      }, Math.max(0, dueAt - Date.now()));
     };
 
     const onVisibilityChange = () => {
@@ -93,6 +102,7 @@ export function KsefHealthBannerClient({ initial }: Props) {
     return () => {
       stopped = true;
       window.clearTimeout(timer);
+      inFlight?.abort();
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);

@@ -122,6 +122,7 @@ it.each([
   expect(await anonymous.json()).toEqual({ error: 'not_authenticated' });
 
   // Z sesją pełna bramka: getClaims + getUser(token) + getClaims(token).
+  // Sesja 8 planu skalowania ma to zmniejszyć do 1 — wtedy zmień świadomie.
   authCalls = [];
   const signedIn = await updateSession(request(path, true));
   expect(signedIn.status).toBe(200);

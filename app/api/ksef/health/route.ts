@@ -7,9 +7,12 @@
  * (`isNoSessionPath` w `lib/supabase/middleware.ts`). Stan infrastruktury MF
  * nie jest poufny; pole `error` (tekst dla operatora) nie wychodzi.
  *
- * Cache-Control: public, max-age=15 — wolno, bo proxy nie dokłada tu
- * `Set-Cookie`, więc odpowiedź jest taka sama dla każdego. Tyle samo trwa
- * pamięć w procesie (`getPublicKsefHealth`); Redis daje snapshotowi 90 s TTL.
+ * Cache-Control: private, max-age=15 — karty jednej przeglądarki dzielą
+ * odpowiedź. Tyle samo trwa pamięć w procesie (`getPublicKsefHealth`); Redis
+ * daje snapshotowi 90 s TTL. Nie `public`: proxy pomija sesję tylko dla
+ * dokładnej ścieżki, a alias `/api/ksef/health/` (next.config ma
+ * `skipTrailingSlashRedirect`) trafia tu przez pełną bramkę i może nieść
+ * odświeżone ciasteczko sesji — tego nie wolno przechować we wspólnym cache.
  */
 
 import { NextResponse } from 'next/server';
@@ -20,7 +23,7 @@ import type { KsefEnvironment } from '@/types/ksef';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const CACHE_HEADERS = { 'Cache-Control': 'public, max-age=15' };
+const CACHE_HEADERS = { 'Cache-Control': 'private, max-age=15' };
 
 function getCurrentEnv(): KsefEnvironment {
   const env = process.env.KSEF_ENV ?? 'test';
