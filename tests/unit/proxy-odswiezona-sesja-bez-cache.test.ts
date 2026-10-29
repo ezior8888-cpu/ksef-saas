@@ -233,6 +233,22 @@ describe('odświeżona sesja w proxy', () => {
     expectNotStorableBySharedCache(response);
   });
 
+  // Uszkodzone ciasteczko: biblioteka kasuje je bez wywołania GoTrue
+  // (SIGNED_OUT) — także u anonimowego gościa na stronie publicznej.
+  it('uszkodzone ciasteczko sesji na stronie publicznej: skasowanie też bez wspólnego cache', async () => {
+    const response = await updateSession(new NextRequest('https://app.example.test/pricing', {
+      headers: { cookie: `${COOKIE_NAME}=uszkodzone` },
+    }));
+
+    expect(response.headers.get('x-middleware-next')).toBe('1');
+    expect(refreshCalls).toBe(0);
+    const cookies = sessionSetCookies(response);
+    expect(cookies.length).toBeGreaterThan(0);
+    for (const cookie of cookies) expect(cookie).toContain('Max-Age=0');
+
+    expectNotStorableBySharedCache(response);
+  });
+
   // Bez odświeżenia proxy nie dokłada nagłówków — trasa publiczna dalej sama
   // decyduje o cache CDN (status 30 s), a anonimowy ruch go nie traci.
   it.each([
