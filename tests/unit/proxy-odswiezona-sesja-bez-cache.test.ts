@@ -46,8 +46,12 @@ type Fixture = {
   refresh: 'ok' | 'fails';
   /** `aal` w tokenie wydanym przy odświeżeniu. */
   aal: Aal;
-  /** `/auth/v1/user`: ten sam użytkownik, inny, albo odmowa od drugiego wywołania. */
-  authUser: 'same' | 'other' | 'fails-after-first';
+  /**
+   * `/auth/v1/user`: ten sam użytkownik, inny, od drugiego wywołania odmowa
+   * tokenu (`bad_jwt`) albo sesja usunięta w GoTrue (`session_not_found` —
+   * biblioteka kasuje wtedy ciasteczko: drugi `setAll` w tym samym żądaniu).
+   */
+  authUser: 'same' | 'other' | 'rejected-after-first' | 'gone-after-first';
   memberships: number;
 };
 
@@ -91,15 +95,17 @@ function user(id: string) {
   };
 }
 
+/** Błąd GoTrue tak, jak go czyta auth-js: `code` liczy się tylko z nagłówkiem wersji API. */
+function gotrueError(status: number, code: string, message: string): Response {
+  return Response.json({ code, message }, { status, headers: { 'x-supabase-api-version': '2024-01-01' } });
+}
+
 async function fakeFetch(input: RequestInfo | URL): Promise<Response> {
   const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
   if (url.pathname === '/auth/v1/token' && url.searchParams.get('grant_type') === 'refresh_token') {
     refreshCalls += 1;
     if (fixture.refresh === 'fails') {
-      return Response.json(
-        { code: 'refresh_token_already_used', message: 'Invalid Refresh Token: Already Used' },
-        { status: 400 },
-      );
+      return gotrueError(400, 'refresh_token_already_used', 'Invalid Refresh Token: Already Used');
     }
     return Response.json(session(Math.floor(Date.now() / 1000) + 3600, fixture.aal, 'fixture-refresh-2'));
   }
@@ -108,8 +114,11 @@ async function fakeFetch(input: RequestInfo | URL): Promise<Response> {
   }
   if (url.pathname === '/auth/v1/user') {
     userCalls += 1;
-    if (fixture.authUser === 'fails-after-first' && userCalls > 1) {
-      return Response.json({ code: 'bad_jwt', message: 'invalid JWT' }, { status: 401 });
+    if (fixture.authUser === 'rejected-after-first' && userCalls > 1) {
+      return gotrueError(403, 'bad_jwt', 'invalid JWT');
+    }
+    if (fixture.authUser === 'gone-after-first' && userCalls > 1) {
+      return gotrueError(403, 'session_not_found', 'Session from session_id claim in JWT does not exist');
     }
     return Response.json(user(fixture.authUser === 'other' ? '33333333-3333-4333-8333-333333333333' : userId));
   }
@@ -171,6 +180,13 @@ type Scenario = {
   setup?: () => void;
   status: number;
   location?: string;
+  /** Treść odmowy API — odróżnia wyjścia o tym samym statusie. */
+  error?: string;
+  /**
+   * Liczba wywołań `/auth/v1/user` tam, gdzie inne wyjście dałoby ten sam
+   * status: odmowa przy weryfikacji MFA (2) ≠ brak użytkownika po `getClaims` (1).
+   */
+  userCalls?: number;
 };
 
 const scenarios: Scenario[] = [
@@ -187,13 +203,13 @@ const scenarios: Scenario[] = [
   { name: 'telefon → /mobile', path: '/dashboard', opts: { phone: true }, status: 307, location: '/mobile' },
   { name: 'przerwa techniczna (strona)', path: '/dashboard', setup: () => { mocks.maintenance.mockResolvedValue(true); }, status: 307, location: '/przerwa-techniczna' },
   { name: 'MFA do potwierdzenia (strona)', path: '/invoices', setup: () => { fixture.aal = 'aal1'; }, status: 307, location: '/login/two-factor?redirect=%2Finvoices' },
-  { name: 'sesja odrzucona przy weryfikacji (strona)', path: '/invoices', setup: () => { fixture.authUser = 'fails-after-first'; }, status: 307, location: '/login?redirect=%2Finvoices' },
+  { name: 'sesja odrzucona przy weryfikacji (strona)', path: '/invoices', setup: () => { fixture.authUser = 'rejected-after-first'; }, status: 307, location: '/login?redirect=%2Finvoices', userCalls: 2 },
   // Odmowy.
-  { name: 'przerwa techniczna (API)', path: '/api/invoices', setup: () => { mocks.maintenance.mockResolvedValue(true); }, status: 503 },
-  { name: 'MFA do potwierdzenia (API)', path: '/api/invoices', setup: () => { fixture.aal = 'aal1'; }, status: 403 },
-  { name: 'niezgodna tożsamość (strona)', path: '/invoices', setup: () => { fixture.authUser = 'other'; }, status: 503 },
-  { name: 'niezgodna tożsamość (API)', path: '/api/invoices', setup: () => { fixture.authUser = 'other'; }, status: 503 },
-  { name: 'sesja odrzucona przy weryfikacji (API)', path: '/api/invoices', setup: () => { fixture.authUser = 'fails-after-first'; }, status: 401 },
+  { name: 'przerwa techniczna (API)', path: '/api/invoices', setup: () => { mocks.maintenance.mockResolvedValue(true); }, status: 503, error: 'maintenance' },
+  { name: 'MFA do potwierdzenia (API)', path: '/api/invoices', setup: () => { fixture.aal = 'aal1'; }, status: 403, error: 'mfa_required' },
+  { name: 'niezgodna tożsamość (strona)', path: '/invoices', setup: () => { fixture.authUser = 'other'; }, status: 503, userCalls: 3 },
+  { name: 'niezgodna tożsamość (API)', path: '/api/invoices', setup: () => { fixture.authUser = 'other'; }, status: 503, error: 'session_verification_failed', userCalls: 3 },
+  { name: 'sesja odrzucona przy weryfikacji (API)', path: '/api/invoices', setup: () => { fixture.authUser = 'rejected-after-first'; }, status: 401, error: 'not_authenticated', userCalls: 2 },
 ];
 
 describe('odświeżona sesja w proxy', () => {
@@ -205,10 +221,30 @@ describe('odświeżona sesja w proxy', () => {
     expect(response.status).toBe(s.status);
     if (s.location) expect(response.headers.get('location')).toBe('https://app.example.test' + s.location);
     if (s.status === 200) expect(response.headers.get('x-middleware-next')).toBe('1');
+    if (s.error) expect(await response.json()).toEqual({ error: s.error });
+    if (s.userCalls) expect(userCalls).toBe(s.userCalls);
     expect(refreshCalls).toBe(1);
     const cookies = sessionSetCookies(response);
     expect(cookies).toHaveLength(1);
     expect(cookies[0]).not.toContain('Max-Age=0');
+
+    expectNotStorableBySharedCache(response);
+  });
+
+  // Odświeżenie, a zaraz potem GoTrue mówi, że sesji już nie ma: biblioteka
+  // woła `setAll` drugi raz w tym samym żądaniu, tym razem z kasowaniem.
+  // Wygrywa ostatni zapis — ciasteczka i nagłówki.
+  it('odświeżenie, potem sesja usunięta w GoTrue: dwa zapisy w jednym żądaniu, oba bez wspólnego cache', async () => {
+    fixture.authUser = 'gone-after-first';
+    const response = await updateSession(request('/invoices'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('https://app.example.test/login?redirect=%2Finvoices');
+    expect(refreshCalls).toBe(1);
+    expect(userCalls).toBe(2);
+    const cookies = sessionSetCookies(response);
+    expect(cookies).toHaveLength(1);
+    expect(cookies[0]).toContain('Max-Age=0');
 
     expectNotStorableBySharedCache(response);
   });
