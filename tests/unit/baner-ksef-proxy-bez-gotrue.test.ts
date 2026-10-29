@@ -7,11 +7,12 @@ import { NextRequest } from 'next/server';
  * Baner KSeF odpytuje `/api/ksef/health` z każdej otwartej karty panelu.
  * Trasa nie zwraca danych firmy, a przechodziła pełną bramkę proxy:
  * `getClaims()` i weryfikację MFA. Przy kluczu HS256 każde z tych sprawdzeń
- * idzie do GoTrue przez sieć, czyli 3 wywołania `/auth/v1/user` na takt.
+ * może iść do GoTrue przez sieć, czyli do 3 wywołań `/auth/v1/user` na takt.
  *
  * Test używa PRAWDZIWEGO klienta `@supabase/ssr` (opakowanego szpiegiem)
  * i liczy żądania do `/auth/v1/*` na atrapie `fetch`. Sesja w ciasteczku
- * ma token HS256, jak na produkcji.
+ * ma token HS256 — najgorszy przypadek, w którym każde sprawdzenie idzie
+ * do GoTrue.
  */
 
 const mocks = vi.hoisted(() => ({ create: vi.fn(), flag: vi.fn() }));
