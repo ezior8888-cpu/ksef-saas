@@ -115,6 +115,16 @@ describe('readAllById — „nie wiem” to nie „nie ma”', () => {
     await expect(readAllById('test', fetchPage, { pageSize: 2 })).rejects.toThrow(/identyfikatory nie rosną po 00000002/);
   });
 
+  it('strona 2 bez danych i bez błędu (data: null): wyjątek, nie koniec listy', async () => {
+    const { fetchPage } = source(rows(700));
+    let call = 0;
+    const nullOnSecond: KeysetFetchPage<Row> = async (afterId, limit) => {
+      call += 1;
+      return call === 2 ? { data: null, error: null } : fetchPage(afterId, limit);
+    };
+    await expect(readAllById('test', nullOnSecond)).rejects.toThrow(/odpowiedź bez danych i bez błędu/);
+  });
+
   it('wiersz bez id: wyjątek', async () => {
     const fetchPage: KeysetFetchPage<Row> = async () => ({ data: [{ id: '', n: 1 }], error: null });
     await expect(readAllById('test', fetchPage)).rejects.toThrow(/identyfikatory nie rosną/);

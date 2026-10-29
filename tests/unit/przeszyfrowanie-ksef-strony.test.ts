@@ -186,10 +186,34 @@ describe('wyścig z klientem i błędy', () => {
     expect(lines).toEqual([`firma ${id(1)}: decryptCredentials: brak klucza, którym zaszyfrowano dane (rotacja?)`]);
   });
 
-  it('błąd odczytu listy firm: wyjątek, nie „0 do zrobienia”', async () => {
-    db = historyDb({ tenants: [tenantRow(1, v2With(OLD, 1))] });
-    db.failures.add('tenants:select');
-    await expect(reencryptKsefCredentials(client(), { apply: true, force: false })).rejects.toThrow(/Przeszyfrowanie/);
+  it('błąd odczytu strony 2 listy firm: wyjątek, nie raport „przeszyfrowano: 200”', async () => {
+    db = historyDb({ tenants: heapOrder(FIRMS).slice(0, 600).map((n) => tenantRow(n, v2With(OLD, n))) });
+    // SELECT-y na `tenants`: 1 — liczba firm, 2 — strona 1 (200 firm), 3 — strona 2.
+    const base = historyClient(db);
+    let selects = 0;
+    const failing = {
+      ...base,
+      from(table: string) {
+        const q = base.from(table) as ReturnType<typeof base.from> & { then: unknown };
+        const select = q.select;
+        const update = q.update;
+        // `.update(…).select('id')` to zapis, nie odczyt — nie liczymy go.
+        let writing = false;
+        q.update = (...args: Parameters<typeof update>) => { writing = true; return update(...args); };
+        q.select = (...args: Parameters<typeof select>) => {
+          if (table === 'tenants' && !writing && (selects += 1) === 3) {
+            q.then = (ok: (v: unknown) => unknown, fail?: (e: unknown) => unknown) =>
+              Promise.resolve({ data: null, count: null, error: { message: 'canceling statement due to statement timeout' } }).then(ok, fail);
+          }
+          return select(...args);
+        };
+        return q;
+      },
+    };
+    await expect(reencryptKsefCredentials(failing as unknown as Parameters<typeof reencryptKsefCredentials>[0], { apply: true, force: false }))
+      .rejects.toThrow('Przeszyfrowanie: odczyt firm: canceling statement due to statement timeout');
+    // Strona 1 zdążyła się zapisać (powtórka ją pominie jako „już na bieżącym kluczu”), strona 2 — nie.
+    expect(db.log.filter((e) => e.table === 'tenants' && e.op === 'update')).toHaveLength(200);
   });
 
   it('mniej przeczytanych niż w bazie (firma zniknęła w trakcie) = przebieg niekompletny', () => {

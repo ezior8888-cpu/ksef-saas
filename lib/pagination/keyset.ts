@@ -18,7 +18,8 @@
  *   }
  *
  * Helper pilnuje, żeby „nie wiem” nie zamieniło się w „nie ma”:
- *   - błąd strony → wyjątek z etykietą (nigdy częściowa lista),
+ *   - błąd strony albo odpowiedź bez danych (`data: null`) → wyjątek
+ *     z etykietą (nigdy częściowa lista),
  *   - strona dłuższa niż `limit` → wyjątek (zapytanie zignorowało limit),
  *   - identyfikatory ściśle rosnące, także względem kursora → inaczej
  *     wyjątek (brak `order('id')` albo zignorowane `gt('id')` — bez tego
@@ -109,7 +110,10 @@ export async function forEachPageById<T extends { id: string }>(
   for (;;) {
     const page = await fetchPage(afterId, pageSize);
     if (page.error) throw new KeysetPageError(label, page.error.message);
-    const data = page.data ?? [];
+    // `data: null` bez błędu (np. pusta treść odpowiedzi pośrednika) to nie
+    // „pusta strona” — nie wiadomo, czy lista się skończyła.
+    if (!Array.isArray(page.data)) throw new KeysetPageError(label, 'odpowiedź bez danych i bez błędu — nie wiadomo, czy to koniec listy');
+    const data = page.data;
     if (data.length === 0) return { pages, rows };
     if (data.length > pageSize) {
       throw new KeysetPageError(label, `strona ma ${data.length} wierszy przy limicie ${pageSize} (zapytanie bez limit?)`);

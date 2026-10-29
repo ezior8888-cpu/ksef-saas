@@ -266,7 +266,15 @@ export function historyClient(db: HistoryDb) {
           if (o !== 'is' || v !== null) throw new Error('Atrapa: not() tylko is null');
           return add(`${c}=not.is.null`, (r) => valueAt(r, c) != null);
         },
-        in: (c: string, vs: unknown[]) => add(`${c}=in.(${vs.join(',')})`, (r) => vs.some((v) => matches(r, c, 'eq', v))),
+        in: (c: string, vs: unknown[]) => {
+          // Zbiór zamiast `vs.some(matches)`: testy na 2500 firmach robią
+          // setki `in.(…)` po tysiącach wierszy. Te same reguły co `eq`.
+          const keys = new Set(vs.filter((v) => v != null).map(String));
+          return add(`${c}=in.(${vs.join(',')})`, (r) => {
+            const actual = valueAt(r, c);
+            return actual == null ? vs.some((v) => v === actual) : keys.has(String(actual));
+          });
+        },
         lt: (c: string, v: unknown) => add(`${c}=lt.${String(v)}`, (r) => matches(r, c, 'lt', v)),
         lte: (c: string, v: unknown) => add(`${c}=lte.${String(v)}`, (r) => matches(r, c, 'lte', v)),
         gt: (c: string, v: unknown) => add(`${c}=gt.${String(v)}`, (r) => matches(r, c, 'gt', v)),

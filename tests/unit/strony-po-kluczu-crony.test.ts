@@ -47,6 +47,9 @@ import { runCoPilotMonthly } from '@/lib/jobs/runners/co-pilot-monthly';
 import { runInboxPolling } from '@/lib/jobs/runners/inbox-polling';
 import { runKsefHistorySync } from '@/lib/jobs/runners/ksef-history-sync';
 
+// Atrapa w pamięci na 2500 firmach: lokalnie ok. 1 s na test, zapas na wolniejszy runner CI.
+vi.setConfig({ testTimeout: 30_000 });
+
 const FIRMS = 2500;
 const MAX_ROWS = 1000;
 const NOW = new Date('2026-10-05T06:00:00.000Z'); // 5. dnia, 8:00 w Warszawie — dzień paczek Co-Pilota
