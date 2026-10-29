@@ -156,18 +156,34 @@ function toJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null
 }
 
 /**
+ * Co się stało z plikiem — od tego zależy komunikat, gdy dalej nie mieści
+ * się w limicie:
+ * - `kept`: PDF albo obraz, którego nie trzeba ruszać;
+ * - `shrunk`: płótno zadziałało (wynik może być JPEG-iem albo mniejszym
+ *   od niego oryginałem);
+ * - `blocked`: przeglądarka podmienia piksele płótna;
+ * - `failed`: dekodowanie albo kodowanie zawiodło.
+ */
+export type ShrinkStatus = 'kept' | 'shrunk' | 'blocked' | 'failed';
+
+export interface ShrinkResult {
+  file: File;
+  status: ShrinkStatus;
+}
+
+/**
  * Zmniejszone zdjęcie jako JPEG albo — według zasad z nagłówka — ten sam
  * plik.
  */
-export async function shrinkReceiptPhoto(file: File): Promise<File> {
-  if (isPdf(file)) return file;
+export async function shrinkReceiptPhoto(file: File): Promise<ShrinkResult> {
+  if (isPdf(file)) return { file, status: 'kept' };
   const accepted = SERVER_IMAGE_TYPES.has(file.type);
-  if (accepted && file.size <= ACTION_FILE_LIMIT_BYTES) return file;
+  if (accepted && file.size <= ACTION_FILE_LIMIT_BYTES) return { file, status: 'kept' };
 
   try {
-    if (!canvasReadable()) return file;
+    if (!canvasReadable()) return { file, status: 'blocked' };
     const image = await decode(file);
-    if (!image) return file;
+    if (!image) return { file, status: 'failed' };
 
     let canvas: HTMLCanvasElement | null;
     try {
@@ -176,7 +192,7 @@ export async function shrinkReceiptPhoto(file: File): Promise<File> {
       // Pełna bitmapa 12 Mpx to ok. 48 MB pamięci — oddajemy ją przed kodowaniem.
       image.release();
     }
-    if (!canvas) return file;
+    if (!canvas) return { file, status: 'failed' };
 
     try {
       let blob: Blob | null = null;
@@ -184,29 +200,40 @@ export async function shrinkReceiptPhoto(file: File): Promise<File> {
         blob = await toJpeg(canvas, quality);
         if (!blob || blob.size <= ACTION_FILE_LIMIT_BYTES) break;
       }
-      if (!blob || (accepted && blob.size >= file.size)) return file;
-      return new File([blob], jpgName(file.name), { type: 'image/jpeg', lastModified: file.lastModified });
+      if (!blob) return { file, status: 'failed' };
+      if (accepted && blob.size >= file.size) return { file, status: 'shrunk' };
+      const jpeg = new File([blob], jpgName(file.name), { type: 'image/jpeg', lastModified: file.lastModified });
+      return { file: jpeg, status: 'shrunk' };
     } finally {
       // Safari na iOS zwalnia pamięć płótna dopiero po wyzerowaniu wymiarów.
       canvas.width = 0;
       canvas.height = 0;
     }
   } catch {
-    return file;
+    return { file, status: 'failed' };
   }
 }
 
-/** Komunikat dla pliku, który nie zmieści się w limicie Server Action; `null` = mieści się. */
-export function expenseFileTooLargeMessage(file: File): string | null {
-  if (file.size <= ACTION_FILE_LIMIT_BYTES) return null;
-  const size = formatUploadSize(file.size);
-  if (isPdf(file)) {
-    return `PDF ma ${size}, a można wgrać najwyżej ${ACTION_FILE_LIMIT_LABEL}. Zapisz go w niższej rozdzielczości albo, jeśli ma jedną stronę, wgraj jego zdjęcie — zdjęcia zmniejszamy sami.`;
+/**
+ * Komunikat dla pliku, który nie zmieści się w limicie Server Action;
+ * `null` = mieści się. Rozmiar w komunikacie to rozmiar pliku wybranego
+ * przez klienta, nie wyniku zmniejszania.
+ */
+export function expenseFileTooLargeMessage(original: File, result: ShrinkResult): string | null {
+  if (result.file.size <= ACTION_FILE_LIMIT_BYTES) return null;
+  const size = formatUploadSize(original.size);
+  const limit = ACTION_FILE_LIMIT_LABEL;
+  if (isPdf(original)) {
+    return `PDF ma ${size}, a można wgrać najwyżej ${limit}. Zapisz go w niższej rozdzielczości albo, jeśli ma jedną stronę, wgraj jego zdjęcie — zdjęcia zmniejszamy sami.`;
   }
-  if (!SERVER_IMAGE_TYPES.has(file.type)) {
-    return `Nie udało się zmniejszyć zdjęcia (${size}), a można wgrać najwyżej ${ACTION_FILE_LIMIT_LABEL}. Zapisz je jako JPG i spróbuj ponownie.`;
+  switch (result.status) {
+    case 'shrunk':
+      return `Zdjęcie (${size}) nawet po zmniejszeniu przekracza ${limit}. Zrób zdjęcie z bliska, samego dokumentu, albo je przytnij i spróbuj ponownie.`;
+    case 'blocked':
+      return `Ta przeglądarka blokuje zmniejszanie zdjęć (ochrona prywatności), a zdjęcie ma ${size} — można wgrać najwyżej ${limit}. Spróbuj w innej przeglądarce albo zrób zdjęcie w niższej rozdzielczości.`;
+    default:
+      return `Nie udało się zmniejszyć zdjęcia (${size}), a można wgrać najwyżej ${limit}. Zapisz je jako JPG i spróbuj ponownie.`;
   }
-  return `Zdjęcie ma ${size}, a można wgrać najwyżej ${ACTION_FILE_LIMIT_LABEL}, a w tej przeglądarce nie udało się go zmniejszyć. Spróbuj w innej przeglądarce albo zrób zdjęcie w niższej rozdzielczości.`;
 }
 
 /**
@@ -218,12 +245,12 @@ export async function sendExpenseFile(
   file: File,
   upload: (form: FormData) => Promise<ExpenseUploadResult>,
 ): Promise<ExpenseUploadResult> {
-  const prepared = await shrinkReceiptPhoto(file);
-  const tooLarge = expenseFileTooLargeMessage(prepared);
+  const result = await shrinkReceiptPhoto(file);
+  const tooLarge = expenseFileTooLargeMessage(file, result);
   if (tooLarge) return { success: false, error: tooLarge };
 
   const form = new FormData();
-  form.append('photo', prepared);
+  form.append('photo', result.file);
   return upload(form).catch((error: unknown): ExpenseUploadResult => {
     console.error('[koszty] wgranie pliku odrzucone', error);
     return { success: false, error: uploadRejectedMessage(error) };

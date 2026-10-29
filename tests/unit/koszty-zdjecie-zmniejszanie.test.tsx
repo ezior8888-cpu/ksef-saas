@@ -359,7 +359,9 @@ describe('CaptureButton — zdjęcie zmniejszane przed wysłaniem (sesja 4)', ()
     expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
     expect(toBlobCalls).toEqual([]);
     expect(mocks.upload).not.toHaveBeenCalled();
-    expect(onlyToast()).toContain('nie udało się go zmniejszyć');
+    const message = onlyToast();
+    expect(message).toContain('blokuje zmniejszanie');
+    expect(message).toContain('3,2 MB');
   });
 
   it('drobny szum odczytu (Brave, Safari) nie wyłącza zmniejszania', async () => {
@@ -391,7 +393,20 @@ describe('CaptureButton — zdjęcie zmniejszane przed wysłaniem (sesja 4)', ()
 
     expect(toBlobCalls.map((call) => call.quality)).toEqual([0.8, 0.6]);
     expect(mocks.upload).not.toHaveBeenCalled();
-    expect(onlyToast()).toContain('Zdjęcie ma 1,1 MB');
+    const message = onlyToast();
+    expect(message).toContain('Zdjęcie (1,1 MB) nawet po zmniejszeniu');
+    expect(message).not.toContain('przeglądark');
+  });
+
+  it('zdjęcie zmniejszone, ale nadal ponad limitem → komunikat z rozmiarem wybranego pliku', async () => {
+    bytesPerPixel = () => 0.45;
+    await choose(photo(6 * MB));
+
+    expect(toBlobCalls.map((call) => call.quality)).toEqual([0.8, 0.6]);
+    expect(mocks.upload).not.toHaveBeenCalled();
+    const message = onlyToast();
+    expect(message).toContain('Zdjęcie (6,3 MB) nawet po zmniejszeniu');
+    expect(message).not.toContain('przeglądark');
   });
 
   it('PDF 2 MB → komunikat o limicie, akcja niewołana, przycisk wolny', async () => {
