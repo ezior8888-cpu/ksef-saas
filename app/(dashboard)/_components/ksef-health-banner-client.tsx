@@ -5,24 +5,36 @@ import { RiAlertLine, RiCloseLine, RiCloudOffLine } from '@remixicon/react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import type { KsefHealthSnapshot } from '@/lib/ksef/health-status';
+import type { KsefHealthPublic } from '@/lib/ksef/health-status';
 
-const POLL_INTERVAL_MS = 30_000;
+/** Widoczna karta odpytuje co 120 s plus losowo do 30 s. */
+const POLL_INTERVAL_MS = 120_000;
+const POLL_JITTER_MS = 30_000;
+/** Powrót do karty odpytuje od razu, ale najwyżej raz na tyle. */
+const RETURN_POLL_MIN_GAP_MS = 60_000;
 
 interface Props {
-  initial: KsefHealthSnapshot | null;
+  initial: KsefHealthPublic | null;
 }
 
 /**
  * Banner gdy KSeF jest `degraded` lub `down`. Polluje `/api/ksef/health`
- * co 30s — odpada koszt WebSocket setup'u (Supabase Realtime, dedykowany
- * pub/sub) dla zdarzenia, które realnie zmienia się max kilka razy w tygodniu.
+ * tylko z widocznej karty — odpada koszt WebSocket setup'u (Supabase
+ * Realtime, dedykowany pub/sub) dla zdarzenia, które realnie zmienia się max
+ * kilka razy w tygodniu. Baner siedzi w layoucie panelu, więc odpytuje każda
+ * otwarta karta (plan skalowania, sesja 1):
+ *  - karta w tle nie ma zegara wcale;
+ *  - widoczna co 120–150 s; rozrzut, żeby karty otwarte razem (np. po
+ *    wdrożeniu) nie pytały w tej samej sekundzie. Także przy `operational`,
+ *    bo inaczej awaria nie miałaby jak się pojawić;
+ *  - po powrocie do karty od razu, żeby baner awarii się nie spóźnił, ale
+ *    najwyżej raz na 60 s — przełączanie kart robi serię zdarzeń.
  *
  * Dismiss: użytkownik może schować banner — flaga w `sessionStorage`, więc
  * po odświeżeniu lub eskalacji do `down` banner wraca.
  */
 export function KsefHealthBannerClient({ initial }: Props) {
-  const [snapshot, setSnapshot] = useState<KsefHealthSnapshot | null>(initial);
+  const [snapshot, setSnapshot] = useState<KsefHealthPublic | null>(initial);
   // Lazy init: czytamy sessionStorage raz w pierwszym renderze (SSR-safe
   // przez `typeof window` guard), zamiast useEffect+setState — ESLint
   // `react-hooks/set-state-in-effect` flaguje cascading renders inaczej.
@@ -36,11 +48,19 @@ export function KsefHealthBannerClient({ initial }: Props) {
   });
 
   useEffect(() => {
-    const tick = async () => {
+    let timer: number | undefined;
+    let stopped = false;
+    // Snapshot z renderu serwera jest świeży — liczy się jak odpytanie.
+    let lastPollAt = Date.now();
+
+    const poll = async () => {
+      lastPollAt = Date.now();
       try {
-        const res = await fetch('/api/ksef/health', { cache: 'no-store' });
+        // Bez `no-store`: trasa pozwala trzymać odpowiedź 15 s, więc karty
+        // jednej przeglądarki odpytujące blisko siebie dzielą odpowiedź.
+        const res = await fetch('/api/ksef/health');
         if (!res.ok) return;
-        const data = (await res.json()) as KsefHealthSnapshot & { stale?: boolean };
+        const data = (await res.json()) as KsefHealthPublic & { stale?: boolean };
         if (data.stale) return;
         setSnapshot(data);
       } catch {
@@ -48,8 +68,33 @@ export function KsefHealthBannerClient({ initial }: Props) {
       }
     };
 
-    const id = window.setInterval(tick, POLL_INTERVAL_MS);
-    return () => window.clearInterval(id);
+    // Jeden zegar naraz; ukryta karta (albo odmontowany baner) nie dostaje nowego.
+    const schedule = () => {
+      window.clearTimeout(timer);
+      if (stopped || document.visibilityState !== 'visible') return;
+      timer = window.setTimeout(async () => {
+        if (document.visibilityState === 'visible') await poll();
+        schedule();
+      }, POLL_INTERVAL_MS + Math.random() * POLL_JITTER_MS);
+    };
+
+    const onVisibilityChange = () => {
+      if (
+        document.visibilityState === 'visible' &&
+        Date.now() - lastPollAt >= RETURN_POLL_MIN_GAP_MS
+      ) {
+        void poll();
+      }
+      schedule();
+    };
+
+    schedule();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, []);
 
   if (!snapshot || snapshot.level === 'operational') return null;

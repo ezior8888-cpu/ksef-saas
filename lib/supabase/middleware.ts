@@ -63,6 +63,22 @@ const STATIC_PUBLIC_EXACT = [
   MAINTENANCE_PATH, // tu kieruje bramka przerwy technicznej — musi być osiągalna
 ] as const;
 
+/**
+ * Ścieżki obsługiwane BEZ klienta Supabase: proxy nie czyta sesji, nie
+ * odświeża ciasteczek i nie woła GoTrue (przy kluczu HS256 każde sprawdzenie
+ * sesji to wywołanie sieciowe). Tylko trasy, które nie zależą od tego, kto
+ * pyta, i nie zwracają danych firmy. Odpowiedź nie niesie `Set-Cookie`, więc
+ * trasa może ją oznaczyć jako cache'owalną.
+ * Dopasowanie DOKŁADNE: sąsiednie trasy (`/api/ksef/...`) zostają za bramką.
+ */
+const NO_SESSION_EXACT = [
+  '/api/ksef/health', // baner KSeF w każdej karcie panelu (plan skalowania, sesja 1)
+] as const;
+
+export function isNoSessionPath(pathname: string): boolean {
+  return NO_SESSION_EXACT.some((p) => pathname === p);
+}
+
 export function isMarketingPath(pathname: string): boolean {
   return MARKETING_PATHS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
@@ -74,6 +90,7 @@ export function isMarketingPath(pathname: string): boolean {
  * Całość `/api/*` NIE jest publiczna — tylko jawne prefiksy (bezpieczeństwo).
  */
 export function isPublicPath(pathname: string): boolean {
+  if (isNoSessionPath(pathname)) return true;
   // PostHog reverse proxy — musi być publiczny (skrypt ładuje się przed logowaniem).
   if (pathname.startsWith('/ingest')) return true;
   if (isMarketingPath(pathname)) return true;
@@ -118,6 +135,10 @@ function isPhoneUserAgent(ua: string | null): boolean {
  *  4. /onboarding — bez redirectu z proxy (soft-nav loop); strona sama decyduje.
  */
 export async function updateSession(request: NextRequest) {
+  // Przed `createServerClient`: bez klienta nie ma `getClaims()` ani
+  // odświeżenia ciasteczek (zob. `NO_SESSION_EXACT`).
+  if (isNoSessionPath(request.nextUrl.pathname)) return NextResponse.next();
+
   let supabaseResponse = NextResponse.next({ request });
 
   function withSessionCookies(response: NextResponse): NextResponse {
