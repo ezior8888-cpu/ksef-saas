@@ -452,7 +452,7 @@ describe('strażnik ZAP-01: sprzedaż „już w FaktWay” jest w księgach', ()
   });
 
   // Próby wysyłki posiadacza: brak albo wycofanie 440 bez numeru oryginału
-  // (duplicate-decision.ts) — taki szkic zostaje na zawsze (wyzwalacz 00148).
+  // (duplicate-decision.ts) — klient takiego szkicu nie usunie (wyzwalacz 00148).
   const ATTEMPTS: Row[][] = [[], [{
     id: 's-440', tenant_id: TENANT, invoice_id: 'lok-1', status: 'number_taken',
     original_ksef_number: null, response_ksef_number: null, request_payload_hash: null,
@@ -491,7 +491,7 @@ describe('strażnik ZAP-01: sprzedaż „już w FaktWay” jest w księgach', ()
                 violations.push(`szkic bez drogi klienta: ${at}`);
               }
               // 4. „Usuń szkic” (`number_conflict`) tylko, gdy da się go usunąć: `deleteDraftInvoiceAction`
-              //    usuwa wyłącznie `draft`, a wycofanego szkicu 440 nie usunie nikt (recenzja #339).
+              //    usuwa wyłącznie `draft`, a wycofanego szkicu 440 klient nie usunie (recenzja #339).
               //    Reszta powodów sprawdzanych ponownie budzi operatora (ksef-historia-alarm.test.ts).
               if (outcome.action === 'block' && outcome.reason === 'number_conflict' && !deletableDraft) {
                 violations.push(`„usuń szkic” bez możliwości usunięcia: ${at}`);

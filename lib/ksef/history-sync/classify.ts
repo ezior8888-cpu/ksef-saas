@@ -423,7 +423,7 @@ async function classifyNumberHolder(
     // ZAP-01: szkic z importu pliku (CSV/JPK) ma ten sam numer i dane, ale
     // księgi go nie liczą — pominięcie oryginału zgubiłoby sprzedaż. Z numerem
     // KSeF albo bez statusu — operator. Bez numeru KSeF klient mógł go wysłać
-    // z FaktWay (440 bez numeru oryginału = szkic nieusuwalny, 00148) — dalej
+    // z FaktWay (440 bez numeru oryginału — klient go nie usunie, 00148) — dalej
     // jak faktura FaktWay, z operatorem zamiast „innego numeru KSeF”.
     if (!inSalesBooks(row, ctx.environment)) {
       if (ksefNumber !== '' || row.ksef_status === null) return { action: 'block', reason: 'local_conflict', invoiceId: row.id };
@@ -446,8 +446,9 @@ async function classifyNumberHolder(
 
 /**
  * Posiadacz numeru, który mógł iść do KSeF z FaktWay. `number_conflict`
- * („usuń szkic”) tylko dla szkicu, który da się usunąć: `deleteDraftInvoiceAction`
- * usuwa wyłącznie `draft`, a szkicu z próbą wysyłki (np. wycofanego 440) nie
+ * („usuń szkic”) tylko dla szkicu bez prób wysyłki: `deleteDraftInvoiceAction`
+ * usuwa wyłącznie `draft`, a wycofanego 440 nie (wyzwalacz 00148 — usuwa serwis
+ * za zgodą Bartosza). Szkic z próbą ocenia operator, jak w gałęzi `app`
  * (recenzja #339). Reszta — operator (`fallback`, alarm `ksef_history_blocked`).
  */
 async function classifyBySendAttempts(
