@@ -159,6 +159,19 @@ it('krótkie wyjście z karty nie odsuwa następnego odpytania', async () => {
   expect(fetchedAt).toHaveLength(1);
 });
 
+it('cofnięcie zegara systemowego nie zatrzymuje odpytywania', async () => {
+  mount();
+  await wait(30_000);
+  // Synchronizacja czasu cofa zegar o godzinę; zegary przeglądarki liczą dalej.
+  vi.setSystemTime(Date.now() - 60 * MIN);
+  setVisibility('hidden');
+  await wait(5_000);
+  setVisibility('visible');
+  const before = fetchedAt.length;
+  await wait(30 * MIN);
+  expect(fetchedAt.length - before).toBeGreaterThanOrEqual(12);
+});
+
 it('zawieszone żądanie nie zatrzymuje odpytywania widocznej karty', async () => {
   const fetchMock = vi.mocked(fetch);
   fetchMock.mockImplementationOnce((_input, init) => {

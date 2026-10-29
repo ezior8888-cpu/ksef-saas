@@ -51,11 +51,12 @@ export function KsefHealthBannerClient({ initial }: Props) {
     let timer: number | undefined;
     let inFlight: AbortController | null = null;
     let stopped = false;
-    // Snapshot z renderu serwera jest świeży — liczy się jak odpytanie.
-    let lastPollAt = Date.now();
+    // Snapshot z renderu serwera jest świeży — liczy się jak odpytanie. Czas
+    // z zegara monotonicznego: cofnięcie zegara systemowego nie odsunie terminu.
+    let lastPollAt = performance.now();
 
     const poll = async () => {
-      lastPollAt = Date.now();
+      lastPollAt = performance.now();
       // Zawieszona poprzednia odpowiedź nie nadpisze nowszej.
       inFlight?.abort();
       const controller = new AbortController();
@@ -84,13 +85,13 @@ export function KsefHealthBannerClient({ initial }: Props) {
       timer = window.setTimeout(() => {
         if (document.visibilityState === 'visible') void poll();
         schedule();
-      }, Math.max(0, dueAt - Date.now()));
+      }, Math.max(0, dueAt - performance.now()));
     };
 
     const onVisibilityChange = () => {
       if (
         document.visibilityState === 'visible' &&
-        Date.now() - lastPollAt >= RETURN_POLL_MIN_GAP_MS
+        performance.now() - lastPollAt >= RETURN_POLL_MIN_GAP_MS
       ) {
         void poll();
       }
