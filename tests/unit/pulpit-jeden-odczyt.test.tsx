@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { isValidElement, type ReactNode } from 'react';
@@ -520,12 +520,22 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** Wzorzec z dysku; `null`, gdy go jeszcze nie ma (pierwszy zapis). Bez osobnego sprawdzania istnienia pliku. */
+function wczytajWzorzec(): Record<string, unknown> | null {
+  try {
+    return JSON.parse(readFileSync(WZORZEC, 'utf8')) as Record<string, unknown>;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 describe('złoty wzorzec: propsy kart identyczne jak przed sesją 19', () => {
   it.each(SCENARIUSZE.map((s) => [s.nazwa, s] as const))('%s', async (_nazwa, s) => {
     const { karty: wynik } = await renderuj(s);
     expect(wynik).toHaveLength(7);
     if (process.env.PULPIT_WZORZEC === 'zapisz') {
-      const wzorzec = existsSync(WZORZEC) ? JSON.parse(readFileSync(WZORZEC, 'utf8')) as Record<string, unknown> : {};
+      const wzorzec = wczytajWzorzec() ?? {};
       wzorzec[s.nazwa] = wynik;
       writeFileSync(WZORZEC, `${JSON.stringify(wzorzec, null, 1)}\n`);
       return;
