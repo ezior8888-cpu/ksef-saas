@@ -42,8 +42,10 @@ export interface PageContext {
  * pomijamy, bo ciasteczko kontroluje klient. Wiersze to aktywne członkostwa
  * użytkownika (filtr `user_id` + `status = active`, klient admina), więc
  * brak wiersza firmy z ciasteczka = ta sama odmowa co dawne zapytanie
- * z `organization_id`. Błąd odczytu członkostw rzuca (strona błędu
- * z ponowieniem, jak w layoucie), zamiast udawać brak firmy.
+ * z `organization_id`. Porównanie tekstu jak w `assertDashboardShellAccess`:
+ * baza oddaje UUID małymi literami, więc ciasteczko pisane wielkimi jest
+ * odrzucane tak samo jak w layoucie. Błąd odczytu członkostw rzuca (strona
+ * błędu, jak w layoucie), zamiast udawać brak firmy.
  */
 export const getPageContext = cache(async (): Promise<PageContext> => {
   const user = await getDashboardSessionUser();

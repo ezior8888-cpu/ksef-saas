@@ -19,6 +19,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * wywołanie), więc tu dostaje pamięć jednego żądania: klucz to funkcja
  * i argumenty (wartości proste po wartości, obiekty po tożsamości — jak
  * w React), a poza „żądaniem” — bez pamięci.
+ *
+ * Next 16 w renderze RSC skleja identyczne GET (memoizacja `fetch`), więc
+ * powtórzone `getUser()` z tym samym tokenem szło dotąd do sieci raz. Test
+ * liczy wywołania w kodzie (`getUser`, `memberships`) i osobno to, co wyjdzie
+ * do sieci (`siec*`). Sklejanie znika przy `signal` (limity czasu, sesja 5),
+ * a zapytania o członkostwo o różnych adresach nie sklejały się nigdy.
  */
 
 const ATRAPA = 'https://atrapa.supabase.test';
@@ -31,13 +37,19 @@ type Wiersz = Record<string, unknown>;
 
 type Wezel = Map<unknown, unknown>;
 
+/** Jedno żądanie do atrapy: ścieżka, token z `Authorization`, klucz memoizacji `fetch` w Next. */
+type Wywolanie = { sciezka: string; bearer: string | null; klucz: string };
+
 const h = vi.hoisted(() => ({
   /** Pamięć bieżącego żądania RSC (`null` = poza renderem): drzewo funkcja → argumenty → wynik. */
   zadanie: null as Map<unknown, unknown> | null,
   WYNIK: Symbol('wynik'),
+  BLAD: Symbol('blad'),
   ciasteczka: new Map<string, string>(),
-  /** Ścieżki zapytań do atrapy, w kolejności. */
-  wywolania: [] as string[],
+  /** Token dostępu z ciasteczka sesji. */
+  token: '',
+  /** Zapytania do atrapy, w kolejności. */
+  wywolania: [] as Wywolanie[],
   uzytkownik: null as Wiersz | null,
   tabele: {} as Record<string, Wiersz[]>,
   /** Tabela, której odczyt kończy się błędem 500. */
@@ -60,7 +72,16 @@ vi.mock('react', async (original) => {
           }
           wezel = dalej;
         }
-        if (!wezel.has(h.WYNIK)) wezel.set(h.WYNIK, fn(...args));
+        // Wyjątek synchroniczny też zostaje w pamięci (React: `s = 2`).
+        if (wezel.has(h.BLAD)) throw wezel.get(h.BLAD);
+        if (!wezel.has(h.WYNIK)) {
+          try {
+            wezel.set(h.WYNIK, fn(...args));
+          } catch (e) {
+            wezel.set(h.BLAD, e);
+            throw e;
+          }
+        }
         return wezel.get(h.WYNIK) as R;
       },
   };
@@ -172,11 +193,25 @@ function pasuje(wiersz: Wiersz, url: URL): boolean {
   return true;
 }
 
+/**
+ * Klucz jak w memoizacji `fetch` Nexta 16 w renderze RSC
+ * (`next/dist/server/lib/dedupe-fetch.js`): identyczne GET/HEAD — adres
+ * i nagłówki — idą do sieci raz; z `signal` albo inną metodą zawsze osobno.
+ */
+function kluczMemoizacji(req: Request, init: RequestInit | undefined, n: number): string {
+  if (init?.signal || (req.method !== 'GET' && req.method !== 'HEAD')) return `osobne-${n}`;
+  return JSON.stringify([req.method, req.url, [...req.headers].filter(([k]) => k !== 'traceparent' && k !== 'tracestate')]);
+}
+
 async function atrapaFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const req = new Request(input, init);
   const url = new URL(req.url);
   if (url.origin !== ATRAPA) throw new Error(`nieoczekiwane wywołanie sieci: ${req.url}`);
-  h.wywolania.push(url.pathname);
+  h.wywolania.push({
+    sciezka: url.pathname,
+    bearer: req.headers.get('authorization')?.replace(/^Bearer /u, '') ?? null,
+    klucz: kluczMemoizacji(req, init, h.wywolania.length),
+  });
 
   if (url.pathname === '/auth/v1/user') {
     const token = req.headers.get('authorization')?.replace(/^Bearer /u, '');
@@ -186,6 +221,7 @@ async function atrapaFetch(input: RequestInfo | URL, init?: RequestInit): Promis
   // Odczyt kluczem serwisowym (zgody e-mail w Powiadomieniach) — nie sprawdza sesji.
   if (url.pathname.startsWith('/auth/v1/admin/users/')) return json(h.uzytkownik);
 
+  // Żadna z renderowanych stron dziś nie woła RPC; licznik `rpc` pilnuje, że tak zostaje.
   const rpc = url.pathname.match(/^\/rest\/v1\/rpc\//u);
   if (rpc) return json(null);
 
@@ -224,6 +260,7 @@ function zalogujCiasteczkiem(userId: string): void {
     expires_at: exp,
     user: { id: userId, aud: 'authenticated' },
   };
+  h.token = accessToken;
   h.ciasteczka.set('sb-atrapa-auth-token', `base64-${base64url(session)}`);
 }
 
@@ -254,13 +291,30 @@ function czlonkostwo(org: string, extra: Wiersz = {}): Wiersz {
 
 // ─── Render jednego żądania ─────────────────────────────────────────────
 
-/** Liczba wywołań GoTrue (`/user`) i zapytań o członkostwo. */
-function liczniki(): { getUser: number; memberships: number } {
+const czyGetUser = (w: Wywolanie) => w.sciezka === '/auth/v1/user';
+const czyMemberships = (w: Wywolanie) => w.sciezka === '/rest/v1/memberships';
+
+/**
+ * Wywołania w jednym żądaniu. `getUser` i `memberships` to wywołania w kodzie;
+ * `siec*` — ile z nich wyjdzie do sieci po memoizacji `fetch` w Next (identyczne
+ * GET sklejone). `gotrueInne` to pozostałe wywołania GoTrue (np. odczyt kluczem
+ * serwisowym), `rpc` — funkcje bazy.
+ */
+function liczniki() {
+  const ile = (p: (w: Wywolanie) => boolean) => h.wywolania.filter(p).length;
+  const roznych = (p: (w: Wywolanie) => boolean) => new Set(h.wywolania.filter(p).map((w) => w.klucz)).size;
   return {
-    getUser: h.wywolania.filter((p) => p === '/auth/v1/user').length,
-    memberships: h.wywolania.filter((p) => p === '/rest/v1/memberships').length,
+    getUser: ile(czyGetUser),
+    memberships: ile(czyMemberships),
+    siecGetUser: roznych(czyGetUser),
+    siecMemberships: roznych(czyMemberships),
+    gotrueInne: ile((w) => w.sciezka.startsWith('/auth/v1/') && !czyGetUser(w)),
+    rpc: ile((w) => w.sciezka.startsWith('/rest/v1/rpc/')),
   };
 }
+
+/** Cel sesji 9: jedno sprawdzenie sesji i jedno zapytanie o członkostwo, nic poza tym. */
+const RAZ = { getUser: 1, memberships: 1, siecGetUser: 1, siecMemberships: 1, gotrueInne: 0, rpc: 0 };
 
 /** Jedno żądanie RSC: pełne drzewo (z asynchronicznymi dziećmi), bez błędów renderu. */
 async function wyrenderuj(drzewo: ReactNode): Promise<string> {
@@ -320,12 +374,12 @@ describe('jedno sprawdzenie sesji i jedno zapytanie o członkostwo na render', (
       </DashboardLayout>,
     );
     expect(out).toContain('data-firma="Firma Atrapa"');
-    expect(liczniki()).toEqual({ getUser: 1, memberships: 1 });
+    expect(liczniki()).toEqual(RAZ);
   });
 
   it('/dashboard, miękka nawigacja (sama strona, layout się nie renderuje)', async () => {
     await wyrenderuj(<DashboardHomePage />);
-    expect(liczniki()).toEqual({ getUser: 1, memberships: 1 });
+    expect(liczniki()).toEqual(RAZ);
   });
 
   it('/settings/ksef, pełne wejście (layout panelu + layout ustawień + strona)', async () => {
@@ -337,12 +391,12 @@ describe('jedno sprawdzenie sesji i jedno zapytanie o członkostwo na render', (
       </DashboardLayout>,
     );
     expect(out).toContain('Skonfigurowano połączenie');
-    expect(liczniki()).toEqual({ getUser: 1, memberships: 1 });
+    expect(liczniki()).toEqual(RAZ);
   });
 
   it('/settings/ksef, miękka nawigacja z innej zakładki ustawień (sama strona)', async () => {
     await wyrenderuj(<KsefSettingsPage />);
-    expect(liczniki()).toEqual({ getUser: 1, memberships: 1 });
+    expect(liczniki()).toEqual(RAZ);
   });
 
   it.each([
@@ -359,9 +413,11 @@ describe('jedno sprawdzenie sesji i jedno zapytanie o członkostwo na render', (
       </DashboardLayout>,
     );
     expect(out).toContain(`data-2fa="${wlaczone}"`);
-    expect(liczniki()).toEqual({ getUser: 1, memberships: 1 });
+    expect(liczniki()).toEqual(RAZ);
   });
 
+  // Zgody e-mail czyta `getEmailConsents` przez `auth.admin.getUserById`
+  // (GoTrue kluczem serwisowym) — tak było przed tym PR; osobne ustalenie.
   it('/settings/notifications, pełne wejście', async () => {
     await wyrenderuj(
       <DashboardLayout>
@@ -370,7 +426,7 @@ describe('jedno sprawdzenie sesji i jedno zapytanie o członkostwo na render', (
         </SettingsLayout>
       </DashboardLayout>,
     );
-    expect(liczniki()).toEqual({ getUser: 1, memberships: 1 });
+    expect(liczniki()).toEqual({ ...RAZ, gotrueInne: 1 });
   });
 
   it('/settings/ksef: tożsamość Google z tego samego odczytu użytkownika', async () => {
@@ -400,17 +456,20 @@ describe('jedno sprawdzenie sesji i jedno zapytanie o członkostwo na render', (
         <InvoiceDetailPage params={params()} />
       </DashboardLayout>,
     );
-    expect(liczniki()).toEqual({ getUser: 1, memberships: 2 });
+    expect(liczniki()).toEqual({ ...RAZ, memberships: 2, siecMemberships: 2 });
+    // Layout: klucz serwisowy (wszystkie członkostwa); strona: token użytkownika (RLS).
+    expect(h.wywolania.filter(czyMemberships).map((w) => w.bearer)).toEqual(['klucz-serwisowy-atrapa', h.token]);
 
     h.wywolania = [];
     await wyrenderuj(<InvoiceDetailPage params={params()} />);
-    expect(liczniki()).toEqual({ getUser: 1, memberships: 1 });
+    expect(liczniki()).toEqual(RAZ);
+    expect(h.wywolania.find(czyMemberships)?.bearer).toBe(h.token);
   });
 
   it('pamięć tylko w obrębie żądania: dwa rendery = dwa sprawdzenia', async () => {
     await wyrenderuj(<DashboardHomePage />);
     await wyrenderuj(<DashboardHomePage />);
-    expect(liczniki()).toEqual({ getUser: 2, memberships: 2 });
+    expect(liczniki()).toMatchObject({ getUser: 2, memberships: 2 });
   });
 });
 
@@ -422,13 +481,16 @@ describe('getPageContext', () => {
     expect(ctx.user).toEqual({ id: USER_ID, email: 'jan@example.test' });
     expect(ctx.tenantId).toBe(ORG);
     expect(ctx.role).toBe('owner');
-    expect(typeof ctx.supabase.from).toBe('function');
+    // Decyzja o dostępie kluczem serwisowym, dane strony — klientem z sesji (RLS).
+    expect(h.wywolania.find(czyMemberships)?.bearer).toBe('klucz-serwisowy-atrapa');
+    await ctx.supabase.from('tenants').select('id');
+    expect(h.wywolania.at(-1)).toMatchObject({ sciezka: '/rest/v1/tenants', bearer: h.token });
   });
 
   it('dwa wywołania w jednym żądaniu: jedno sprawdzenie sesji i jedno zapytanie', async () => {
     const [a, b] = await wZadaniu(() => Promise.all([getPageContext(), getPageContext()]));
     expect(a).toBe(b);
-    expect(liczniki()).toEqual({ getUser: 1, memberships: 1 });
+    expect(liczniki()).toEqual(RAZ);
   });
 
   it('rola z wiersza firmy z ciasteczka, nie z pierwszego wiersza', async () => {
