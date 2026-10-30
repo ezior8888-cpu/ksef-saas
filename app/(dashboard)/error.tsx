@@ -37,10 +37,13 @@ export default function Error({
           </p>
         </div>
         {/* Samo `reset()` renderuje ten sam ładunek RSC, więc błąd Server
-            Componentu wraca od razu. Najpierw pobranie strony od nowa, potem
-            ponowny render segmentu — wzór jak w `reports/kpir/error.tsx`.
-            Wyłączony w trakcie: seria kliknięć przy awarii nie mnoży renderów
-            strony na serwerze. Test: `panel-blad-ponow.test.tsx`. */}
+            Componentu wraca od razu. `router.refresh()` pobiera stronę od nowa
+            (razem z layoutem panelu), a `reset()` w tym samym przejściu
+            renderuje segment dopiero z nowymi danymi — wzór jak w
+            `reports/kpir/error.tsx`. Gdy przy ponowieniu padnie layout (ta
+            sama awaria bazy), błąd trafia do `global-error.tsx`, jak po F5.
+            Wyłączony do odpowiedzi serwera: kolejne kliknięcia nie wysyłają
+            następnych odświeżeń. Test: `panel-blad-ponow.test.tsx`. */}
         <Button
           size="lg"
           disabled={isPending}
