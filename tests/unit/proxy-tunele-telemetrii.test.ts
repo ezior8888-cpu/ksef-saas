@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server';
+import { modifyRouteRegex } from 'next/dist/lib/redirect-status';
+import { getPathMatch } from 'next/dist/shared/lib/router/utils/path-match';
 
 /**
  * `/ingest/*` (PostHog) i `/monitoring` (tunel Sentry) Next przepisuje na
@@ -145,6 +147,10 @@ const TUNNELS = [
   { name: 'PostHog: konfiguracja', path: '/ingest/array/phc_fixture/config.js', method: 'GET' },
   { name: 'Sentry: koperta', path: '/monitoring?o=123&p=456', method: 'POST' },
   { name: 'Sentry: koperta z regionem', path: '/monitoring/?o=123&p=456&r=de', method: 'POST' },
+  // Next dopasowuje przepisania bez względu na wielkość liter — link z innym
+  // zapisem też trafia do PostHog albo Sentry.
+  { name: 'PostHog: wielkie litery', path: '/Ingest/e/?ip=0', method: 'GET' },
+  { name: 'Sentry: wielkie litery', path: '/MONITORING?o=123&p=456', method: 'GET' },
 ] as const;
 
 describe('tunele PostHog i Sentry w proxy', () => {
@@ -171,9 +177,16 @@ describe('tunele PostHog i Sentry w proxy', () => {
   });
 
   it.each([
-    '/ingest/static/toolbar.svg', '/ingest/static/surveys.css', '/ingest/static/logo.png',
+    '/ingest/static/toolbar.svg', '/ingest/static/logo.png', '/ingest/static/font.woff2',
+    '/INGEST/static/logo.png', '/Ingest/static/toolbar.svg',
   ])('proxy obejmuje każdy plik tunelu PostHog, także z rozszerzeniem: %s', (path) => {
     expect(unstable_doesMiddlewareMatch({ config, url: `https://app.example.test${path}` })).toBe(true);
+  });
+
+  it.each([
+    '/logo.png', '/icons/a.png', '/_next/static/chunks/x.js', '/ingestion.png', '/x/ingest/a.png', '/ingest.png',
+  ])('wpis tunelu nie poszerza proxy na inne pliki: %s', (path) => {
+    expect(unstable_doesMiddlewareMatch({ config, url: `https://app.example.test${path}` })).toBe(false);
   });
 
   it('kontrola: na zwykłej stronie wygasły token naprawdę się odświeża', async () => {
@@ -184,25 +197,53 @@ describe('tunele PostHog i Sentry w proxy', () => {
 });
 
 describe('isTelemetryTunnelPath', () => {
-  it.each([
+  const TUNNEL = [
     '/ingest', '/ingest/', '/ingest/e/', '/ingest/static/array.js', '/ingest/array/phc_x/config.js',
     '/monitoring', '/monitoring/',
-  ])('tunel: %s', (path) => {
+    '/Ingest/e/', '/INGEST', '/InGeSt/static/logo.png', '/MONITORING', '/Monitoring/',
+  ];
+  const NOT_TUNNEL = [
+    '/', '/ingestion', '/ingest-raport', '/api/ingest', '/monitoringx', '/monitoring/raport', '/pricing',
+    '/INGESTION', '/Monitoring/raport',
+  ];
+
+  it.each(TUNNEL)('tunel: %s', (path) => {
     expect(isTelemetryTunnelPath(path)).toBe(true);
   });
 
-  it.each([
-    '/', '/ingestion', '/ingest-raport', '/api/ingest', '/monitoringx', '/monitoring/raport', '/pricing',
-  ])('nie tunel: %s', (path) => {
+  it.each(NOT_TUNNEL)('nie tunel: %s', (path) => {
     expect(isTelemetryTunnelPath(path)).toBe(false);
   });
 
-  it('zgadza się z przepisaniami w next.config.ts', () => {
+  /**
+   * Reguła przepisania dopasowana tak jak w Next 16.4 (`filesystem.js`,
+   * `buildCustomRoute`; bez `experimental.caseSensitiveRoutes`, więc
+   * wielkość liter nie ma znaczenia). `has` (o, p) Sentry pomijamy:
+   * `/monitoring` bez nich i tak idzie do aplikacji, tylko bez ciasteczek.
+   */
+  function rewrittenByNext(source: string, pathname: string): boolean {
+    const match = getPathMatch(source, {
+      strict: true, removeUnnamedParams: true, sensitive: false,
+      regexModifier: (regex) => modifyRouteRegex(regex),
+    });
+    return match(pathname) !== false;
+  }
+
+  it('obejmuje dokładnie to, co Next przepisuje na PostHog i Sentry', () => {
     const src = readFileSync(join(process.cwd(), 'next.config.ts'), 'utf8');
     expect(src).toContain("tunnelRoute: '/monitoring'");
-    const sources = [...src.matchAll(/source: '([^']+)'/g)].map((m) => m[1]);
-    const rewrites = sources.filter((s) => s.startsWith('/ingest'));
-    expect(rewrites.length).toBeGreaterThan(0);
-    for (const s of rewrites) expect(isTelemetryTunnelPath(s.replace('/:path*', '/x'))).toBe(true);
+    const posthog = [...src.matchAll(/source: '(\/ingest[^']*)'/g)].map((m) => m[1]);
+    expect(posthog.length).toBeGreaterThan(0);
+    // Reguła, którą dokłada `withSentryConfig` (`${tunnelRoute}(/?)`).
+    const sources = [...posthog, '/monitoring(/?)'];
+
+    for (const path of [...TUNNEL, ...NOT_TUNNEL]) {
+      const rewritten = sources.some((source) => rewrittenByNext(source, path));
+      expect({ path, tunnel: isTelemetryTunnelPath(path) }).toEqual({ path, tunnel: rewritten });
+      if (rewritten) {
+        expect({ path, proxy: unstable_doesMiddlewareMatch({ config, url: `https://app.example.test${path}` }) })
+          .toEqual({ path, proxy: true });
+      }
+    }
   });
 });

@@ -49,8 +49,9 @@ export const config = {
   // cichym błędem dekodera w przeglądarce.
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|mp4|webm|mov|woff|woff2)$).*)',
-    // Tunel PostHog w całości, także pliki z rozszerzeniem z listy wyżej:
+    // Tunel PostHog w całości, także pliki z rozszerzeniem z listy wyżej
+    // i każdy zapis wielkości liter (Next przepisuje `/Ingest/…` tak samo):
     // tylko proxy zdejmuje z niego ciasteczka (`lib/telemetry-tunnel.ts`).
-    '/ingest/:path*',
+    '/:tunnel([iI][nN][gG][eE][sS][tT])/:path*',
   ],
 };

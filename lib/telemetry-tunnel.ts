@@ -4,13 +4,16 @@ import { NextResponse, type NextRequest } from 'next/server';
  * Tunele telemetrii: ścieżki, które Next przepisuje na serwery zewnętrzne —
  * PostHog (`/ingest/*`, `next.config.ts` → `rewrites()`) i Sentry
  * (`tunnelRoute: '/monitoring'`, reguła `/monitoring(/?)` z `withSentryConfig`).
+ * Bez względu na wielkość liter — tak dopasowuje przepisania Next (bez
+ * `experimental.caseSensitiveRoutes`), więc `/Ingest/e` też idzie do PostHog.
  */
 export function isTelemetryTunnelPath(pathname: string): boolean {
+  const path = pathname.toLowerCase();
   return (
-    pathname === '/ingest' ||
-    pathname.startsWith('/ingest/') ||
-    pathname === '/monitoring' ||
-    pathname === '/monitoring/'
+    path === '/ingest' ||
+    path.startsWith('/ingest/') ||
+    path === '/monitoring' ||
+    path === '/monitoring/'
   );
 }
 
