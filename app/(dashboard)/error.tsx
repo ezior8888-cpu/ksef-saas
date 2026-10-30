@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import * as Sentry from '@sentry/nextjs';
 import { RiErrorWarningLine, RiRefreshLine } from '@remixicon/react';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,9 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
   useEffect(() => {
     Sentry.captureException(error);
     if (process.env.NODE_ENV === 'development') {
@@ -32,7 +36,21 @@ export default function Error({
             Wystąpił nieoczekiwany błąd. Możesz spróbować ponownie.
           </p>
         </div>
-        <Button onClick={reset} size="lg">
+        {/* Samo `reset()` renderuje ten sam ładunek RSC, więc błąd Server
+            Componentu wraca od razu. Najpierw pobranie strony od nowa, potem
+            ponowny render segmentu — wzór jak w `reports/kpir/error.tsx`.
+            Wyłączony w trakcie: seria kliknięć przy awarii nie mnoży renderów
+            strony na serwerze. Test: `panel-blad-ponow.test.tsx`. */}
+        <Button
+          size="lg"
+          disabled={isPending}
+          onClick={() =>
+            startTransition(() => {
+              router.refresh();
+              reset();
+            })
+          }
+        >
           <RiRefreshLine aria-hidden />
           Spróbuj ponownie
         </Button>
